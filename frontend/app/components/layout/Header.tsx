@@ -29,7 +29,7 @@ interface HeaderProps {
   showAccountSelector?: boolean
 }
 
-export default function Header({ title = 'Hyper Alpha Arena', currentAccount, showAccountSelector = false }: HeaderProps) {
+export default function Header({ title = 'CEC-codex', currentAccount, showAccountSelector = false }: HeaderProps) {
   const { t } = useTranslation()
   const { user, loading, authEnabled, logout } = useAuth()
 

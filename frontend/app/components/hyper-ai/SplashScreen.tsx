@@ -101,11 +101,11 @@ export default function SplashScreen({ onComplete, minDuration = 1500, isReady =
       <div className="flex flex-col items-center space-y-6">
         <img
           src="/static/arena_logo_app_small.png"
-          alt="Hyper Alpha Arena"
+          alt="CEC-codex"
           className="w-24 h-24 object-contain"
         />
         <h1 className="text-2xl font-bold text-foreground">
-          Hyper Alpha Arena
+          CEC-codex
         </h1>
         <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
           <div

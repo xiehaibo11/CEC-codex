@@ -1,4 +1,4 @@
-# <img width="40" height="40" alt="logo_app" src="https://github.com/user-attachments/assets/911ba846-a08b-4e3e-b119-ec1e78347288" style="vertical-align: middle;" /> Hyper Alpha Arena
+# <img width="40" height="40" alt="logo_app" src="https://github.com/user-attachments/assets/911ba846-a08b-4e3e-b119-ec1e78347288" style="vertical-align: middle;" /> CEC-codex
 
 **English** | [简体中文](./README.zh-CN.md)
 
@@ -16,7 +16,7 @@
 
 ## Overview
 
-Hyper Alpha Arena is a production-ready AI trading platform where Large Language Models (LLMs) autonomously execute cryptocurrency trading strategies. Inspired by [nof1 Alpha Arena](https://nof1.ai), this platform enables AI models like GPT-5, Claude, and Deepseek to make intelligent trading decisions based on real-time market data and execute trades automatically.
+CEC-codex is a production-ready AI trading platform where Large Language Models (LLMs) autonomously execute cryptocurrency trading strategies. Inspired by [nof1 Alpha Arena](https://nof1.ai), this platform enables AI models like GPT-5, Claude, and Deepseek to make intelligent trading decisions based on real-time market data and execute trades automatically.
 
 **Official Website:** https://www.akooi.com/
 
@@ -62,11 +62,11 @@ Hyper Alpha Arena is a production-ready AI trading platform where Large Language
 
 ### Smart Wallet Signal Integration
 
-Connect [Hyper Insight](https://hyper.akooi.com/) to bring tracked whale and smart-money activity into Hyper Alpha Arena as wallet signal pools. Hyper Insight currently indexes about **70,000** tracked addresses and can sync wallet actions into Hyper Alpha Arena for **AI Trader**, **Program Trader**, and bot notifications.
+Connect [Hyper Insight](https://hyper.akooi.com/) to bring tracked whale and smart-money activity into CEC-codex as wallet signal pools. Hyper Insight currently indexes about **70,000** tracked addresses and can sync wallet actions into CEC-codex for **AI Trader**, **Program Trader**, and bot notifications.
 
 ### AI Agent Architecture
 
-What sets Hyper Alpha Arena apart is its multi-agent AI system. Instead of a single chatbot, five specialized AI agents collaborate to cover the full trading workflow:
+What sets CEC-codex apart is its multi-agent AI system. Instead of a single chatbot, five specialized AI agents collaborate to cover the full trading workflow:
 
 | Agent | Role |
 |-------|------|
@@ -131,8 +131,8 @@ Each skill follows a checkpoint-based workflow—the AI pauses at key steps to c
 
 ```bash
 # Clone the repository
-git clone https://github.com/HammerGPT/Hyper-Alpha-Arena.git
-cd Hyper-Alpha-Arena
+git clone https://github.com/xiehaibo11/CEC-codex.git
+cd CEC-codex
 
 # Start the application (choose one command based on your Docker version)
 docker compose up -d --build        # For newer Docker Desktop (recommended)
@@ -177,7 +177,7 @@ For detailed setup instructions including:
 
 ## Supported Models
 
-Hyper Alpha Arena supports any OpenAI API compatible language model. **For best results, we recommend using Deepseek** for its cost-effectiveness and strong performance in trading scenarios.
+CEC-codex supports any OpenAI API compatible language model. **For best results, we recommend using Deepseek** for its cost-effectiveness and strong performance in trading scenarios.
 
 Supported models include:
 - **Deepseek** (Recommended): Excellent cost-performance ratio for trading decisions
@@ -245,14 +245,14 @@ Please star and fork this repository to stay updated with development progress.
 **🌐 Official Website**: [https://www.akooi.com/](https://www.akooi.com/)
 
 **🐦 Twitter/X**: [@GptHammer3309](https://x.com/GptHammer3309)
-- Latest updates on Hyper Alpha Arena development
+- Latest updates on CEC-codex development
 - AI trading insights and strategy discussions
 
 **💬 Discord**: [Join our community](https://discord.gg/9Pr5Uz2JvV)
 - Technical support and discussions
 - Bug reports and feature requests
 
-**📝 GitHub Issues**: For bug tracking and feature requests, please use [GitHub Issues](https://github.com/HammerGPT/Hyper-Alpha-Arena/issues).
+**📝 GitHub Issues**: For bug tracking and feature requests, please use [GitHub Issues](https://github.com/xiehaibo11/CEC-codex/issues).
 
 ---
 
@@ -266,7 +266,7 @@ Please star and fork this repository to stay updated with development progress.
 - 技术支持与讨论
 - Bug 反馈和功能建议
 
-**📝 GitHub Issues**: Bug 追踪和功能请求请使用 [GitHub Issues](https://github.com/HammerGPT/Hyper-Alpha-Arena/issues)。
+**📝 GitHub Issues**: Bug 追踪和功能请求请使用 [GitHub Issues](https://github.com/xiehaibo11/CEC-codex/issues)。
 
 ## License
 

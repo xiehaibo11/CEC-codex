@@ -466,7 +466,7 @@ Or for program:
 {
   "twitter": {"url": "https://x.com/GptHammer3309", "enabled": true},
   "telegram": {"url": "https://t.me/+RqxjT7Gttm9hOGEx", "enabled": true},
-  "github": {"url": "https://github.com/HammerGPT/Hyper-Alpha-Arena", "enabled": true}
+  "github": {"url": "https://github.com/xiehaibo11/CEC-codex", "enabled": true}
 }
 ```
 

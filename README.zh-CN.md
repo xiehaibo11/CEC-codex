@@ -1,4 +1,4 @@
-# <img width="40" height="40" alt="logo_app" src="https://github.com/user-attachments/assets/911ba846-a08b-4e3e-b119-ec1e78347288" style="vertical-align: middle;" /> Hyper Alpha Arena
+# <img width="40" height="40" alt="logo_app" src="https://github.com/user-attachments/assets/911ba846-a08b-4e3e-b119-ec1e78347288" style="vertical-align: middle;" /> CEC-codex
 
 [English](./README.md) | **简体中文**
 
@@ -16,7 +16,7 @@
 
 ## 这是什么
 
-Hyper Alpha Arena 是一个 AI 交易平台——让 GPT、Claude、Deepseek 这些大模型帮你盯盘、分析、下单，全自动。灵感来自 [nof1 Alpha Arena](https://nof1.ai)。
+CEC-codex 是一个 AI 交易平台——让 GPT、Claude、Deepseek 这些大模型帮你盯盘、分析、下单，全自动。灵感来自 [nof1 Alpha Arena](https://nof1.ai)。
 
 **官网：** https://www.akooi.com/
 
@@ -62,11 +62,11 @@ Hyper Alpha Arena 是一个 AI 交易平台——让 GPT、Claude、Deepseek 这
 
 ### 聪明钱钱包信号接入
 
-可连接 [Hyper Insight](https://hyper.akooi.com/)，将巨鲸与聪明钱地址的跟踪动作同步到 Hyper Alpha Arena，作为钱包信号池使用。Hyper Insight 当前已收录约 **70,000** 个跟踪地址，这些钱包信号可用于触发 **AI Trader**、**Program Trader** 和 Bot 通知。
+可连接 [Hyper Insight](https://hyper.akooi.com/)，将巨鲸与聪明钱地址的跟踪动作同步到 CEC-codex，作为钱包信号池使用。Hyper Insight 当前已收录约 **70,000** 个跟踪地址，这些钱包信号可用于触发 **AI Trader**、**Program Trader** 和 Bot 通知。
 
 ### AI 多智能体架构
 
-Hyper Alpha Arena 的核心差异化在于多智能体 AI 系统。不是单一聊天机器人，而是五个专业 AI 智能体协同覆盖完整交易工作流：
+CEC-codex 的核心差异化在于多智能体 AI 系统。不是单一聊天机器人，而是五个专业 AI 智能体协同覆盖完整交易工作流：
 
 | 智能体 | 职责 |
 |--------|------|
@@ -131,8 +131,8 @@ Hyper AI 内置 Skill 技能系统：模块化的分步工作流引导，带你�
 
 ```bash
 # 克隆仓库
-git clone https://github.com/HammerGPT/Hyper-Alpha-Arena.git
-cd Hyper-Alpha-Arena
+git clone https://github.com/xiehaibo11/CEC-codex.git
+cd CEC-codex
 
 # 启动应用（根据你的 Docker 版本选择命令）
 docker compose up -d --build        # 新版 Docker Desktop（推荐）
@@ -177,7 +177,7 @@ docker compose up -d --build # 或 docker-compose up -d --build
 
 ## 支持的模型
 
-Hyper Alpha Arena 支持所有兼容 OpenAI API 的大语言模型。**推荐使用 Deepseek**，性价比高，交易场景表现出色。
+CEC-codex 支持所有兼容 OpenAI API 的大语言模型。**推荐使用 Deepseek**，性价比高，交易场景表现出色。
 
 支持的模型包括：
 - **Deepseek**（推荐）：交易决策性价比之王
@@ -250,7 +250,7 @@ docker-compose up -d --build
 - 技术支持与讨论
 - Bug 反馈和功能建议
 
-**📝 GitHub Issues**：Bug 追踪和功能请求请使用 [GitHub Issues](https://github.com/HammerGPT/Hyper-Alpha-Arena/issues)。
+**📝 GitHub Issues**：Bug 追踪和功能请求请使用 [GitHub Issues](https://github.com/xiehaibo11/CEC-codex/issues)。
 
 ## 许可证
 

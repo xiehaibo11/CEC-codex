@@ -145,11 +145,11 @@ export default function HyperAiOnboarding({ onComplete, onSkip }: HyperAiOnboard
         <div className="text-center space-y-2">
           <img
             src="/static/arena_logo_app_small.png"
-            alt="Hyper Alpha Arena"
+            alt="CEC-codex"
             className="w-16 h-16 mx-auto mb-4"
           />
           <h1 className="text-2xl font-bold">
-            {t('hyperAi.onboarding.welcome', 'Welcome to Hyper Alpha Arena')}
+            {t('hyperAi.onboarding.welcome', 'Welcome to CEC-codex')}
           </h1>
           <p className="text-muted-foreground">
             {t('hyperAi.onboarding.configureAi', 'Configure Hyper AI to get started')}

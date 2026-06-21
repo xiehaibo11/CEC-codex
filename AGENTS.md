@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Purpose
-This file defines contributor rules for Hyper Alpha Arena.
+This file defines contributor rules for CEC-codex.
 It is a code-management guide, not product documentation.
 Keep it practical and update it when repository structure changes.
 Keep this file between 300 and 500 lines.
@@ -11,7 +11,7 @@ Store split files under `docs/code-management/`.
 Keep `AGENTS.md` as the short entry point if splitting is needed.
 
 ## Project Overview
-Hyper Alpha Arena is a crypto perpetual trading platform.
+CEC-codex is a crypto perpetual trading platform.
 The backend is FastAPI, SQLAlchemy, PostgreSQL, and APScheduler.
 The frontend is React, Vite, TypeScript, Tailwind, and i18next.
 The product supports Hyperliquid and Binance Futures.

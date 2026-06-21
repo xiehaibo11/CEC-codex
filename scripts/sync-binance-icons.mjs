@@ -52,7 +52,7 @@ async function readJson(file) {
 
 async function fetchJson(url) {
   const response = await fetch(url, {
-    headers: { 'user-agent': 'Hyper-Alpha-Arena icon sync' },
+    headers: { 'user-agent': 'CEC-codex icon sync' },
   })
   if (!response.ok) {
     throw new Error(`${url} returned ${response.status}`)
@@ -207,7 +207,7 @@ async function downloadIcon(task, existingFiles) {
   }
 
   const response = await fetch(task.logo_url, {
-    headers: { 'user-agent': 'Hyper-Alpha-Arena icon sync' },
+    headers: { 'user-agent': 'CEC-codex icon sync' },
   })
   if (!response.ok) {
     throw new Error(`${task.key} returned ${response.status}`)

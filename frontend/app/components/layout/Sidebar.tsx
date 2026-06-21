@@ -151,7 +151,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center gap-2">
             <img src="/static/logo_app.png" alt="Logo" className="h-7 w-7 object-contain flex-shrink-0" />
-            <span className="text-base font-bold">Hyper Alpha Arena</span>
+            <span className="text-base font-bold">CEC-codex</span>
           </div>
         </div>
 
@@ -294,7 +294,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
                 <TooltipTrigger asChild>
                   <button
                     className="p-2 rounded-md text-muted-foreground hover:text-[#B8860B] hover:bg-muted transition-colors"
-                    onClick={() => window.open('https://github.com/HammerGPT/Hyper-Alpha-Arena', '_blank', 'noopener,noreferrer')}
+                    onClick={() => window.open('https://github.com/xiehaibo11/CEC-codex', '_blank', 'noopener,noreferrer')}
                   >
                     <Github className="w-4 h-4" />
                   </button>

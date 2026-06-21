@@ -747,7 +747,7 @@
   "trader": {
     "title": "AI交易员管理",
     "subtitle": "管理您的AI交易员并配置交易策略",
-    "welcomeTitle": "欢迎使用 Hyper Alpha Arena！",
+    "welcomeTitle": "欢迎使用 CEC-codex！",
     "welcomeSubtitle": "让我们设置您的第一个AI交易员",
     "setupTitle": "设置您的AI交易员",
     "setupDesc": "我们已为您创建了一个默认AI交易员。要开始交易，您需要：",
@@ -1178,12 +1178,12 @@
       "inProgress": "设置中...",
       "connecting": "正在连接浏览器钱包...",
       "checkingAuth": "正在检查交易授权...",
-      "signingAuth": "请在钱包中确认 Hyper Alpha Arena 交易工具授权...",
+      "signingAuth": "请在钱包中确认 CEC-codex 交易工具授权...",
       "signingAgent": "请在钱包中确认创建 API 钱包...",
       "saving": "正在保存钱包配置...",
       "done": "钱包设置完成！",
       "rejected": "用户拒绝了签名请求",
-      "mainnetHint": "连接浏览器钱包，授权 Hyper Alpha Arena 交易工具，并创建安全的 API 钱包。",
+      "mainnetHint": "连接浏览器钱包，授权 CEC-codex 交易工具，并创建安全的 API 钱包。",
       "testnetHint": "连接浏览器钱包并创建安全的 API 钱包用于测试网交易。"
     },
     "error": {
@@ -1914,7 +1914,7 @@
       }
     },
     "welcomeWithName": "你好，{{name}}！我是 Hyper AI，你的专属交易助手。",
-    "welcomeNoName": "你好！我是 Hyper AI，Hyper Alpha Arena 的智能助手。",
+    "welcomeNoName": "你好！我是 Hyper AI，CEC-codex 的智能助手。",
     "welcomeCapabilities": "我可以帮你：",
     "capability1": "了解系统功能和使用方法",
     "capability2": "生成和优化 AI 交易策略",
@@ -1960,7 +1960,7 @@
     "hideContent": "收起内容",
     "viewInPage": "在页面中查看",
     "onboarding": {
-      "welcome": "欢迎使用 Hyper Alpha Arena",
+      "welcome": "欢迎使用 CEC-codex",
       "configureAi": "配置 Hyper AI 轻松上手",
       "provider": "AI 服务商",
       "selectProvider": "选择服务商",

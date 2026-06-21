@@ -1308,7 +1308,7 @@ def _build_insight_messages(
     )
 
     system_prompt = (
-        "You are Hyper AI inside Hyper Alpha Arena.\n"
+        "You are Hyper AI inside CEC-codex.\n"
         f"{language_instruction}"
         "You analyze market intelligence for a retail crypto trader.\n"
         "Use only the provided context.\n"

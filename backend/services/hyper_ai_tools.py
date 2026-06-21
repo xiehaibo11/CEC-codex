@@ -255,7 +255,7 @@ HYPER_AI_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_tracked_wallets",
-            "description": "Get the current Hyper Insight wallet sync status and the tracked wallet addresses currently synced into Hyper Alpha Arena. Use this to see whether Hyper Insight is connected and which wallets are currently available to wallet-tracking signal pools.",
+            "description": "Get the current Hyper Insight wallet sync status and the tracked wallet addresses currently synced into CEC-codex. Use this to see whether Hyper Insight is connected and which wallets are currently available to wallet-tracking signal pools.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -1371,7 +1371,7 @@ def execute_get_contact_config() -> str:
     return json.dumps({
         "twitter": {"url": "https://x.com/GptHammer3309", "enabled": True},
         "telegram": {"url": "https://t.me/+RqxjT7Gttm9hOGEx", "enabled": True},
-        "github": {"url": "https://github.com/HammerGPT/Hyper-Alpha-Arena", "enabled": True}
+        "github": {"url": "https://github.com/xiehaibo11/CEC-codex", "enabled": True}
     }, indent=2)
 
 
@@ -2313,18 +2313,18 @@ def execute_analyze_tracked_address(db: Session, address: str) -> str:
     access_token = _get_hyper_insight_access_token(db)
     if not access_token:
         return json.dumps({
-            "error": "Please log in to Hyper Alpha Arena before using Hyper Insight analysis.",
+            "error": "Please log in to CEC-codex before using Hyper Insight analysis.",
             "next_steps": [
-                "Log in to Hyper Alpha Arena with your linked account first.",
+                "Log in to CEC-codex with your linked account first.",
                 "After login, open Signals > Wallet Tracking and make sure your tracked wallets have synced before asking for wallet analysis."
             ]
         }, ensure_ascii=False)
 
     if snapshot.get("status") != "connected":
         return json.dumps({
-            "error": "Wallet Tracking is not connected yet in Hyper Alpha Arena.",
+            "error": "Wallet Tracking is not connected yet in CEC-codex.",
             "next_steps": [
-                "Open Hyper Alpha Arena and use the left sidebar to enter Signals > Wallet Tracking.",
+                "Open CEC-codex and use the left sidebar to enter Signals > Wallet Tracking.",
                 "Enable sync and wait until the connection status becomes connected before requesting wallet analysis."
             ]
         }, ensure_ascii=False)
@@ -2334,7 +2334,7 @@ def execute_analyze_tracked_address(db: Session, address: str) -> str:
             "error": "This wallet is not currently in your synced wallet list.",
             "next_steps": [
                 "Track the wallet on https://hyper.akooi.com/ if it is not already tracked there.",
-                "Then return to Hyper Alpha Arena > Signals > Wallet Tracking and wait until the wallet appears in the synced wallet list."
+                "Then return to CEC-codex > Signals > Wallet Tracking and wait until the wallet appears in the synced wallet list."
             ]
         }, ensure_ascii=False)
 
@@ -2356,9 +2356,9 @@ def execute_analyze_tracked_address(db: Session, address: str) -> str:
             }, ensure_ascii=False)
         if response.status_code == 401:
             return json.dumps({
-                "error": "Your Hyper Insight session in Hyper Alpha Arena is no longer valid.",
+                "error": "Your Hyper Insight session in CEC-codex is no longer valid.",
                 "next_steps": [
-                    "Refresh Hyper Alpha Arena, open Signals > Wallet Tracking, and enable sync again.",
+                    "Refresh CEC-codex, open Signals > Wallet Tracking, and enable sync again.",
                     "After the tracked wallet list is visible again, retry the wallet analysis request."
                 ]
             }, ensure_ascii=False)
@@ -3391,7 +3391,7 @@ def execute_get_tracked_wallets(db: Session) -> str:
         "last_connected_at": snapshot.get("last_connected_at"),
         "last_event_at": snapshot.get("last_event_at"),
         "last_error": snapshot.get("last_error"),
-        "usage_note": "This list reflects the wallets currently synced from Hyper Insight into Hyper Alpha Arena. It is the correct source for what Hyper AI can currently inspect in this Arena session.",
+        "usage_note": "This list reflects the wallets currently synced from Hyper Insight into CEC-codex. It is the correct source for what Hyper AI can currently inspect in this Arena session.",
     }
     return json.dumps(result, indent=2, ensure_ascii=False)
 
@@ -3431,10 +3431,10 @@ def _fetch_strategy_radar_universe(db: Session, *, force_refresh: bool = False) 
     if headers is None:
         return {
             "ok": False,
-            "error": "Please log in to Hyper Alpha Arena before using Strategy Radar with Hyper AI.",
+            "error": "Please log in to CEC-codex before using Strategy Radar with Hyper AI.",
             "reason": "missing_login_token",
             "next_steps": [
-                "Log in to Hyper Alpha Arena with your linked account first.",
+                "Log in to CEC-codex with your linked account first.",
                 "After login, ask Hyper AI to search Strategy Radar again.",
             ],
         }
@@ -3444,10 +3444,10 @@ def _fetch_strategy_radar_universe(db: Session, *, force_refresh: bool = False) 
     if response.status_code == 401:
         return {
             "ok": False,
-            "error": "Your Hyper Insight login in Hyper Alpha Arena is no longer valid.",
+            "error": "Your Hyper Insight login in CEC-codex is no longer valid.",
             "reason": "upstream_401",
             "next_steps": [
-                "Log in to Hyper Alpha Arena again.",
+                "Log in to CEC-codex again.",
                 "After login, ask Hyper AI to search Strategy Radar again.",
             ],
         }
@@ -3546,9 +3546,9 @@ def execute_search_strategy_radar(
     if headers is None:
         return json.dumps({
             "ok": False,
-            "error": "Please log in to Hyper Alpha Arena before using Strategy Radar with Hyper AI.",
+            "error": "Please log in to CEC-codex before using Strategy Radar with Hyper AI.",
             "next_steps": [
-                "Log in to Hyper Alpha Arena with your linked account first.",
+                "Log in to CEC-codex with your linked account first.",
                 "After login, ask Hyper AI to search Strategy Radar again.",
             ],
         }, ensure_ascii=False)
@@ -3581,10 +3581,10 @@ def execute_search_strategy_radar(
         if response.status_code == 401:
             return json.dumps({
                 "ok": False,
-                "error": "Your Hyper Insight login in Hyper Alpha Arena is no longer valid.",
+                "error": "Your Hyper Insight login in CEC-codex is no longer valid.",
                 "reason": "upstream_401",
                 "next_steps": [
-                    "Log in to Hyper Alpha Arena again.",
+                    "Log in to CEC-codex again.",
                     "After login, ask Hyper AI to search Strategy Radar again.",
                 ],
             }, ensure_ascii=False)

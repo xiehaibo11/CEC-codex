@@ -834,7 +834,7 @@
   "trader": {
     "title": "AI Trader Management",
     "subtitle": "Manage your AI traders and configure trading strategies",
-    "welcomeTitle": "Welcome to Hyper Alpha Arena!",
+    "welcomeTitle": "Welcome to CEC-codex!",
     "welcomeSubtitle": "Let's set up your first AI trader",
     "setupTitle": "Setup Your AI Trader",
     "setupDesc": "We've created a default AI trader for you. To start trading, you need to:",
@@ -1158,12 +1158,12 @@
       "inProgress": "Setting up...",
       "connecting": "Connecting browser wallet...",
       "checkingAuth": "Checking trading authorization...",
-      "signingAuth": "Please approve Hyper Alpha Arena trading authorization in your wallet...",
+      "signingAuth": "Please approve CEC-codex trading authorization in your wallet...",
       "signingAgent": "Please approve API Wallet creation in your wallet...",
       "saving": "Saving wallet configuration...",
       "done": "Wallet setup complete!",
       "rejected": "Signing rejected by user",
-      "mainnetHint": "Connects your browser wallet, authorizes Hyper Alpha Arena trading tools, and creates a secure API Wallet.",
+      "mainnetHint": "Connects your browser wallet, authorizes CEC-codex trading tools, and creates a secure API Wallet.",
       "testnetHint": "Connects your browser wallet and creates a secure API Wallet for testnet trading."
     },
     "error": {
@@ -1894,7 +1894,7 @@
       }
     },
     "welcomeWithName": "Hello, {{name}}! I'm Hyper AI, your personal trading assistant.",
-    "welcomeNoName": "Hello! I'm Hyper AI, the intelligent assistant for Hyper Alpha Arena.",
+    "welcomeNoName": "Hello! I'm Hyper AI, the intelligent assistant for CEC-codex.",
     "welcomeCapabilities": "I can help you:",
     "capability1": "Understand system features and usage",
     "capability2": "Generate and optimize AI trading strategies",
@@ -1940,7 +1940,7 @@
     "hideContent": "Hide content",
     "viewInPage": "View in page",
     "onboarding": {
-      "welcome": "Welcome to Hyper Alpha Arena",
+      "welcome": "Welcome to CEC-codex",
       "configureAi": "Configure Hyper AI to get started",
       "provider": "AI Provider",
       "selectProvider": "Select provider",

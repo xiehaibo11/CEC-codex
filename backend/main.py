@@ -58,7 +58,7 @@ AUTH_CONFIG_ENV_OVERRIDES = {
 }
 
 app = FastAPI(
-    title="Hyper Alpha Arena API",
+    title="CEC-codex API",
     version=__version__,
     description="Cryptocurrency perpetual contract trading platform with AI-powered decision making"
 )

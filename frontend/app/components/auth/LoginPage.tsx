@@ -55,11 +55,11 @@ export default function LoginPage() {
           <div className="mb-6 flex items-center gap-3">
             <img
               src="/arena_logo_app_small.png"
-              alt="Hyper Alpha Arena"
+              alt="CEC-codex"
               className="h-10 w-10 rounded-md"
             />
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold leading-tight">Hyper Alpha Arena</h1>
+              <h1 className="truncate text-lg font-semibold leading-tight">CEC-codex</h1>
               <p className="text-sm text-muted-foreground">Sign in</p>
             </div>
           </div>

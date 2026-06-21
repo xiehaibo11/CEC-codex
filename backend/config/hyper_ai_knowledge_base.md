@@ -1,4 +1,4 @@
-# Hyper Alpha Arena Knowledge Base (Supplementary Reference)
+# CEC-codex Knowledge Base (Supplementary Reference)
 
 This document provides detailed workflows and examples. Core tool usage is defined in the system prompt.
 
@@ -138,20 +138,20 @@ Yes. Common setups:
 Hyper Insight wallet signals are configured in two places:
 
 1. Track wallets on `https://hyper.akooi.com/`
-2. Open Hyper Alpha Arena → `Signals` → `Wallet Tracking`
+2. Open CEC-codex → `Signals` → `Wallet Tracking`
 3. Enable the Hyper Insight connection
 4. Create a wallet-tracking signal pool from the synced wallet list
 
 Suggested user-facing guidance:
 - Explain Hyper Insight as the wallet intelligence site where users track wallets and review wallet behavior
-- Explain Hyper Alpha Arena as the place where those tracked wallet signals are connected and used
+- Explain CEC-codex as the place where those tracked wallet signals are connected and used
 - Prefer product paths and links over internal implementation details
 - Do not mention internal tool names, API names, or tokens in user replies
 - Do not quote raw status enums or raw field names in normal replies; translate them into product language
 
 Important rules:
 - Hyper Insight is the source of truth for tracked wallets
-- Hyper Alpha Arena consumes synced wallets but does not edit them locally
+- CEC-codex consumes synced wallets but does not edit them locally
 - New synced wallets do not automatically enter an existing pool
 - Wallet-tracking pools do not support backtest in Phase 5
 - Wallet Tracking and Strategy Radar are different Hyper Insight capabilities and should not be described as the same flow
@@ -160,18 +160,18 @@ Important rules:
 Yes.
 
 Recommended usage:
-- First confirm `Hyper Alpha Arena -> Signals -> Wallet Tracking` is connected
-- Then read the exact wallet list currently synced into this Hyper Alpha Arena session
+- First confirm `CEC-codex -> Signals -> Wallet Tracking` is connected
+- Then read the exact wallet list currently synced into this CEC-codex session
 - Then choose one of those wallets for deeper analysis if needed
 
 Status wording:
-- If login is required, say the user needs to log in to Hyper Alpha Arena
+- If login is required, say the user needs to log in to CEC-codex
 - If sync is not enabled yet, say Wallet Tracking is not connected yet
 - If sync is enabled but there are no wallets, say there are no synced wallets yet
 - Avoid raw backend wording such as `waiting_for_token`
 
 ### Q: Can Hyper AI analyze a tracked wallet for me?
-Yes, if the wallet is already tracked in Hyper Insight and Wallet Tracking sync is connected in Hyper Alpha Arena.
+Yes, if the wallet is already tracked in Hyper Insight and Wallet Tracking sync is connected in CEC-codex.
 
 Important limitation:
 - Hyper AI can read detailed address data and recent fills
@@ -179,8 +179,8 @@ Important limitation:
 - Hyper AI should treat style conclusions as analysis based on available data, not as guaranteed full-history facts
 
 If analysis is unavailable:
-- First check whether the user is logged in to Hyper Alpha Arena
-- First check `Hyper Alpha Arena -> Signals -> Wallet Tracking` and confirm sync is connected
+- First check whether the user is logged in to CEC-codex
+- First check `CEC-codex -> Signals -> Wallet Tracking` and confirm sync is connected
 - Then confirm the wallet already appears in the synced wallet list
 - If sync is connected and the wallet is already visible in the synced list but analysis still fails, explain that the problem is system-side rather than a tracking issue
 
@@ -189,7 +189,7 @@ Strategy Radar is the Hyper Insight area for browsing current strategy ideas bef
 
 Product boundaries:
 - Hyper Insight entry: `https://hyper.akooi.com/strategy-radar`
-- Hyper Alpha Arena linkage: Hyper AI can query it after login, and Prompt / Program pages can link users to open it
+- CEC-codex linkage: Hyper AI can query it after login, and Prompt / Program pages can link users to open it
 - Strategy Radar is not part of `Signals -> Wallet Tracking`
 - Wallet Tracking is for synced wallets and wallet signals; Strategy Radar is for strategy ideas
 
@@ -205,7 +205,7 @@ Important rules:
 - Do not describe Strategy Radar as a realtime scanning engine, a performance leaderboard, or a source of guaranteed profitable strategies
 - Prebuilt Prompt and Program templates are test templates for learning the workflow
 - Users should adapt and test any candidate before live trading
-- If the user is not logged in, tell them to use the top-right `Login` button inside Hyper Alpha Arena first
+- If the user is not logged in, tell them to use the top-right `Login` button inside CEC-codex first
 
 ### Q: What data does a wallet signal event contain?
 Wallet signals arrive as `wallet_event` inside trigger_context (AI Trader) or input_data (Program Trader).
