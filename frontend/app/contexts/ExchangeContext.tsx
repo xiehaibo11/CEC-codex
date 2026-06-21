@@ -72,7 +72,6 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
       logo: '/static/hyperliquid_logo.svg',
       description: '#1 Decentralized Perpetual DEX',
       features: ['No KYC Required', 'On-chain Settlement', 'Testnet Available'],
-      referralLink: 'https://app.hyperliquid.xyz/join/HYPERSVIP',
       buttonText: 'Open Futures',
       buttonVariant: 'default'
     },

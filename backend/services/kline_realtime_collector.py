@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Set
 import logging
 
+from .exchanges.binance_constants import BINANCE_KLINE_INTERVALS
 from .kline_data_service import kline_service
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class KlineRealtimeCollector:
         # Fallback symbols (use watchlist when available)
         self.default_symbols = ["BTC"]
 
-        # 采集的K线周期 (1m到1h)
+        # Default Hyperliquid periods. Binance uses the full 1m-1M list.
         self.periods = ["1m", "3m", "5m", "15m", "30m", "1h"]
 
     async def start(self):
@@ -127,8 +128,14 @@ class KlineRealtimeCollector:
         tasks = []
         task_info = []  # 记录每个任务对应的symbol和period
 
+        collection_periods = (
+            BINANCE_KLINE_INTERVALS
+            if kline_service.exchange_id == "binance"
+            else self.periods
+        )
+
         for symbol in symbols:
-            for period in self.periods:
+            for period in collection_periods:
                 task = asyncio.create_task(
                     self._collect_symbol_kline(symbol, period),
                     name=f"collect_{symbol}_{period}"

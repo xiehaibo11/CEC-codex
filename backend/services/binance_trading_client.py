@@ -20,6 +20,23 @@ from config.settings import BINANCE_BROKER_CONFIG
 logger = logging.getLogger(__name__)
 
 
+class BinanceAPIError(Exception):
+    """Structured Binance REST API error."""
+
+    def __init__(
+        self,
+        code: Any,
+        message: str,
+        status_code: Optional[int] = None,
+        endpoint: Optional[str] = None,
+    ):
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.endpoint = endpoint
+        super().__init__(f"Binance API Error {code}: {message}")
+
+
 class BinanceTradingClient:
     """
     Binance Futures trading client with HMAC authentication.
@@ -218,7 +235,12 @@ class BinanceTradingClient:
                         continue
 
                     logger.error(f"[BINANCE] API Error: {error_code} - {error_msg}")
-                    raise Exception(f"Binance API Error {error_code}: {error_msg}")
+                    raise BinanceAPIError(
+                        error_code,
+                        str(error_msg),
+                        status_code=response.status_code,
+                        endpoint=endpoint,
+                    )
 
                 return response.json()
 

@@ -16,6 +16,37 @@ import {
 
 const FORWARD_PERIODS = ['1h', '4h', '12h', '24h']
 const DAY_OPTIONS = [30, 60, 90, 0]  // 0 = All
+const KLINE_PERIOD_SECONDS: Record<string, number> = {
+  '1m': 60,
+  '3m': 3 * 60,
+  '5m': 5 * 60,
+  '15m': 15 * 60,
+  '30m': 30 * 60,
+  '1h': 60 * 60,
+  '2h': 2 * 60 * 60,
+  '4h': 4 * 60 * 60,
+  '8h': 8 * 60 * 60,
+  '12h': 12 * 60 * 60,
+  '1d': 24 * 60 * 60,
+  '3d': 3 * 24 * 60 * 60,
+  '1w': 7 * 24 * 60 * 60,
+  '1M': 30 * 24 * 60 * 60,
+}
+const FORWARD_PERIOD_SECONDS: Record<string, number> = {
+  '1h': 60 * 60,
+  '4h': 4 * 60 * 60,
+  '12h': 12 * 60 * 60,
+  '24h': 24 * 60 * 60,
+}
+
+function getCompatibleForwardPeriods(period: string) {
+  const periodSeconds = KLINE_PERIOD_SECONDS[period]
+  if (!periodSeconds) return FORWARD_PERIODS
+  return FORWARD_PERIODS.filter((fp) => {
+    const forwardSeconds = FORWARD_PERIOD_SECONDS[fp]
+    return forwardSeconds >= periodSeconds && forwardSeconds % periodSeconds === 0
+  })
+}
 
 interface Props {
   open: boolean
@@ -70,8 +101,14 @@ export default function FactorAnalysisDialog({
   const [history, setHistory] = useState<any[]>([])
   const [windows, setWindows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const compatibleForwardPeriods = useMemo(() => getCompatibleForwardPeriods(period), [period])
 
   useEffect(() => { setFp(forwardPeriod) }, [forwardPeriod])
+  useEffect(() => {
+    if (compatibleForwardPeriods.length > 0 && !compatibleForwardPeriods.includes(fp)) {
+      setFp(compatibleForwardPeriods[0])
+    }
+  }, [compatibleForwardPeriods, fp])
 
   useEffect(() => {
     if (!open || !factorName || !symbol) return
@@ -151,10 +188,12 @@ export default function FactorAnalysisDialog({
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">{t('factors.forwardPeriodLabel')}:</span>
-                <Select value={fp} onValueChange={setFp}>
+                <Select value={fp} onValueChange={setFp} disabled={compatibleForwardPeriods.length === 0}>
                   <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {FORWARD_PERIODS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    {FORWARD_PERIODS.map(p => (
+                      <SelectItem key={p} value={p} disabled={!compatibleForwardPeriods.includes(p)}>{p}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

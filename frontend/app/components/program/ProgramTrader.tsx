@@ -1151,9 +1151,6 @@ export default function ProgramTrader() {
                 >
                   ✨ {t('programTrader.tryAiCoding', 'Try AI Coding')}
                 </Button>
-                <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  {t('programTrader.premiumFeature', 'Premium feature')}
-                </p>
               </div>
             </div>
 

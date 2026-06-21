@@ -9,6 +9,7 @@ import logging
 
 from database.connection import SessionLocal
 from database.models import User, UserExchangeConfig, UserSubscription
+from api.auth_dependencies import get_current_user
 from repositories.user_repo import (
     create_user, get_user, get_user_by_username,
     update_user, create_auth_session, verify_auth_session
@@ -180,11 +181,13 @@ async def list_users(db: Session = Depends(get_db)):
 
 
 @router.get("/exchange-config")
-async def get_exchange_config(db: Session = Depends(get_db)):
-    """Get current exchange configuration for default user"""
+async def get_exchange_config(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get current exchange configuration for the authenticated user."""
     try:
-        # Use default user_id=1 for now
-        config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == 1).first()
+        config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == current_user.id).first()
         if not config:
             # Return default if no config exists
             return {"selected_exchange": "hyperliquid"}
@@ -195,19 +198,22 @@ async def get_exchange_config(db: Session = Depends(get_db)):
 
 
 @router.post("/exchange-config")
-async def set_exchange_config(exchange_data: dict, db: Session = Depends(get_db)):
-    """Set exchange configuration for default user"""
+async def set_exchange_config(
+    exchange_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set exchange configuration for the authenticated user."""
     try:
         selected_exchange = exchange_data.get("selected_exchange")
         if not selected_exchange or selected_exchange not in ["hyperliquid", "binance", "aster"]:
             raise HTTPException(status_code=400, detail="Invalid exchange selection")
 
-        # Use default user_id=1 for now
-        config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == 1).first()
+        config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == current_user.id).first()
         if config:
             config.selected_exchange = selected_exchange
         else:
-            config = UserExchangeConfig(user_id=1, selected_exchange=selected_exchange)
+            config = UserExchangeConfig(user_id=current_user.id, selected_exchange=selected_exchange)
             db.add(config)
 
         db.commit()

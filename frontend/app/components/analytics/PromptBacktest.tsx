@@ -450,20 +450,20 @@ export default function PromptBacktest({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto xl:overflow-hidden">
       {/* Main Layout: Left (Records) + Right (Workspace) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
+      <div className="grid min-h-[760px] grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2">
         {/* Left Panel: Decision Records */}
-        <Card className="flex flex-col min-h-0">
+        <Card className="flex min-h-[360px] flex-col xl:min-h-0">
           <CardHeader className="pb-2 shrink-0">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="text-base shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="shrink-0 text-base">
                 {t('promptBacktest.decisionRecords', 'Decision Records')}
               </CardTitle>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:items-center">
                 {/* Filters */}
                 <Select value={filterOperation} onValueChange={setFilterOperation}>
-                  <SelectTrigger className="w-24 h-8 text-xs">
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-24">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -474,7 +474,7 @@ export default function PromptBacktest({
                   </SelectContent>
                 </Select>
                 <Select value={filterSymbol} onValueChange={setFilterSymbol}>
-                  <SelectTrigger className="w-28 h-8 text-xs">
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-28">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -484,15 +484,22 @@ export default function PromptBacktest({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="ghost" size="sm" onClick={() => fetchRecords()} disabled={loading}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fetchRecords()}
+                  disabled={loading}
+                  className="h-8 w-8 shrink-0 p-0"
+                  aria-label={t('common.refresh', 'Refresh')}
+                >
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col pt-0 min-h-0">
-            <div className="border rounded-md flex-1 overflow-auto min-h-0">
-              <Table>
+          <CardContent className="flex min-h-0 flex-1 flex-col pt-0">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8 sticky top-0 bg-background z-10">
@@ -543,12 +550,12 @@ export default function PromptBacktest({
               </Table>
             </div>
             {/* Load More & Add to Workspace */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t">
+            <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-xs text-muted-foreground">
                 {filteredRecords.length} {t('promptBacktest.records', 'records')}
                 {selectedIds.size > 0 && ` · ${selectedIds.size} ${t('promptBacktest.selected', 'selected')}`}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {hasMore && (
                   <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
                     {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : t('common.loadMore', 'Load More')}
@@ -572,13 +579,13 @@ export default function PromptBacktest({
         </Card>
 
         {/* Right Panel: Workspace */}
-        <Card className="flex flex-col min-h-0">
+        <Card className="flex min-h-[480px] flex-col xl:min-h-0">
           <CardHeader className="pb-2 shrink-0">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">
                 {t('promptBacktest.workspace', 'Workspace')} ({workspace.length})
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => { setInitialTaskId(undefined); setHistoryModalOpen(true) }}>
                   <History className="h-4 w-4 mr-1" />
                   {t('promptBacktest.history', 'History')}
@@ -594,9 +601,9 @@ export default function PromptBacktest({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col pt-0 space-y-3 min-h-0">
+          <CardContent className="flex min-h-0 flex-1 flex-col space-y-3 pt-0">
             {/* Batch Replace */}
-            <div className="flex gap-2 items-stretch shrink-0">
+            <div className="flex shrink-0 flex-col gap-2 md:flex-row md:items-stretch">
               <Textarea
                 placeholder={t('promptBacktest.findText', 'Find...')}
                 value={findText}
@@ -614,15 +621,15 @@ export default function PromptBacktest({
                     })))
                   }
                 }}
-                className="flex-1 min-h-[68px] max-h-[100px] text-xs font-mono resize-none"
+                className="min-h-[68px] max-h-[100px] flex-1 resize-none text-xs font-mono"
               />
               <Textarea
                 placeholder={t('promptBacktest.replaceWith', 'Replace...')}
                 value={replaceText}
                 onChange={e => setReplaceText(e.target.value)}
-                className="flex-1 min-h-[68px] max-h-[100px] text-xs font-mono resize-none"
+                className="min-h-[68px] max-h-[100px] flex-1 resize-none text-xs font-mono"
               />
-              <div className="flex flex-col gap-1">
+              <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:gap-1">
                 <Button variant="outline" size="sm" onClick={searchPreview} disabled={!findText} className="flex-1">
                   <Search className="h-4 w-4 mr-1" />
                   {t('promptBacktest.preview', 'Preview')}
@@ -659,13 +666,13 @@ export default function PromptBacktest({
             )}
 
             {/* Workspace Items */}
-            <div className="border rounded-md flex-1 overflow-auto min-h-0">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
               {workspace.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground text-sm py-12">
                   {t('promptBacktest.emptyWorkspace', 'Select records from the left and click Add')}
                 </div>
               ) : (
-                <Table>
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       {searchMode && (

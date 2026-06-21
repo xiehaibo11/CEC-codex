@@ -19,7 +19,6 @@ import {
   getCacheTimestamp,
 } from '@/lib/cacheUtils'
 import TraderDetailModal from './TraderDetailModal'
-import QuotaUpgradeModal from '@/components/binance/QuotaUpgradeModal'
 
 // Position type from parent component
 export interface Position {
@@ -110,8 +109,6 @@ export default function HyperliquidMultiAccountSummary({
   const [globalLastUpdate, setGlobalLastUpdate] = useState<string | null>(null)
   const [selectedTraderForModal, setSelectedTraderForModal] = useState<AccountBalance | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false)
-  const [selectedQuotaAccount, setSelectedQuotaAccount] = useState<AccountBalance | null>(null)
 
   // Filter accounts based on selectedAccount - memoized to prevent infinite loops
   const filteredAccounts = useMemo(() => {
@@ -419,25 +416,6 @@ export default function HyperliquidMultiAccountSummary({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Quota upgrade button for Binance mainnet limited accounts */}
-                  {account.quota && account.quota.limited && (
-                    <button
-                      onClick={() => {
-                        setSelectedQuotaAccount(account)
-                        setIsQuotaModalOpen(true)
-                      }}
-                      className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium transition-colors"
-                      title={account.quota.reset_at ? `Resets at ${new Date(account.quota.reset_at * 1000).toLocaleString()}` : undefined}
-                    >
-                      {account.quota.remaining}/{account.quota.limit}
-                      {account.quota.reset_at && (
-                        <span className="ml-1 opacity-75">
-                          · Reset at {new Date(account.quota.reset_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                      <span className="ml-1">· Upgrade</span>
-                    </button>
-                  )}
                   {account.balance && (
                     <Button
                       variant="outline"
@@ -580,12 +558,6 @@ export default function HyperliquidMultiAccountSummary({
         />
       )}
 
-      {/* Quota Upgrade Modal */}
-      <QuotaUpgradeModal
-        isOpen={isQuotaModalOpen}
-        onClose={() => setIsQuotaModalOpen(false)}
-        quota={selectedQuotaAccount?.quota || undefined}
-      />
     </div>
   )
 }

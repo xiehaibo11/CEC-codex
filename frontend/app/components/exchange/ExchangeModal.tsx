@@ -146,14 +146,16 @@ export default function ExchangeModal({ isOpen, onClose }: ExchangeModalProps) {
                   )}
 
                   {/* Register Button */}
-                  <Button
-                    variant={exchange.id === 'hyperliquid' ? 'default' : 'outline'}
-                    className="w-full"
-                    onClick={() => handleExchangeClick(exchange.referralLink)}
-                  >
-                    {exchangeTranslations[exchange.id]?.buttonText || exchange.buttonText}
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </Button>
+                  {exchange.referralLink && (
+                    <Button
+                      variant={exchange.id === 'hyperliquid' ? 'default' : 'outline'}
+                      className="w-full"
+                      onClick={() => handleExchangeClick(exchange.referralLink!)}
+                    >
+                      {exchangeTranslations[exchange.id]?.buttonText || exchange.buttonText}
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               )
             })}

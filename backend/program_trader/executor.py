@@ -3,17 +3,16 @@ Sandbox executor for Program Trader.
 Safely executes strategy code with restricted environment.
 """
 
-import ast
 import math
 import time as pytime
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import threading
 import ctypes
 import traceback
 
-from .models import Strategy, MarketData, Decision, ActionType
+from .models import MarketData, Decision, ActionType
 from .validator import validate_strategy_code
 
 
@@ -91,6 +90,8 @@ SAFE_TIME = {
 
 def _raise_timeout_in_thread(thread_id: int):
     """Raise ExecutionTimeoutError in the target thread using ctypes."""
+    if thread_id is None:
+        return
     res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
         ctypes.c_ulong(thread_id),
         ctypes.py_object(ExecutionTimeoutError)
@@ -131,9 +132,10 @@ class SandboxExecutor:
             )
 
         # Use threading for timeout (works in any thread, unlike signal.SIGALRM)
-        result_holder = {"decision": None, "error": None}
+        result_holder = {"decision": None, "error": None, "thread_id": None}
 
         def run_sandbox():
+            result_holder["thread_id"] = threading.get_ident()
             try:
                 result_holder["decision"] = self._execute_in_sandbox(code, market_data, params or {})
             except ExecutionTimeoutError:
@@ -146,9 +148,21 @@ class SandboxExecutor:
             future = self._thread_pool.submit(run_sandbox)
             try:
                 future.result(timeout=self.timeout_seconds)
-            except Exception:
-                # Timeout or other error - future may still be running
-                pass
+            except TimeoutError:
+                _raise_timeout_in_thread(result_holder["thread_id"])
+                try:
+                    future.result(timeout=0.5)
+                except Exception:
+                    pass
+                return ExecutionResult(
+                    success=False,
+                    decision=None,
+                    error=f"Execution timed out after {self.timeout_seconds}s",
+                    execution_time_ms=self.timeout_seconds * 1000,
+                    logs=self._execution_logs,
+                )
+            except Exception as e:
+                result_holder["error"] = f"Execution error: {str(e)}\n{traceback.format_exc()}"
         else:
             # Real-time mode: create dedicated thread (no concurrency limit)
             execution_thread = threading.Thread(target=run_sandbox, daemon=True)
@@ -174,6 +188,15 @@ class SandboxExecutor:
                 success=False,
                 decision=None,
                 error=result_holder["error"],
+                execution_time_ms=execution_time,
+                logs=self._execution_logs,
+            )
+
+        if result_holder["decision"] is None:
+            return ExecutionResult(
+                success=False,
+                decision=None,
+                error="Execution finished without returning a decision",
                 execution_time_ms=execution_time,
                 logs=self._execution_logs,
             )

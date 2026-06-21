@@ -1,0 +1,357 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'react-hot-toast'
+import { Bot, Loader2, Play, RefreshCw, Save } from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  getEventContractSymbols,
+  getCoinGlassEventContractCapability,
+  getHyperAiProfile,
+  predictEventContract,
+  runEventContractBacktest,
+  type CoinGlassEventContractCapability,
+  type EventAiDecision,
+  type EventBacktestResponse,
+  type EventContractBacktestConfig,
+  type EventContractConfig,
+  type EventContractSymbol,
+  type EventFactorSnapshot,
+  type EventPrediction,
+  type EventTradeLog,
+  type HyperAiProfile,
+} from '@/lib/api'
+
+import { BacktestConfigPanel } from './BacktestConfigPanel'
+import { BacktestResultsPanel } from './BacktestResultsPanel'
+import { PredictionPanel } from './PredictionPanel'
+import { formatTime, fromLocalInputValue, toLocalInputValue } from './shared'
+import { PERIOD_OPTIONS, PERIOD_SECONDS, type FormState } from './types'
+
+const BACKTEST_CONFIG_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:config:v1'
+
+function buildDefaultForm(start: Date, end: Date): FormState {
+  return {
+    symbol: 'BTC',
+    exchange: 'binance',
+    environment: 'mainnet',
+    period: '1m',
+    consensus_mode: 'ai_confirmed',
+    max_ai_evaluations: 20,
+    start_time: toLocalInputValue(start),
+    end_time: toLocalInputValue(end),
+    expiry_minutes: 5,
+    initial_balance: 10000,
+    stake_amount: 100,
+    win_payout_ratio: 0.8,
+    fee_rate: 0,
+    slippage_bps: 0,
+    delay_seconds: 0,
+    consensus_threshold: 30,
+    draw_result: 'loss',
+    enable_fake_breakout_filter: true,
+    enable_trap_filter: true,
+    enable_range_filter: true,
+    enable_multi_timeframe_filter: true,
+    enable_volume_filter: true,
+    enable_cvd_filter: false,
+    enable_l2_features: true,
+    min_l2_coverage_pct: 96,
+    strict_l2_quality: true,
+    enable_coinglass_features: false,
+    min_coinglass_coverage_pct: 96,
+    strict_coinglass_quality: true,
+    coinglass_no_future_leakage: true,
+  }
+}
+
+function loadSavedForm(defaultForm: FormState): FormState {
+  if (typeof window === 'undefined') return defaultForm
+  try {
+    const raw = window.localStorage.getItem(BACKTEST_CONFIG_STORAGE_KEY)
+    if (!raw) return defaultForm
+    const parsed = JSON.parse(raw) as Partial<FormState>
+    return { ...defaultForm, ...parsed }
+  } catch {
+    return defaultForm
+  }
+}
+
+export default function BacktestTool() {
+  const { t } = useTranslation()
+  const end = useMemo(() => new Date(Date.now() - 10 * 60 * 1000), [])
+  const start = useMemo(() => new Date(end.getTime() - 24 * 60 * 60 * 1000), [end])
+
+  const [symbols, setSymbols] = useState<EventContractSymbol[]>([])
+  const [hyperAiProfile, setHyperAiProfile] = useState<HyperAiProfile | null>(null)
+  const [loadingSymbols, setLoadingSymbols] = useState(false)
+  const [loadingPrediction, setLoadingPrediction] = useState(false)
+  const [runningBacktest, setRunningBacktest] = useState(false)
+  const [prediction, setPrediction] = useState<EventPrediction | null>(null)
+  const [backtest, setBacktest] = useState<EventBacktestResponse | null>(null)
+  const [selectedTrade, setSelectedTrade] = useState<EventTradeLog | null>(null)
+  const [form, setForm] = useState<FormState>(() => loadSavedForm(buildDefaultForm(start, end)))
+  const [coinglassCapability, setCoinGlassCapability] = useState<CoinGlassEventContractCapability | null>(null)
+  const [loadingCoinGlassCapability, setLoadingCoinGlassCapability] = useState(false)
+  const coinGlassAvailable = coinglassCapability?.available === true
+
+  const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm(prev => {
+      const next = { ...prev, [key]: value }
+      if (key === 'enable_coinglass_features' && value === true) {
+        if (!coinGlassAvailable) {
+          toast.error(coinglassCapability?.reason || t('backtestTool.coinglassUnavailableShort', 'CoinGlass is not available for this period'))
+          next.enable_coinglass_features = false
+          return next
+        }
+        next.enable_cvd_filter = true
+      }
+      return next
+    })
+  }
+
+  const selectedSymbolMeta = useMemo(() => {
+    return symbols.find(item => (
+      item.exchange === form.exchange &&
+      item.symbol === form.symbol &&
+      item.environment === form.environment
+    ))
+  }, [symbols, form.exchange, form.symbol, form.environment])
+
+  const symbolOptions = useMemo(() => {
+    const items = symbols.filter(item => (
+      item.exchange === form.exchange &&
+      item.environment === form.environment
+    ))
+    return Array.from(new Set(items.map(item => item.symbol))).sort()
+  }, [symbols, form.exchange, form.environment])
+
+  const periodOptions = selectedSymbolMeta?.periods?.length
+    ? selectedSymbolMeta.periods.filter(period => (PERIOD_SECONDS[period] || Number.MAX_SAFE_INTEGER) <= form.expiry_minutes * 60)
+    : PERIOD_OPTIONS.filter(period => PERIOD_SECONDS[period] <= form.expiry_minutes * 60)
+
+  const saveConfig = () => {
+    window.localStorage.setItem(BACKTEST_CONFIG_STORAGE_KEY, JSON.stringify(form))
+    toast.success(t('backtestTool.configSaved', 'Configuration saved'))
+  }
+
+  const chartData = useMemo(() => {
+    return (backtest?.equity_curve || []).map(point => ({
+      ...point,
+      label: formatTime(point.timestamp),
+    }))
+  }, [backtest])
+
+  const displayAi: EventAiDecision[] = selectedTrade?.ai_decision_snapshot || prediction?.ai_decisions || []
+  const displayFactors: EventFactorSnapshot[] = selectedTrade?.factor_snapshot || prediction?.factors || []
+
+  const loadSymbols = useCallback(async () => {
+    try {
+      setLoadingSymbols(true)
+      const [data, profile] = await Promise.all([
+        getEventContractSymbols(),
+        getHyperAiProfile().catch(() => null),
+      ])
+      setSymbols(data.symbols || [])
+      if (profile) setHyperAiProfile(profile)
+    } catch (error) {
+      console.error('Failed to load event contract symbols:', error)
+      toast.error(t('backtestTool.loadSymbolsFailed', 'Failed to load symbols'))
+    } finally {
+      setLoadingSymbols(false)
+    }
+  }, [t])
+
+  const buildPredictPayload = (): EventContractConfig => ({
+    symbol: form.symbol,
+    exchange: form.exchange,
+    environment: form.environment,
+    period: form.period,
+    expiry_minutes: Number(form.expiry_minutes),
+    consensus_mode: form.consensus_mode,
+    max_ai_evaluations: Number(form.max_ai_evaluations),
+    consensus_threshold: Number(form.consensus_threshold),
+    enable_fake_breakout_filter: form.enable_fake_breakout_filter,
+    enable_trap_filter: form.enable_trap_filter,
+    enable_range_filter: form.enable_range_filter,
+    enable_multi_timeframe_filter: form.enable_multi_timeframe_filter,
+    enable_volume_filter: form.enable_volume_filter,
+    enable_cvd_filter: form.enable_cvd_filter,
+    enable_coinglass_features: form.enable_coinglass_features && coinGlassAvailable,
+    min_coinglass_coverage_pct: Number(form.min_coinglass_coverage_pct),
+    strict_coinglass_quality: form.strict_coinglass_quality,
+    coinglass_no_future_leakage: form.coinglass_no_future_leakage,
+    enable_l2_features: form.enable_l2_features,
+    min_l2_coverage_pct: Number(form.min_l2_coverage_pct),
+    strict_l2_quality: form.strict_l2_quality,
+  })
+
+  const buildBacktestPayload = (): EventContractBacktestConfig => ({
+    ...buildPredictPayload(),
+    start_time: fromLocalInputValue(form.start_time),
+    end_time: fromLocalInputValue(form.end_time),
+    initial_balance: Number(form.initial_balance),
+    stake_amount: Number(form.stake_amount),
+    win_payout_ratio: Number(form.win_payout_ratio),
+    fee_rate: Number(form.fee_rate),
+    slippage_bps: Number(form.slippage_bps),
+    delay_seconds: Number(form.delay_seconds),
+    draw_result: form.draw_result,
+    max_bars: 50000,
+  })
+
+  const refreshPrediction = useCallback(async () => {
+    try {
+      setLoadingPrediction(true)
+      const data = await predictEventContract(buildPredictPayload())
+      setPrediction(data)
+    } catch (error: any) {
+      console.error('Prediction failed:', error)
+      toast.error(error?.message || t('backtestTool.predictionFailed', 'Prediction failed'))
+    } finally {
+      setLoadingPrediction(false)
+    }
+  }, [form, coinGlassAvailable, t])
+
+  const runBacktest = async () => {
+    try {
+      setRunningBacktest(true)
+      setSelectedTrade(null)
+      const data = await runEventContractBacktest(buildBacktestPayload())
+      setBacktest(data)
+      setSelectedTrade(data.trades?.[0] || null)
+      toast.success(t('backtestTool.backtestComplete', 'Backtest complete'))
+    } catch (error: any) {
+      console.error('Backtest failed:', error)
+      toast.error(error?.message || t('backtestTool.backtestFailed', 'Backtest failed'))
+    } finally {
+      setRunningBacktest(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSymbols()
+  }, [loadSymbols])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadCapability = async () => {
+      try {
+        setLoadingCoinGlassCapability(true)
+        const capability = await getCoinGlassEventContractCapability({
+          symbol: form.symbol,
+          exchange: form.exchange,
+          period: form.period,
+        })
+        if (cancelled) return
+        setCoinGlassCapability(capability)
+        if (!capability.available) {
+          setForm(prev => prev.enable_coinglass_features
+            ? { ...prev, enable_coinglass_features: false }
+            : prev)
+        }
+      } catch (error) {
+        if (cancelled) return
+        setCoinGlassCapability({
+          available: false,
+          configured: false,
+          status: 'check_failed',
+          reason: error instanceof Error ? error.message : t('backtestTool.coinglassCheckFailed', 'CoinGlass plan check failed'),
+          period: form.period,
+          metrics: [],
+        })
+        setForm(prev => prev.enable_coinglass_features
+          ? { ...prev, enable_coinglass_features: false }
+          : prev)
+      } finally {
+        if (!cancelled) setLoadingCoinGlassCapability(false)
+      }
+    }
+    loadCapability()
+    return () => {
+      cancelled = true
+    }
+  }, [form.symbol, form.exchange, form.period, t])
+
+  useEffect(() => {
+    if (periodOptions.length > 0 && !periodOptions.includes(form.period)) {
+      updateForm('period', periodOptions[0])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodOptions.join(','), form.period])
+
+  useEffect(() => {
+    refreshPrediction()
+    // Initial prediction only; user controls later refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="shrink-0 border-b pb-3 sm:pb-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-normal sm:text-2xl">
+                {t('backtestTool.title', 'Backtest Tool')}
+              </h1>
+              <Badge variant="secondary" className="gap-1">
+                <Bot className="h-3 w-3" />
+                {t('backtestTool.eventContract', '5m Event Contract')}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('backtestTool.subtitle', '5-minute event contract prediction with rule prefiltering, real AI confirmation, and historical settlement backtest.')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={saveConfig}>
+              <Save className="h-4 w-4" />
+              {t('backtestTool.saveConfig', 'Save Config')}
+            </Button>
+            <Button variant="outline" onClick={refreshPrediction} disabled={loadingPrediction}>
+              {loadingPrediction ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {t('backtestTool.refreshPrediction', 'Refresh Prediction')}
+            </Button>
+            <Button onClick={runBacktest} disabled={runningBacktest}>
+              {runningBacktest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {t('backtestTool.runBacktest', 'Run Event Backtest')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pt-3 sm:pt-4">
+        <div className="grid gap-4 2xl:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <BacktestConfigPanel
+              form={form}
+              symbolOptions={symbolOptions}
+              periodOptions={periodOptions}
+              selectedSymbolMeta={selectedSymbolMeta}
+              hyperAiProfile={hyperAiProfile}
+              coinglassCapability={coinglassCapability}
+              loadingCoinGlassCapability={loadingCoinGlassCapability}
+              loadingSymbols={loadingSymbols}
+              updateForm={updateForm}
+            />
+          </div>
+
+          <div className="min-w-0 space-y-4">
+            <PredictionPanel prediction={prediction} loadingPrediction={loadingPrediction} />
+            <BacktestResultsPanel
+              backtest={backtest}
+              runningBacktest={runningBacktest}
+              chartData={chartData}
+              displayAi={displayAi}
+              displayFactors={displayFactors}
+              selectedTrade={selectedTrade}
+              setSelectedTrade={trade => setSelectedTrade(trade)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

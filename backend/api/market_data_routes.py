@@ -8,11 +8,13 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import logging
 
+from services.exchanges.binance_constants import BINANCE_KLINE_INTERVALS
 from services.market_data import get_last_price, get_kline_data, get_market_status, get_ticker_data
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/market", tags=["market_data"])
+VALID_KLINE_PERIODS = BINANCE_KLINE_INTERVALS
 
 
 class PriceResponse(BaseModel):
@@ -155,19 +157,17 @@ async def get_crypto_kline(
     Args:
         symbol: crypto symbol, such as 'MSFT'
         market: Market symbol, default 'US'
-        period: Time period, supports '1m', '5m', '15m', '30m', '1h', '1d'
+        period: Time period, supports Binance futures intervals from '1m' to '1M'
         count: Number of data points, default 100, max 500
 
     Returns:
         Response containing K-line data
     """
     try:
-        # Parameter validation - Hyperliquid supported time periods
-        valid_periods = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d', '3d', '1w', '1M']
-        if period not in valid_periods:
+        if period not in VALID_KLINE_PERIODS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported time period, supported periods: {', '.join(valid_periods)}"
+                detail=f"Unsupported time period, supported periods: {', '.join(VALID_KLINE_PERIODS)}"
             )
             
         if count <= 0 or count > 500:
@@ -306,11 +306,10 @@ async def get_kline_with_indicators(
         from services.technical_indicators import calculate_indicators
 
         # 参数验证
-        valid_periods = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d', '3d', '1w', '1M']
-        if period not in valid_periods:
+        if period not in VALID_KLINE_PERIODS:
             raise HTTPException(
                 status_code=400,
-                detail=f"不支持的时间周期，支持的周期: {', '.join(valid_periods)}"
+                detail=f"不支持的时间周期，支持的周期: {', '.join(VALID_KLINE_PERIODS)}"
             )
 
         if count <= 0 or count > 500:

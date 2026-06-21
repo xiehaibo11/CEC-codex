@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { getWalletRateLimit, getBinanceRateLimit } from '@/lib/hyperliquidApi';
 import type { HyperliquidEnvironment } from '@/lib/types/hyperliquid';
 import type { ExchangeType } from './WalletSelector';
+import { DEFAULT_MANUAL_TRADING_EXCHANGE } from './manualTradingExchanges';
 import { formatDateTime } from '@/lib/dateTime';
 import { useTranslation } from 'react-i18next';
 
@@ -32,7 +33,7 @@ interface RateLimitData {
   timestamp?: number;
 }
 
-export default function WalletApiUsage({ accountId, environment, exchange = 'hyperliquid' }: WalletApiUsageProps) {
+export default function WalletApiUsage({ accountId, environment, exchange = DEFAULT_MANUAL_TRADING_EXCHANGE }: WalletApiUsageProps) {
   const { t } = useTranslation();
   const [rateLimit, setRateLimit] = useState<RateLimitData | null>(null);
   const [loading, setLoading] = useState(false);

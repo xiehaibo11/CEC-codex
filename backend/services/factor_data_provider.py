@@ -11,6 +11,7 @@ from typing import List, Dict, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from services.factor_timeframes import period_to_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def _backfill_binance(db: Session, symbol: str, period: str, target_bars: int):
     end_time = int(time.time() * 1000)
 
     # Calculate how far back we need to go
-    period_seconds = _period_to_seconds(period)
+    period_seconds = period_to_seconds(period)
     start_time = end_time - (target_bars * period_seconds * 1000)
 
     current_end = end_time
@@ -140,12 +141,3 @@ def _backfill_binance(db: Session, symbol: str, period: str, target_bars: int):
 
     print(f"[FactorDataProvider] Binance backfill {symbol}/{period}: "
           f"done, total {total_fetched} bars", flush=True)
-
-
-def _period_to_seconds(period: str) -> int:
-    """Convert period string to seconds."""
-    mapping = {
-        "1m": 60, "5m": 300, "15m": 900,
-        "1h": 3600, "4h": 14400, "1d": 86400,
-    }
-    return mapping.get(period, 3600)

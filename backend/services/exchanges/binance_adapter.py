@@ -6,6 +6,7 @@ to unified internal format.
 """
 
 import logging
+import json
 import requests
 from decimal import Decimal
 from typing import List, Optional
@@ -163,9 +164,10 @@ class BinanceAdapter(BaseExchangeAdapter):
         best_bid = Decimal(str(bids[0][0])) if bids else Decimal("0")
         best_ask = Decimal(str(asks[0][0])) if asks else Decimal("0")
 
-        # Sum top levels for depth
-        bid_depth_sum = sum(Decimal(str(b[1])) for b in bids[:10])
-        ask_depth_sum = sum(Decimal(str(a[1])) for a in asks[:10])
+        bid_depth_5 = sum(Decimal(str(b[1])) for b in bids[:5])
+        ask_depth_5 = sum(Decimal(str(a[1])) for a in asks[:5])
+        bid_depth_10 = sum(Decimal(str(b[1])) for b in bids[:10])
+        ask_depth_10 = sum(Decimal(str(a[1])) for a in asks[:10])
 
         spread = best_ask - best_bid
         mid_price = (best_ask + best_bid) / 2
@@ -177,10 +179,17 @@ class BinanceAdapter(BaseExchangeAdapter):
             timestamp=timestamp,
             best_bid=best_bid,
             best_ask=best_ask,
-            bid_depth_sum=bid_depth_sum,
-            ask_depth_sum=ask_depth_sum,
+            bid_depth_sum=bid_depth_10,
+            ask_depth_sum=ask_depth_10,
             spread=spread,
             spread_bps=spread_bps,
+            bid_depth_5=bid_depth_5,
+            ask_depth_5=ask_depth_5,
+            bid_depth_10=bid_depth_10,
+            ask_depth_10=ask_depth_10,
+            bid_orders_count=len(bids),
+            ask_orders_count=len(asks),
+            raw_levels=json.dumps({"bids": bids[:10], "asks": asks[:10]}, separators=(",", ":")),
         )
 
     def fetch_funding_rate(self, symbol: str) -> UnifiedFunding:

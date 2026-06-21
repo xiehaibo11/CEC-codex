@@ -8,7 +8,8 @@
     "build": "pnpm run build:frontend && pnpm run build:backend",
     "build:frontend": "cd frontend && pnpm build",
     "build:backend": "cd backend && echo \"Backend build step not yet implemented\"",
-    "install:all": "pnpm install && cd backend && uv sync --quiet"
+    "install:all": "pnpm install && cd backend && uv sync --quiet",
+    "sync:icons": "node scripts/sync-binance-icons.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.0"

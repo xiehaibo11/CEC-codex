@@ -43,34 +43,6 @@ interface SamplingPoolData {
   }
 }
 
-interface HyperliquidActionEntry {
-  id: number
-  timestamp: string | null
-  account_id: number
-  environment: string
-  wallet_address: string
-  action_type: string
-  status: string
-  symbol?: string | null
-  side?: string | null
-  leverage?: number | null
-  size?: number | null
-  price?: number | null
-  notional?: number | null
-  request_weight: number
-  error_message?: string | null
-  request_payload?: string | null
-  response_payload?: string | null
-}
-
-interface HyperliquidActionStats {
-  total: number
-  last24h: number
-  success: number
-  error: number
-  request_weight_sum: number
-}
-
 export default function SystemLogs() {
   const { t } = useTranslation()
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -80,8 +52,6 @@ export default function SystemLogs() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedLevel, setSelectedLevel] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<string>('logs')
-  const [hyperliquidActions, setHyperliquidActions] = useState<HyperliquidActionEntry[]>([])
-  const [hyperliquidStats, setHyperliquidStats] = useState<HyperliquidActionStats | null>(null)
 
   // Fetch logs
   const fetchLogs = async () => {
@@ -122,18 +92,6 @@ export default function SystemLogs() {
     }
   }
 
-  const fetchHyperliquidActions = async () => {
-    try {
-      const response = await fetch('/api/hyperliquid/actions/?limit=100')
-      const data = await response.json()
-      setHyperliquidActions(data.entries || [])
-      setHyperliquidStats(data.stats || null)
-    } catch (error) {
-      console.error('Failed to fetch Hyperliquid actions:', error)
-      toast.error('Failed to fetch Hyperliquid actions')
-    }
-  }
-
   // Clear logs
   const clearLogs = async () => {
     if (!confirm('Are you sure you want to clear all logs?')) return
@@ -156,8 +114,6 @@ useEffect(() => {
     fetchStats()
   } else if (activeTab === 'sampling') {
     fetchSamplingPool()
-  } else if (activeTab === 'hyperliquid') {
-    fetchHyperliquidActions()
   }
 }, [selectedCategory, selectedLevel, activeTab])
 
@@ -214,8 +170,6 @@ useEffect(() => {
                 fetchStats()
               } else if (activeTab === 'sampling') {
                 fetchSamplingPool()
-              } else if (activeTab === 'hyperliquid') {
-                fetchHyperliquidActions()
               }
             }}
           >
@@ -286,10 +240,9 @@ useEffect(() => {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="logs">{t('logs.systemLogs', 'System Logs')}</TabsTrigger>
           <TabsTrigger value="sampling">{t('logs.samplingPool', 'Sampling Pool')}</TabsTrigger>
-          <TabsTrigger value="hyperliquid">{t('logs.hyperliquidActions', 'Hyperliquid Actions')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="logs" className="space-y-4">
@@ -469,105 +422,6 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="hyperliquid" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {t('logs.hyperliquidActionSummary', 'Hyperliquid Action Summary')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {hyperliquidStats ? (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('logs.totalRequests', 'Total Requests')}</p>
-                    <p className="text-2xl font-bold">{hyperliquidStats.total}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('logs.last24h', 'Last 24h')}</p>
-                    <p className="text-2xl font-bold">{hyperliquidStats.last24h}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('logs.success', 'Success')}</p>
-                    <p className="text-2xl font-bold text-green-500">{hyperliquidStats.success}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('logs.errorsCount', 'Errors')}</p>
-                    <p className="text-2xl font-bold text-red-500">{hyperliquidStats.error}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-muted-foreground">{t('logs.noStatsAvailable', 'No stats available')}</div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('logs.latestActions', 'Latest Actions')} ({hyperliquidActions.length})</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {t('logs.requestWeightTotal', 'Request weight total')}: {hyperliquidStats?.request_weight_sum ?? 0}
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[600px] pr-4">
-                {hyperliquidActions.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    {t('logs.noHyperliquidActions', 'No Hyperliquid actions recorded yet')}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {hyperliquidActions.map((action) => (
-                      <div key={action.id} className="border rounded-lg p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold uppercase text-sm">{action.action_type}</span>
-                            <Badge variant={action.status === 'success' ? 'outline' : 'destructive'}>
-                              {action.status.toUpperCase()}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {action.timestamp ? formatTimestamp(action.timestamp) : 'N/A'}
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {action.environment.toUpperCase()} · {action.wallet_address}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
-                          {action.symbol && (
-                            <div>
-                              <span className="text-muted-foreground">Symbol:</span> {action.symbol}
-                            </div>
-                          )}
-                          {action.side && (
-                            <div>
-                              <span className="text-muted-foreground">Side:</span> {action.side.toUpperCase()}
-                            </div>
-                          )}
-                          {action.size !== null && action.size !== undefined && (
-                            <div>
-                              <span className="text-muted-foreground">Size:</span> {action.size}
-                            </div>
-                          )}
-                          {action.price !== null && action.price !== undefined && (
-                            <div>
-                              <span className="text-muted-foreground">Price:</span> ${action.price}
-                            </div>
-                          )}
-                        </div>
-                        {action.error_message && (
-                          <div className="text-xs text-red-500 bg-red-500/10 p-2 rounded">
-                            {action.error_message}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   )

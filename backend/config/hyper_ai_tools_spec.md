@@ -263,7 +263,154 @@ Or for program:
 
 ---
 
-### 1.7 get_system_logs
+### 1.7 get_prompt_backtests
+
+**Purpose**: List Prompt Backtest tasks or inspect a single task's result summary.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| trader_id | integer | No | Filter task history to one AI Trader |
+| task_id | integer | No | Inspect one Prompt Backtest task in detail |
+| limit | integer | No | Max tasks to return when listing history (default 10, max 20) |
+
+**Implementation**:
+```python
+# Query PromptBacktestTask and PromptBacktestItem.
+# This tool is read-only: it never creates or reruns backtests.
+# Use existing /api/prompt-backtest endpoints for UI execution.
+```
+
+**Return Value**:
+```json
+{
+  "status": "ok",
+  "tasks": [
+    {
+      "task_id": 12,
+      "trader_id": 3,
+      "trader_name": "BTC Trend Trader",
+      "status": "completed",
+      "total_count": 20,
+      "completed_count": 20,
+      "failed_count": 0
+    }
+  ],
+  "note": "Pass task_id to inspect item-level Prompt Backtest results."
+}
+```
+
+**Safety**: Read-only. Does not trigger LLM calls or market execution.
+
+---
+
+### 1.8 predict_event_contract_5m
+
+**Purpose**: Run the current 5-minute event contract prediction engine for a symbol.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| symbol | string | Yes | Trading symbol, e.g. BTC |
+| exchange | string | No | binance or hyperliquid (default: binance) |
+| period | string | No | 1m, 3m, 5m, 15m, 30m, 1h (default: 1m) |
+| consensus_threshold | integer | No | 30, 29, or 28 (default: 30) |
+| consensus_mode | string | No | `ai_confirmed` calls the configured LLM; `rule_only` uses deterministic rules only |
+| ai_trader_id | integer | No | Optional AI Trader account ID for LLM confirmation |
+| enable_coinglass_features | boolean | No | Use CoinGlass historical CVD, taker flow, OI, funding, and liquidation factors |
+| min_coinglass_coverage_pct | number | No | Minimum CoinGlass coverage when enabled; default 96 |
+| strict_coinglass_quality | boolean | No | Fail if enabled CoinGlass data is below the minimum coverage |
+
+**Implementation**:
+```python
+# Uses services.event_contract_service.
+# Loads latest historical K-lines.
+# Optionally loads CoinGlass historical factors and audits their coverage.
+# Computes factors and deterministic rule prefilter votes.
+# In ai_confirmed mode, calls the configured LLM to return exactly 30 role-based AI decisions.
+# Does not place trades.
+```
+
+**Return Value**:
+```json
+{
+  "status": "ok",
+  "prediction": {
+    "symbol": "BTC",
+    "best_action": "long",
+    "allow_trade": true,
+    "long_5m_probability": 82.4,
+    "short_5m_probability": 12.1,
+    "hold_probability": 17.6,
+    "signal_strength": 88.2,
+    "trap_risk": 18.0,
+    "fake_breakout_risk": 10.0
+  },
+  "ai_consensus": {
+    "long_votes": 30,
+    "short_votes": 0,
+    "hold_votes": 0
+  }
+}
+```
+
+**Safety**: Read-only. Predicts event-contract direction only; does not execute trades.
+
+---
+
+### 1.9 run_event_contract_backtest
+
+**Purpose**: Run and save a 5-minute event contract historical backtest.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| symbol | string | Yes | Trading symbol, e.g. BTC |
+| start_time | string | Yes | ISO start time |
+| end_time | string | Yes | ISO end time |
+| exchange | string | No | binance or hyperliquid (default: binance) |
+| period | string | No | Main K-line period (default: 1m) |
+| consensus_threshold | integer | No | 30, 29, or 28 (default: 30) |
+| initial_balance | number | No | Initial simulated balance |
+| stake_amount | number | No | Stake per event contract |
+| consensus_mode | string | No | `ai_confirmed` calls the configured LLM for candidate signals; `rule_only` uses deterministic rules only |
+| ai_trader_id | integer | No | Optional AI Trader account ID for LLM confirmation |
+| max_ai_evaluations | integer | No | Maximum LLM-confirmed candidate signals in this backtest |
+| enable_coinglass_features | boolean | No | Use CoinGlass historical CVD, taker flow, OI, funding, and liquidation factors |
+| min_coinglass_coverage_pct | number | No | Minimum CoinGlass coverage when enabled; default 96 |
+| strict_coinglass_quality | boolean | No | Fail if enabled CoinGlass data is below the minimum coverage |
+
+**Implementation**:
+```python
+# Iterates historical K-lines.
+# Optionally loads CoinGlass historical factors once per run, aligns them by timestamp, and blocks low-coverage runs in strict mode.
+# Each entry decision uses only data at or before entry_time.
+# Rule prefiltering runs first. In ai_confirmed mode, a candidate is counted only after the LLM returns the 30-role AI panel.
+# Expiry price is used only after signal generation to settle win/loss/draw.
+# Saves event_contract_backtest_runs and event_contract_trade_logs.
+```
+
+**Return Value**:
+```json
+{
+  "status": "ok",
+  "run_id": 42,
+  "summary": {
+    "total_trades": 18,
+    "wins": 11,
+    "losses": 7,
+    "win_rate": 61.11,
+    "total_pnl": 180.0
+  },
+  "sample_trades": []
+}
+```
+
+**Safety**: Simulation only. This is event-contract settlement backtesting, not normal futures TP/SL backtesting.
+
+---
+
+### 1.10 get_system_logs
 
 **Purpose**: Get recent system error/warning logs for troubleshooting.
 

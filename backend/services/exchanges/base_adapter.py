@@ -56,6 +56,13 @@ class UnifiedOrderbook:
     ask_depth_sum: Decimal  # Sum of top N ask quantities
     spread: Decimal
     spread_bps: Decimal  # Spread in basis points
+    bid_depth_5: Optional[Decimal] = None
+    ask_depth_5: Optional[Decimal] = None
+    bid_depth_10: Optional[Decimal] = None
+    ask_depth_10: Optional[Decimal] = None
+    bid_orders_count: int = 0
+    ask_orders_count: int = 0
+    raw_levels: Optional[str] = None
 
 
 @dataclass

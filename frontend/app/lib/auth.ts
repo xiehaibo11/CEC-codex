@@ -1,10 +1,21 @@
 // Authentication configuration interface
 interface AuthConfig {
   authProvider: string
+  authProxyProvider?: string
   clientId: string
   appName: string
   organizationName: string
   redirectPath: string
+  oauthProviders?: AuthOAuthProvider[]
+}
+
+export type OAuthProviderType = 'GitHub' | 'Google'
+
+export interface AuthOAuthProvider {
+  type: OAuthProviderType
+  name: string
+  displayName: string
+  clientId: string
 }
 
 export interface TokenResponse {
@@ -52,6 +63,25 @@ export interface User {
 // Global auth configuration
 let authConfig: AuthConfig | null = null
 
+const FORCE_FRESH_AUTH_KEY = 'arena-force-fresh-oauth'
+const DEFAULT_AUTH_PROMPT = 'login select_account'
+const FRESH_AUTH_PROMPT = 'login consent select_account'
+
+const DEFAULT_OAUTH_PROVIDERS: AuthOAuthProvider[] = [
+  {
+    type: 'GitHub',
+    name: 'github_login',
+    displayName: 'GitHub',
+    clientId: 'Ov23liwdTwGyhQkcFrYK',
+  },
+  {
+    type: 'Google',
+    name: 'google_login',
+    displayName: 'Google',
+    clientId: 'GOOGLE_CLIENT_ID_REDACTED',
+  },
+]
+
 // Load authentication configuration
 export async function loadAuthConfig(): Promise<AuthConfig | null> {
   if (authConfig) return authConfig
@@ -70,12 +100,21 @@ export async function loadAuthConfig(): Promise<AuthConfig | null> {
   }
 }
 
-// Generate random string
-function generateRandomString(length: number): string {
-  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
+// Generate URL-safe random string
+function generateRandomString(length: number, charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'): string {
+  const values = new Uint8Array(length)
+
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(values)
+  } else {
+    for (let i = 0; i < length; i++) {
+      values[i] = Math.floor(Math.random() * 256)
+    }
+  }
+
   let result = ''
   for (let i = 0; i < length; i++) {
-    result += charset.charAt(Math.floor(Math.random() * charset.length))
+    result += charset.charAt(values[i] % charset.length)
   }
   return result
 }
@@ -179,7 +218,7 @@ function base64urlEncode(buffer: ArrayBuffer): string {
 
 // Generate PKCE parameters
 async function generatePKCE() {
-  const codeVerifier = generateRandomString(128)
+  const codeVerifier = generateRandomString(64)
   const codeChallenge = base64urlEncode(await sha256(codeVerifier))
   return {
     codeVerifier,
@@ -188,8 +227,81 @@ async function generatePKCE() {
   }
 }
 
-// Get sign in URL
-export async function getSignInUrl(): Promise<string | null> {
+interface OAuthAuthParams {
+  clientId: string
+  responseType: string
+  redirectUri: string
+  scope: string
+  state: string
+  nonce: string
+  challengeMethod: string
+  codeChallenge: string
+  type: string
+}
+
+interface ProviderCallbackParams {
+  authParams: OAuthAuthParams
+  application: string
+  provider: string
+  method: string
+}
+
+function authParamsToQuery(params: OAuthAuthParams): string {
+  const query = new URLSearchParams({
+    clientId: params.clientId,
+    responseType: params.responseType,
+    redirectUri: params.redirectUri,
+    type: params.type,
+    scope: params.scope,
+    state: params.state,
+    nonce: params.nonce,
+    code_challenge_method: params.challengeMethod,
+    code_challenge: params.codeChallenge,
+  })
+  return `?${query.toString()}`
+}
+
+export function markNextLoginForFreshAuthorization(): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(FORCE_FRESH_AUTH_KEY, '1')
+}
+
+function consumeFreshAuthorizationFlag(): boolean {
+  if (typeof window === 'undefined') return false
+  const shouldForce = localStorage.getItem(FORCE_FRESH_AUTH_KEY) === '1'
+  if (shouldForce) {
+    localStorage.removeItem(FORCE_FRESH_AUTH_KEY)
+  }
+  return shouldForce
+}
+
+function buildAuthorizeSearch(
+  params: OAuthAuthParams,
+  forceFreshAuthorization: boolean = false
+): string {
+  const query = new URLSearchParams({
+    client_id: params.clientId,
+    response_type: params.responseType,
+    redirect_uri: params.redirectUri,
+    scope: params.scope,
+    state: params.state,
+    code_challenge: params.codeChallenge,
+    code_challenge_method: params.challengeMethod,
+    prompt: forceFreshAuthorization ? FRESH_AUTH_PROMPT : DEFAULT_AUTH_PROMPT,
+    max_age: '0',
+  })
+
+  if (forceFreshAuthorization) {
+    // These are harmless if ignored by the auth proxy, but useful for OAuth
+    // providers that support forcing consent/account selection on re-login.
+    query.set('approval_prompt', 'force')
+    query.set('access_type', 'offline')
+  }
+
+  return `?${query.toString()}`
+}
+
+async function createOAuthAuthParams(): Promise<OAuthAuthParams | null> {
   const config = await loadAuthConfig()
   if (!config) return null
 
@@ -208,29 +320,180 @@ export async function getSignInUrl(): Promise<string | null> {
     const state = generateRandomString(32)
     localStorage.setItem('oauth_state', state)
 
-    // Build arena relay redirect URI, include PKCE verifier + a state hint for server-side exchange
-    const relayParams = new URLSearchParams({
-      return_to: window.location.origin,
-      code_verifier: pkce.codeVerifier,
-      state_hint: state,
-    })
-    const redirectUri = `${config.authProvider}/arena-callback?${relayParams.toString()}`
-    const params = new URLSearchParams({
-      client_id: config.clientId,
-      response_type: 'code',
-      redirect_uri: redirectUri,
-      scope: 'read offline_access',  // Add offline_access to get refresh_token
-      state: state,
-      code_challenge: pkce.codeChallenge,
-      code_challenge_method: pkce.codeChallengeMethod,
-      prompt: 'select_account'  // Force account selection screen
-    })
+    const redirectUri = new URL(config.redirectPath || '/callback', window.location.origin).toString()
+    localStorage.setItem('oauth_redirect_uri', redirectUri)
 
-    return `${config.authProvider}/login/oauth/authorize?${params.toString()}`
+    return {
+      clientId: config.clientId,
+      responseType: 'code',
+      redirectUri,
+      scope: 'read offline_access',
+      state,
+      nonce: '',
+      challengeMethod: pkce.codeChallengeMethod,
+      codeChallenge: pkce.codeChallenge,
+      type: 'code',
+    }
   } catch (error) {
-    console.error('Failed to generate sign in URL:', error)
+    console.error('Failed to generate OAuth parameters:', error)
     return null
   }
+}
+
+function getConfiguredOAuthProvider(config: AuthConfig, providerType: OAuthProviderType): AuthOAuthProvider | null {
+  const providers = config.oauthProviders?.length ? config.oauthProviders : DEFAULT_OAUTH_PROVIDERS
+  return providers.find((provider) => provider.type === providerType) || null
+}
+
+export async function getOAuthProviderConfig(providerType: OAuthProviderType): Promise<AuthOAuthProvider | null> {
+  const config = await loadAuthConfig()
+  if (!config) return null
+  return getConfiguredOAuthProvider(config, providerType)
+}
+
+function decodeProviderState(state: string): ProviderCallbackParams | null {
+  try {
+    const decoded = atob(state)
+    const params = new URLSearchParams(decoded)
+    const application = params.get('application')
+    const provider = params.get('provider')
+    const method = params.get('method') || 'signup'
+
+    if (!application || !provider || !method) {
+      return null
+    }
+
+    return {
+      application,
+      provider,
+      method,
+      authParams: {
+        clientId: params.get('client_id') || '',
+        responseType: params.get('response_type') || 'code',
+        redirectUri: params.get('redirect_uri') || '',
+        scope: params.get('scope') || 'read offline_access',
+        state: params.get('state') || '',
+        nonce: params.get('nonce') || '',
+        challengeMethod: params.get('code_challenge_method') || '',
+        codeChallenge: params.get('code_challenge') || '',
+        type: 'code',
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function getProviderSignInUrl(providerType: OAuthProviderType): Promise<string | null> {
+  const config = await loadAuthConfig()
+  if (!config || typeof window === 'undefined') return null
+
+  const provider = getConfiguredOAuthProvider(config, providerType)
+  const authParams = await createOAuthAuthParams()
+  if (!provider || !authParams) return null
+
+  const authorizeUrl = new URL('/login/oauth/authorize', config.authProvider)
+  authorizeUrl.search = buildAuthorizeSearch(authParams, consumeFreshAuthorizationFlag())
+  authorizeUrl.searchParams.set('provider_hint', provider.name)
+  return authorizeUrl.toString()
+}
+
+// Get sign in URL
+export async function getSignInUrl(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  return `${window.location.origin}/login`
+}
+
+export function isProviderCallback(search: string): boolean {
+  const state = new URLSearchParams(search).get('state')
+  return !!state && !!decodeProviderState(state)
+}
+
+async function exchangeProviderLoginForToken(
+  providerCallback: ProviderCallbackParams,
+  code: string,
+  providerRedirectUri: string
+): Promise<TokenResponse | null> {
+  const loginPayload = {
+    type: providerCallback.authParams.responseType || 'code',
+    application: providerCallback.application,
+    provider: providerCallback.provider,
+    code,
+    samlRequest: '',
+    state: providerCallback.application,
+    redirectUri: providerRedirectUri,
+    method: providerCallback.method,
+  }
+
+  try {
+    const response = await fetch(`/api/login${authParamsToQuery(providerCallback.authParams)}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: JSON.stringify(loginPayload),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const data = await response.json()
+    if (!response.ok || data.status !== 'ok' || !data.data) {
+      console.error('Provider login exchange failed:', data)
+      return null
+    }
+
+    return await exchangeCodeForToken(data.data, providerCallback.authParams.state)
+  } catch (error) {
+    console.error('Provider login exchange error:', error)
+    return null
+  }
+}
+
+export async function exchangeProviderCodeForToken(
+  providerType: OAuthProviderType,
+  code: string,
+  providerRedirectUri: string
+): Promise<TokenResponse | null> {
+  const config = await loadAuthConfig()
+  if (!config) return null
+
+  const provider = getConfiguredOAuthProvider(config, providerType)
+  const authParams = await createOAuthAuthParams()
+  if (!provider || !authParams) return null
+
+  return await exchangeProviderLoginForToken(
+    {
+      application: config.appName,
+      provider: provider.name,
+      method: 'signup',
+      authParams,
+    },
+    code,
+    providerRedirectUri
+  )
+}
+
+export async function exchangeProviderCallbackForToken(search: string): Promise<TokenResponse | null> {
+  const config = await loadAuthConfig()
+  if (!config || typeof window === 'undefined') return null
+
+  const searchParams = new URLSearchParams(search)
+  const providerState = searchParams.get('state')
+  if (!providerState) return null
+
+  const providerCallback = decodeProviderState(providerState)
+  if (!providerCallback) return null
+
+  const code =
+    searchParams.get('code') ||
+    searchParams.get('auth_code') ||
+    searchParams.get('authCode')
+
+  if (!code) {
+    console.error('No provider authorization code received')
+    return null
+  }
+
+  return await exchangeProviderLoginForToken(providerCallback, code, `${window.location.origin}/callback`)
 }
 
 // Exchange authorization code for access token
@@ -254,12 +517,16 @@ export async function exchangeCodeForToken(code: string, state: string): Promise
       codeVerifier = '' // Use empty string for non-PKCE flow
     }
 
+    const redirectUri = localStorage.getItem('oauth_redirect_uri')
+
     // Clean up localStorage
     localStorage.removeItem('oauth_state')
     localStorage.removeItem('pkce_code_verifier')
+    localStorage.removeItem('oauth_redirect_uri')
 
     // Build token request
-    const tokenUrl = `${config.authProvider}/api/login/oauth/access_token`
+    const tokenProvider = config.authProxyProvider || config.authProvider
+    const tokenUrl = `${tokenProvider}/api/login/oauth/access_token`
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
       client_id: config.clientId,
@@ -272,6 +539,10 @@ export async function exchangeCodeForToken(code: string, state: string): Promise
       console.log('Using PKCE flow with code_verifier')
     } else {
       console.log('Using standard flow without PKCE')
+    }
+
+    if (redirectUri) {
+      params.append('redirect_uri', redirectUri)
     }
 
     const response = await fetch(tokenUrl, {
@@ -433,13 +704,9 @@ export function decodeArenaSession(session: string): ArenaSessionPayload | null 
 
 // Get sign out URL (deprecated - use ssoLogout instead)
 export async function getSignOutUrl(): Promise<string | null> {
-  const config = await loadAuthConfig()
-  if (!config) return null
-
   if (typeof window === 'undefined') return null
 
-  const redirectUri = window.location.origin
-  return `${config.authProvider}/logout?redirect_uri=${encodeURIComponent(redirectUri)}`
+  return `${window.location.origin}/login`
 }
 
 // SSO Logout - Clear Casdoor session across all apps
@@ -508,17 +775,22 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   if (!config) return null
 
   try {
-    console.log('[refreshAccessToken] Refreshing token via relay server...')
+    console.log('[refreshAccessToken] Refreshing token via auth provider...')
 
-    // Use relay server at www.akooi.com to handle refresh (keeps client_secret secure)
-    const relayUrl = 'https://www.akooi.com/api/arena-refresh'
+    const tokenProvider = config.authProxyProvider || config.authProvider
+    const refreshUrl = `${tokenProvider}/api/login/oauth/refresh_token`
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: config.clientId,
+      refresh_token: refreshToken,
+    })
 
-    const response = await fetch(relayUrl, {
+    const response = await fetch(refreshUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: params.toString(),
     })
 
     if (!response.ok) {

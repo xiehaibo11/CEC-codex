@@ -42,7 +42,6 @@ import {
 } from '@/components/ui/dialog'
 import PromptPreviewDialog from './PromptPreviewDialog'
 import AiPromptChatModal from './AiPromptChatModal'
-import PremiumRequiredModal from '@/components/ui/PremiumRequiredModal'
 
 interface BindingFormState {
   id?: number
@@ -107,8 +106,6 @@ export default function PromptManager() {
   // AI Prompt Chat Modal
   const [aiChatModalOpen, setAiChatModalOpen] = useState(false)
 
-  // Premium Modal
-  const [premiumModalOpen, setPremiumModalOpen] = useState(false)
 
   // Variables Reference Modal
   const [variablesRefModalOpen, setVariablesRefModalOpen] = useState(false)
@@ -123,7 +120,7 @@ export default function PromptManager() {
   }, [i18n.language])
 
   // Auth context
-  const { user, membership } = useAuth()
+  const { user } = useAuth()
 
   const selectedTemplate = useMemo(
     () => templates.find((tpl) => tpl.id === selectedId) || null,
@@ -393,11 +390,6 @@ export default function PromptManager() {
     // Limited Time Free - skip premium check
     // Open AI generator
     setAiChatModalOpen(true)
-  }
-
-  const handleSubscribe = () => {
-    setPremiumModalOpen(false)
-    window.open('https://www.akooi.com/#pricing-section', '_blank')
   }
 
   const handleOpenVariablesRef = async () => {
@@ -812,15 +804,6 @@ export default function PromptManager() {
         promptName={selectedTemplate?.name}
       />
 
-      {/* Premium Required Modal */}
-      <PremiumRequiredModal
-        isOpen={premiumModalOpen}
-        onClose={() => setPremiumModalOpen(false)}
-        onSubscribe={handleSubscribe}
-        featureName="AI Strategy Prompt Generator"
-        description="Let AI help you write professional trading strategy prompts with natural language conversation."
-      />
-
       {/* Variables Reference Modal */}
       <Dialog open={variablesRefModalOpen} onOpenChange={setVariablesRefModalOpen}>
         <DialogContent className="max-w-5xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -861,9 +844,6 @@ export default function PromptManager() {
                 >
                   ✨ {t('prompt.tryAiWrite', 'Try AI Write')}
                 </Button>
-                <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  {t('prompt.premiumFeature', 'Premium feature')}
-                </p>
               </div>
             </div>
 

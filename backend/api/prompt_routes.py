@@ -658,7 +658,7 @@ from services.ai_prompt_generation_service import (
     get_conversation_history,
     get_conversation_messages
 )
-from database.models import User, UserSubscription
+from database.models import User
 
 
 class AiChatRequest(BaseModel):

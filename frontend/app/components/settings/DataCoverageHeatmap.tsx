@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface CoverageItem {
@@ -12,36 +12,70 @@ interface SymbolCoverage {
   coverage: CoverageItem[]
   exchange: string
   data_type: string
+  period?: string | null
+  summary?: CoverageSummary
+}
+
+interface CoverageSummary {
+  window_start: string
+  window_end: string
+  covered_days: number
+  missing_days: number
+  min_pct: number
+  max_pct: number
+  avg_pct: number
+  expected_records_per_day: number
+  coverage_mode: string
+  coverage_unit: string
 }
 
 interface DataCoverageHeatmapProps {
   exchange?: string
   dataType?: 'market_flow' | 'klines'
   title?: string
+  periodOptions?: string[]
+  defaultPeriod?: string
 }
 
 export default function DataCoverageHeatmap({
   exchange = 'hyperliquid',
   dataType = 'market_flow',
   title,
+  periodOptions = [],
+  defaultPeriod,
 }: DataCoverageHeatmapProps) {
   const { t } = useTranslation()
   const [symbols, setSymbols] = useState<string[]>([])
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod || periodOptions[0] || '')
   const [coverage, setCoverage] = useState<CoverageItem[]>([])
+  const [summary, setSummary] = useState<CoverageSummary | null>(null)
   const [symbolsLoading, setSymbolsLoading] = useState(true)
   const [coverageLoading, setCoverageLoading] = useState(false)
   const [days, setDays] = useState(365)
+  const periodQuery = useMemo(() => {
+    if (dataType !== 'klines' || !selectedPeriod) return ''
+    return `&period=${encodeURIComponent(selectedPeriod)}`
+  }, [dataType, selectedPeriod])
 
-  // Fetch available symbols when exchange or dataType changes
+  useEffect(() => {
+    if (periodOptions.length === 0) return
+    const nextPeriod = defaultPeriod || periodOptions[0]
+    if (!selectedPeriod || !periodOptions.includes(selectedPeriod)) {
+      setSelectedPeriod(nextPeriod)
+    }
+  }, [defaultPeriod, periodOptions, selectedPeriod])
+
+  // Fetch available symbols when exchange, dataType, or period changes
   useEffect(() => {
     const fetchSymbols = async () => {
       setSymbolsLoading(true)
       setSelectedSymbol(null)
       setCoverage([])
+      setSummary(null)
       try {
         const res = await fetch(
-          `/api/system/data-coverage?days=365&exchange=${exchange}&data_type=${dataType}`
+          `/api/system/data-coverage?days=365&exchange=${exchange}&data_type=${dataType}${periodQuery}`
         )
         if (res.ok) {
           const data = await res.json()
@@ -57,7 +91,7 @@ export default function DataCoverageHeatmap({
       }
     }
     fetchSymbols()
-  }, [exchange, dataType])
+  }, [exchange, dataType, periodQuery])
 
   // Fetch coverage when symbol changes
   useEffect(() => {
@@ -67,11 +101,12 @@ export default function DataCoverageHeatmap({
       try {
         const tzOffset = new Date().getTimezoneOffset()
         const res = await fetch(
-          `/api/system/data-coverage?days=${days}&symbol=${selectedSymbol}&tz_offset=${tzOffset}&exchange=${exchange}&data_type=${dataType}`
+          `/api/system/data-coverage?days=${days}&symbol=${selectedSymbol}&tz_offset=${tzOffset}&exchange=${exchange}&data_type=${dataType}${periodQuery}`
         )
         if (res.ok) {
           const data: SymbolCoverage = await res.json()
           setCoverage(data.coverage || [])
+          setSummary(data.summary || null)
         }
       } catch (err) {
         console.error('Failed to fetch coverage:', err)
@@ -80,7 +115,7 @@ export default function DataCoverageHeatmap({
       }
     }
     fetchCoverage()
-  }, [selectedSymbol, days, exchange, dataType])
+  }, [selectedSymbol, days, exchange, dataType, periodQuery])
 
   const getCellColor = (pct: number) => {
     if (pct === 0) return 'bg-[#dbdbdb]'
@@ -89,6 +124,18 @@ export default function DataCoverageHeatmap({
     if (pct < 95) return 'bg-emerald-500/70'
     return 'bg-emerald-600'
   }
+
+  const datasetLabel = dataType === 'klines'
+    ? t('settings.coverageDatasetKline', 'K-line')
+    : t('settings.coverageDatasetFlow', 'Market flow')
+  const granularityLabel = dataType === 'klines'
+    ? selectedPeriod
+    : t('settings.coverageFlowGranularity', '1m taker flow')
+  const coverageModeLabel = summary?.coverage_mode === 'period_span'
+    ? t('settings.coverageModeSpan', 'period span')
+    : summary?.coverage_mode === 'daily_expected_records'
+      ? t('settings.coverageModeExpected', 'expected records')
+      : t('settings.coverageModeHourly', 'hourly presence')
 
   if (symbolsLoading) {
     return <div className="text-sm text-muted-foreground">{t('common.loading', 'Loading...')}</div>
@@ -108,6 +155,18 @@ export default function DataCoverageHeatmap({
       {/* Symbol tabs + Days selector + Legend */}
       <div className="flex items-center gap-2 flex-wrap justify-between">
         <div className="flex items-center gap-2 flex-wrap">
+          {periodOptions.length > 0 && (
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="border rounded px-2 py-1 text-sm bg-background"
+              aria-label="K-line period"
+            >
+              {periodOptions.map((period) => (
+                <option key={period} value={period}>{period}</option>
+              ))}
+            </select>
+          )}
           {symbols.map((sym) => (
             <button
               key={sym}
@@ -131,6 +190,7 @@ export default function DataCoverageHeatmap({
             <option value={90}>90 {t('settings.days', 'days')}</option>
             <option value={180}>180 {t('settings.days', 'days')}</option>
             <option value={365}>365 {t('settings.days', 'days')}</option>
+            <option value={730}>730 {t('settings.days', 'days')}</option>
           </select>
         </div>
         {/* Legend */}
@@ -157,6 +217,26 @@ export default function DataCoverageHeatmap({
           </div>
         </div>
       </div>
+
+      {summary && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="rounded border bg-muted/40 px-2 py-1">
+            {datasetLabel}: <span className="font-medium text-foreground">{granularityLabel}</span>
+          </span>
+          <span className="rounded border bg-muted/40 px-2 py-1">
+            {t('settings.coverageWindow', 'Window')}: {summary.window_start} - {summary.window_end}
+          </span>
+          <span className="rounded border bg-muted/40 px-2 py-1">
+            {t('settings.coverageCoveredDays', 'Covered')}: {summary.covered_days}/{days}
+          </span>
+          <span className="rounded border bg-muted/40 px-2 py-1">
+            {t('settings.coverageMissingDays', 'Missing')}: {summary.missing_days}
+          </span>
+          <span className="rounded border bg-muted/40 px-2 py-1">
+            {t('settings.coverageMode', 'Mode')}: {coverageModeLabel}
+          </span>
+        </div>
+      )}
 
       {/* Heatmap grid */}
       {coverageLoading ? (

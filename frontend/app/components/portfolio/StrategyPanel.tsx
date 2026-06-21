@@ -24,7 +24,7 @@ interface StrategyConfig {
   signal_pool_ids?: number[] | null  // New: multiple signal pools
   signal_pool_name?: string | null  // Deprecated
   signal_pool_names?: string[] | null  // New: multiple pool names
-  exchange?: string  // "hyperliquid" or "binance"
+  exchange?: string
 }
 
 interface SignalPool {
@@ -79,7 +79,7 @@ export default function StrategyPanel({
   const [lastTriggerAt, setLastTriggerAt] = useState<string | null>(null)
   const [signalPoolIds, setSignalPoolIds] = useState<number[]>([])
   const [signalPools, setSignalPools] = useState<SignalPool[]>([])
-  const [exchange, setExchange] = useState<string>('hyperliquid')
+  const [exchange, setExchange] = useState<string>('binance')
 
   // Global settings
   const [samplingInterval, setSamplingInterval] = useState<string>('18')
@@ -122,7 +122,7 @@ export default function StrategyPanel({
         // Use new signal_pool_ids field, fallback to old signal_pool_id for compatibility
         const poolIds = strategy.signal_pool_ids ?? (strategy.signal_pool_id ? [strategy.signal_pool_id] : [])
         setSignalPoolIds(poolIds)
-        setExchange(strategy.exchange ?? 'hyperliquid')
+        setExchange('binance')
       }
 
       if (signalsResponse.ok) {
@@ -156,8 +156,8 @@ export default function StrategyPanel({
       setMaxWatchlistSymbols(watchlist.max_symbols ?? available.max_symbols ?? 10)
       setWatchlistSymbols(watchlist.symbols || [])
     } catch (err) {
-      console.error('Failed to load Hyperliquid watchlist', err)
-      setWatchlistError(err instanceof Error ? err.message : 'Unable to load Hyperliquid watchlist.')
+      console.error('Failed to load watchlist', err)
+      setWatchlistError(err instanceof Error ? err.message : 'Unable to load watchlist.')
     } finally {
       setWatchlistLoading(false)
     }
@@ -220,8 +220,8 @@ export default function StrategyPanel({
       setMaxWatchlistSymbols(response.max_symbols ?? maxWatchlistSymbols)
       setWatchlistSuccess('Watchlist updated successfully.')
     } catch (err) {
-      console.error('Failed to update Hyperliquid watchlist', err)
-      setWatchlistError(err instanceof Error ? err.message : 'Failed to update Hyperliquid watchlist.')
+      console.error('Failed to update watchlist', err)
+      setWatchlistError(err instanceof Error ? err.message : 'Failed to update watchlist.')
     } finally {
       setWatchlistSaving(false)
     }
@@ -275,7 +275,7 @@ export default function StrategyPanel({
       // Use new signal_pool_ids field
       const poolIds = result.signal_pool_ids ?? (result.signal_pool_id ? [result.signal_pool_id] : [])
       setSignalPoolIds(poolIds)
-      setExchange(result.exchange ?? 'hyperliquid')
+      setExchange('binance')
 
       setSuccess('Trader configuration saved successfully.')
     } catch (err) {
@@ -324,7 +324,7 @@ export default function StrategyPanel({
 
   return (
     <div className="h-full flex flex-col">
-      <p className="text-sm text-muted-foreground mb-4">{t('strategy.description', 'Configure trigger parameters and Hyperliquid watchlist')}</p>
+      <p className="text-sm text-muted-foreground mb-4">{t('strategy.description', 'Configure trigger parameters and watchlist')}</p>
       <Tabs defaultValue="strategy" className="flex flex-col h-full flex-1 overflow-hidden">
           <TabsList className="grid grid-cols-3 max-w-2xl mb-4">
             <TabsTrigger value="strategy">{t('strategy.aiStrategy', 'AI Strategy')}</TabsTrigger>
@@ -391,7 +391,6 @@ export default function StrategyPanel({
                       <SelectValue placeholder={t('strategy.selectExchange', 'Select exchange')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="hyperliquid">{t('strategy.exchangeHyperliquid', 'Hyperliquid')}</SelectItem>
                       <SelectItem value="binance">{t('strategy.exchangeBinance', 'Binance')}</SelectItem>
                     </SelectContent>
                   </Select>

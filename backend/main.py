@@ -1,17 +1,20 @@
+import asyncio
 from datetime import datetime, timezone
 import logging
+import json
 import subprocess
 import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import os
+import requests
 from dotenv import load_dotenv
 
 from decimal import Decimal
@@ -26,6 +29,33 @@ from config.settings import DEFAULT_TRADING_CONFIGS
 from version import __version__
 
 logger = logging.getLogger(__name__)
+AUTH_PROXY_UPSTREAM = os.getenv("AUTH_PROXY_UPSTREAM", "https://auth.bocail.com").rstrip("/")
+AUTH_PROXY_HOST = AUTH_PROXY_UPSTREAM.replace("https://", "").replace("http://", "")
+AUTH_PROXY_RETRY_STATUSES = {500, 502, 503, 504}
+AUTH_PROXY_REQUEST_HEADER_EXCLUDE = {
+    "host",
+    "connection",
+    "content-length",
+    "transfer-encoding",
+    "upgrade",
+}
+AUTH_PROXY_RESPONSE_HEADER_EXCLUDE = {
+    "connection",
+    "content-encoding",
+    "content-length",
+    "date",
+    "server",
+    "transfer-encoding",
+}
+AUTH_PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+AUTH_CONFIG_ENV_OVERRIDES = {
+    "authProvider": "AUTH_PROVIDER",
+    "authProxyProvider": "AUTH_PROXY_PROVIDER",
+    "clientId": "AUTH_CLIENT_ID",
+    "appName": "AUTH_APP_NAME",
+    "organizationName": "AUTH_ORGANIZATION_NAME",
+    "redirectPath": "AUTH_REDIRECT_PATH",
+}
 
 app = FastAPI(
     title="Hyper Alpha Arena API",
@@ -41,6 +71,165 @@ async def health_check():
         "message": "Trading API is running",
         "version": __version__
     }
+
+
+def _auth_proxy_url(request: Request) -> str:
+    url = f"{AUTH_PROXY_UPSTREAM}{request.url.path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return url
+
+
+def _apply_auth_config_env(config: dict) -> dict:
+    """Allow production auth settings to be changed without rebuilding frontend."""
+    merged = dict(config)
+
+    for config_key, env_key in AUTH_CONFIG_ENV_OVERRIDES.items():
+        value = os.getenv(env_key, "").strip()
+        if value:
+            merged[config_key] = value
+
+    providers = list(merged.get("oauthProviders") or [])
+
+    def upsert_provider(
+        provider_type: str,
+        client_id_env: str,
+        provider_name_env: str,
+        default_name: str,
+        display_name: str,
+    ) -> None:
+        client_id = os.getenv(client_id_env, "").strip()
+        provider_name = os.getenv(provider_name_env, "").strip() or default_name
+        if not client_id:
+            return
+
+        for provider in providers:
+            if provider.get("type") == provider_type:
+                provider["clientId"] = client_id
+                provider["name"] = provider_name
+                provider.setdefault("displayName", display_name)
+                return
+
+        providers.append(
+            {
+                "type": provider_type,
+                "name": provider_name,
+                "displayName": display_name,
+                "clientId": client_id,
+            }
+        )
+
+    upsert_provider(
+        "GitHub",
+        "AUTH_GITHUB_CLIENT_ID",
+        "AUTH_GITHUB_PROVIDER_NAME",
+        "github_login",
+        "GitHub",
+    )
+    upsert_provider(
+        "Google",
+        "AUTH_GOOGLE_CLIENT_ID",
+        "AUTH_GOOGLE_PROVIDER_NAME",
+        "google_login",
+        "Google",
+    )
+
+    if providers:
+        merged["oauthProviders"] = providers
+
+    return merged
+
+
+async def _proxy_auth_request(request: Request, attempts: int = 3) -> Response:
+    body = await request.body()
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in AUTH_PROXY_REQUEST_HEADER_EXCLUDE
+    }
+    url = _auth_proxy_url(request)
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            upstream = requests.request(
+                request.method,
+                url,
+                data=body,
+                headers=headers,
+                timeout=12,
+                allow_redirects=False,
+            )
+
+            if upstream.status_code not in AUTH_PROXY_RETRY_STATUSES or attempt == attempts:
+                response_headers = {}
+                for key, value in upstream.headers.items():
+                    lowered = key.lower()
+                    if lowered in AUTH_PROXY_RESPONSE_HEADER_EXCLUDE or lowered == "set-cookie":
+                        continue
+                    response_headers[key] = value
+
+                response = Response(
+                    content=upstream.content,
+                    status_code=upstream.status_code,
+                    headers=response_headers,
+                    media_type=upstream.headers.get("content-type"),
+                )
+
+                set_cookie_headers = []
+                raw_headers = getattr(upstream.raw, "headers", None)
+                if raw_headers is not None and hasattr(raw_headers, "getlist"):
+                    set_cookie_headers = raw_headers.getlist("Set-Cookie")
+                if not set_cookie_headers and upstream.headers.get("Set-Cookie"):
+                    set_cookie_headers = [upstream.headers["Set-Cookie"]]
+                for cookie_header in set_cookie_headers:
+                    response.headers.append("set-cookie", cookie_header)
+
+                return response
+
+            logger.warning(
+                "Auth proxy upstream %s returned %s on attempt %s/%s",
+                request.url.path,
+                upstream.status_code,
+                attempt,
+                attempts,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            logger.warning(
+                "Auth proxy upstream %s failed on attempt %s/%s: %s",
+                request.url.path,
+                attempt,
+                attempts,
+                exc,
+            )
+
+        await asyncio.sleep(min(0.2 * attempt, 1.0))
+
+    message = "Authentication provider is temporarily unavailable"
+    if last_error:
+        message = f"{message}: {last_error}"
+    return Response(
+        content=json.dumps({"status": "error", "msg": message, "data": None}),
+        status_code=502,
+        media_type="application/json",
+    )
+
+
+@app.api_route("/api/get-app-login", methods=["GET", "OPTIONS"])
+async def proxy_auth_get_app_login(request: Request):
+    return await _proxy_auth_request(request, attempts=5)
+
+
+@app.api_route("/api/get-account", methods=["GET", "OPTIONS"])
+async def proxy_auth_get_account(request: Request):
+    return await _proxy_auth_request(request, attempts=3)
+
+
+@app.api_route("/api/login", methods=AUTH_PROXY_METHODS)
+@app.api_route("/api/login/{auth_path:path}", methods=AUTH_PROXY_METHODS)
+async def proxy_auth_login(request: Request, auth_path: str = ""):
+    return await _proxy_auth_request(request, attempts=5)
 
 # Manual frontend rebuild endpoint
 @app.post("/api/rebuild-frontend")
@@ -731,6 +920,8 @@ from api.bot_routes import router as bot_router
 from api.factor_routes import router as factor_router
 from api.news_routes import router as news_router
 from api.market_intelligence_routes import router as market_intelligence_router
+from api.coinglass_routes import router as coinglass_router
+from api.event_contract_routes import router as event_contract_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -764,6 +955,8 @@ app.include_router(bot_router)
 app.include_router(factor_router)
 app.include_router(news_router)
 app.include_router(market_intelligence_router)
+app.include_router(coinglass_router)
+app.include_router(event_contract_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility
@@ -810,13 +1003,17 @@ app.websocket("/ws")(websocket_endpoint)
 # Serve auth config file
 @app.get("/auth-config.json")
 async def serve_auth_config():
-    """Serve the auth configuration file"""
+    """Serve the auth configuration file with optional environment overrides."""
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     config_path = os.path.join(static_dir, "auth-config.json")
 
     if os.path.exists(config_path):
-        return FileResponse(
-            config_path,
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            config = json.load(config_file)
+
+        config = _apply_auth_config_env(config)
+        return Response(
+            content=json.dumps(config, ensure_ascii=False),
             media_type="application/json",
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -850,16 +1047,28 @@ async def serve_root():
 # Catch-all route for SPA routing (must be last)
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    """Serve the frontend index.html for SPA routes that don't match API/static"""
-    # Skip API and static routes
+    """Serve existing frontend files first, then index.html for SPA routes."""
+    # Skip API and explicitly mounted/config routes
     if full_path.startswith("api") or full_path.startswith("static") or full_path.startswith("docs") or full_path.startswith("openapi.json") or full_path == "auth-config.json":
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
     
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    index_path = os.path.join(static_dir, "index.html")
+    static_dir = Path(os.path.dirname(__file__)) / "static"
+    static_root = static_dir.resolve()
+    requested_path = (static_dir / full_path).resolve()
+
+    try:
+        requested_path.relative_to(static_root)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if requested_path.is_file():
+        return FileResponse(requested_path)
+
+    index_path = static_dir / "index.html"
     
-    if os.path.exists(index_path):
+    if index_path.exists():
         return FileResponse(
             index_path,
             headers={

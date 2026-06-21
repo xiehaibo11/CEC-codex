@@ -16,7 +16,7 @@ export interface ExchangeInfo {
   logo: string;
   description: string;
   features: string[];
-  referralLink: string;
+  referralLink?: string;
   buttonText: string;
   buttonVariant: 'default' | 'outline';
   proTip?: string;

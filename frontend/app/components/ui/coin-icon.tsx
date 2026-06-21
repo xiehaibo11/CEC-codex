@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -7,10 +7,52 @@ type Props = {
   className?: string
 }
 
-const PREFIX_RE = /^(k|K)(?=[A-Z])/
+const QUOTE_SUFFIXES = ['USDT', 'USDC', 'BUSD', 'FDUSD', 'TUSD', 'USD', 'PERP']
+const ICON_ALIASES: Record<string, string[]> = {
+  IOTA: ['MIOTA'],
+}
+
+let cachedLocalIcons: Record<string, string> | null = null
+let localIconsPromise: Promise<Record<string, string>> | null = null
 
 function stripPrefix(symbol: string): string {
-  return symbol.replace(PREFIX_RE, '')
+  return symbol.replace(/^k(?=[A-Z])/, '')
+}
+
+function normalizeSymbol(symbol: string): string {
+  let clean = stripPrefix(symbol || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  for (const suffix of QUOTE_SUFFIXES) {
+    if (clean.endsWith(suffix) && clean.length > suffix.length + 1) {
+      clean = clean.slice(0, -suffix.length)
+      break
+    }
+  }
+  return clean
+}
+
+function iconCandidates(symbol: string): string[] {
+  const clean = normalizeSymbol(symbol)
+  const candidates = [clean]
+  if (clean.startsWith('1000') && clean.length > 4) {
+    candidates.push(clean.slice(4))
+  }
+  const noNumericPrefix = clean.replace(/^\d+(?=[A-Z])/, '')
+  if (noNumericPrefix && noNumericPrefix !== clean) {
+    candidates.push(noNumericPrefix)
+  }
+  if (clean.startsWith('1M') && clean.length > 2) {
+    candidates.push(clean.slice(2))
+  }
+  if (clean.endsWith('X') && clean.length > 2) {
+    candidates.push(clean.slice(0, -1))
+  }
+  if (/^LUNA\d+$/.test(clean)) {
+    candidates.push('LUNA')
+  }
+  candidates.push(...(ICON_ALIASES[clean] || []))
+  return Array.from(new Set(candidates.filter(Boolean)))
 }
 
 function fallbackHue(symbol: string): number {
@@ -21,23 +63,63 @@ function fallbackHue(symbol: string): number {
   return Math.abs(hash) % 360
 }
 
-function getSources(symbol: string): string[] {
-  const clean = stripPrefix(symbol)
-  const upper = clean.toUpperCase()
-  const lower = clean.toLowerCase()
-  return [
-    `https://app.hyperliquid.xyz/coins/${upper}.svg`,
-    `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/${lower}.svg`,
-  ]
+function findLocalIconUrl(symbol: string): string | null {
+  if (!cachedLocalIcons) return null
+  for (const candidate of iconCandidates(symbol)) {
+    const url = cachedLocalIcons[candidate]
+    if (url) return url
+  }
+  return null
+}
+
+function loadLocalIcons() {
+  if (cachedLocalIcons) return Promise.resolve(cachedLocalIcons)
+  if (!localIconsPromise) {
+    localIconsPromise = fetch('/crypto-icons/manifest.json', { credentials: 'same-origin' })
+      .then(response => response.ok ? response.json() : { icons: {} })
+      .then(data => {
+        cachedLocalIcons = data.icons || {}
+        return cachedLocalIcons
+      })
+      .catch(error => {
+        console.warn('Failed to load local crypto icon manifest:', error)
+        cachedLocalIcons = {}
+        return cachedLocalIcons
+      })
+  }
+  return localIconsPromise
 }
 
 export function CoinIcon({ symbol, size = 20, className }: Props) {
-  const [sourceIdx, setSourceIdx] = useState(0)
-  const sources = useMemo(() => getSources(symbol), [symbol])
+  const [iconUrl, setIconUrl] = useState<string | null>(() => findLocalIconUrl(symbol))
+  const [imageFailed, setImageFailed] = useState(false)
   const hue = useMemo(() => fallbackHue(symbol), [symbol])
-  const letter = stripPrefix(symbol).charAt(0) || symbol.charAt(0) || '?'
+  const letter = normalizeSymbol(symbol).charAt(0) || symbol.charAt(0) || '?'
 
-  if (sourceIdx >= sources.length) {
+  useEffect(() => {
+    let cancelled = false
+    setImageFailed(false)
+
+    const cached = findLocalIconUrl(symbol)
+    if (cached) {
+      setIconUrl(cached)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setIconUrl(null)
+    loadLocalIcons().then(() => {
+      if (!cancelled) {
+        setIconUrl(findLocalIconUrl(symbol))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [symbol])
+
+  if (!iconUrl || imageFailed) {
     return (
       <span
         className={cn(
@@ -60,12 +142,12 @@ export function CoinIcon({ symbol, size = 20, className }: Props) {
   return (
     <img
       className={cn('shrink-0 rounded-full', className)}
-      src={sources[sourceIdx]}
+      src={iconUrl}
       alt={symbol}
       width={size}
       height={size}
       loading="lazy"
-      onError={() => setSourceIdx((idx) => idx + 1)}
+      onError={() => setImageFailed(true)}
     />
   )
 }

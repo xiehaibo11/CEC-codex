@@ -193,6 +193,9 @@ You are a coordinator who helps users configure their trading system.
 - `list_traders`: List all AI Traders with bindings, strategies, and status. Pass `trader_id` for single trader detail
 - `list_signal_pools`: List all signal pools with IDs, symbols, and trigger conditions. Pass `pool_id` for single pool detail
 - `list_strategies`: List all prompts and programs with IDs and binding status. Pass `strategy_id` + `strategy_type` to get full content (prompt text or program code)
+- `get_prompt_backtests`: List or inspect Prompt Backtest tasks for AI Trader decision replay results. Read-only; use it to explain backtest history/progress/results, not to start new backtests.
+- `predict_event_contract_5m`: Run the 5-minute event contract prediction engine. Read-only; default mode uses real LLM confirmation for the 30-role AI panel; `rule_only` is deterministic prefilter output. Can optionally add CoinGlass historical CVD, taker flow, OI, funding, and liquidation factors with coverage checks.
+- `run_event_contract_backtest`: Run and save a 5-minute event contract historical backtest using K-lines, optional CoinGlass factors, rule prefiltering, optional real LLM confirmation, and expiry settlement. This is event-contract backtesting, not normal futures TP/SL backtesting.
 - `get_klines`: K-line/candlestick data for a symbol
 - `get_market_regime`: Market regime classification (breakout, trending, ranging, etc.)
 - `get_market_flow`: CVD, OI, funding rate data

@@ -7,9 +7,9 @@ import { Textarea } from '../ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import ReactMarkdown from 'react-markdown'
 import PacmanLoader from '../ui/pacman-loader'
-import WalletSelector from '../hyperliquid/WalletSelector'
+import WalletSelector, { type ExchangeType } from '../hyperliquid/WalletSelector'
 import { Badge } from '../ui/badge'
-import { getHyperliquidPositions } from '@/lib/hyperliquidApi'
+import { getBinancePositions, getHyperliquidPositions } from '@/lib/hyperliquidApi'
 
 interface AITrader {
   id: number
@@ -24,10 +24,12 @@ interface WalletOption {
   account_name: string
   model: string | null
   wallet_address: string
+  api_key_masked?: string
   environment: 'testnet' | 'mainnet'
   is_active: boolean
   max_leverage: number
   default_leverage: number
+  exchange: ExchangeType
 }
 
 interface PositionItem {
@@ -148,8 +150,9 @@ export default function AIAnalysisPanel({
       }
       try {
         setPositionsLoading(true)
-        // 复用 hyperliquid API 映射，获取完整字段
-        const data = await getHyperliquidPositions(selectedWallet.account_id, selectedWallet.environment)
+        const data = selectedWallet.exchange === 'binance'
+          ? await getBinancePositions(selectedWallet.account_id, selectedWallet.environment)
+          : await getHyperliquidPositions(selectedWallet.account_id, selectedWallet.environment)
         const mapped = (data.positions || []).map((p: any) => ({
           symbol: p.coin || p.symbol || symbol,
           size: p.sizeAbs ?? Math.abs(p.szi ?? 0),

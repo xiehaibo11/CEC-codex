@@ -54,5 +54,13 @@ BINANCE_BROKER_CONFIG = BinanceBrokerConfig(
 # This limits the number of AI-executed trades per day to prevent excessive API usage
 BINANCE_DAILY_QUOTA_LIMIT = 40
 
+# Server egress IP shown in Binance API-key troubleshooting messages.
+# Binance IP restrictions must whitelist the server that sends signed API requests.
+BINANCE_SERVER_EGRESS_IP = os.getenv("BINANCE_SERVER_EGRESS_IP", "")
+
 # Factor Engine toggle (set to "true" to enable factor computation)
 FACTOR_ENGINE_ENABLED = os.getenv("FACTOR_ENGINE_ENABLED", "false").lower() == "true"
+
+# CoinGlass market intelligence API. Keep the paid API key server-side only.
+COINGLASS_API_BASE_URL = os.getenv("COINGLASS_API_BASE_URL", "https://open-api-v4.coinglass.com")
+COINGLASS_API_KEY = os.getenv("COINGLASS_API_KEY", "").strip()

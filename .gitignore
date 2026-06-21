@@ -313,11 +313,16 @@ backend/.DS_Store
 # AI Programming Assistants
 CLAUDE.md
 AGENTS.md
+!AGENTS.md
 .claude/
 .cursor/
 *.db
 backend/.venv/
 frontend/node_modules/
+
+# Local secrets and database dumps
+client_secret_*.json
+backups/*.dump
 
 # Development Plans (sensitive information)
 REAL_TRADING_PLAN.md

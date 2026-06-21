@@ -3,24 +3,28 @@ Binance historical data backfill service
 """
 
 import asyncio
+import math
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Optional
 
 from database.connection import SessionLocal
-from database.models import BinanceBackfillTask
+from database.models import BinanceBackfillTask, SystemConfig
 from .binance_adapter import BinanceAdapter
+from .binance_constants import BINANCE_KLINE_INTERVAL_SECONDS, BINANCE_KLINE_INTERVALS
 from .data_persistence import ExchangeDataPersistence
 
 logger = logging.getLogger(__name__)
 
 # Backfill limits
 KLINE_BACKFILL_LIMIT = 1500  # Per period
-KLINE_PERIODS = ['1m', '15m', '1h']  # Multiple periods for better coverage
+KLINE_BACKFILL_DAYS_DEFAULT = 365
+KLINE_PAGE_DELAY_SECONDS = 0.35
+KLINE_PERIODS = BINANCE_KLINE_INTERVALS
 OI_BACKFILL_DAYS = 30
 FUNDING_BACKFILL_DAYS = 365
 SENTIMENT_BACKFILL_DAYS = 30
+BINANCE_RETENTION_KEY = "binance_retention_days"
 
 
 class BinanceBackfillService:
@@ -65,33 +69,45 @@ class BinanceBackfillService:
             db.commit()
 
             symbols = task.symbols.split(",") if task.symbols else ["BTC"]
+            backfill_days = self._get_backfill_days(db)
+            end_time_ms = int(time.time() * 1000)
+            start_time_ms = end_time_ms - (backfill_days * 24 * 60 * 60 * 1000)
+
             # Steps: (klines x periods) + OI + Funding + Sentiment per symbol
-            total_steps = len(symbols) * (len(KLINE_PERIODS) + 3)
+            total_kline_pages = self._estimate_kline_pages(backfill_days)
+            total_steps = len(symbols) * (total_kline_pages + 3)
             current_step = 0
 
             persistence = ExchangeDataPersistence(db)
+
+            def update_progress(steps: int = 1):
+                nonlocal current_step
+                current_step += steps
+                task.progress = min(99, int(current_step / total_steps * 100))
+                db.commit()
 
             for symbol in symbols:
                 # 1. Backfill K-lines for each period
                 for period in KLINE_PERIODS:
                     try:
-                        await self._backfill_klines(symbol, period, persistence)
+                        await self._backfill_klines(
+                            symbol,
+                            period,
+                            persistence,
+                            start_time_ms,
+                            end_time_ms,
+                            backfill_days,
+                            update_progress,
+                        )
                     except Exception as e:
                         logger.error(f"Kline backfill failed for {symbol}/{period}: {e}")
-                    current_step += 1
-                    task.progress = int(current_step / total_steps * 100)
-                    db.commit()
-                    # Wait 3 seconds between requests to avoid API rate limiting
-                    await asyncio.sleep(3)
 
                 # 2. Backfill OI (30 days)
                 try:
                     await self._backfill_oi(symbol, persistence)
                 except Exception as e:
                     logger.error(f"OI backfill failed for {symbol}: {e}")
-                current_step += 1
-                task.progress = int(current_step / total_steps * 100)
-                db.commit()
+                update_progress()
                 await asyncio.sleep(3)
 
                 # 3. Backfill Funding Rate (365 days)
@@ -99,9 +115,7 @@ class BinanceBackfillService:
                     await self._backfill_funding(symbol, persistence)
                 except Exception as e:
                     logger.error(f"Funding backfill failed for {symbol}: {e}")
-                current_step += 1
-                task.progress = int(current_step / total_steps * 100)
-                db.commit()
+                update_progress()
                 await asyncio.sleep(3)
 
                 # 4. Backfill Sentiment (30 days)
@@ -109,9 +123,7 @@ class BinanceBackfillService:
                     await self._backfill_sentiment(symbol, persistence)
                 except Exception as e:
                     logger.error(f"Sentiment backfill failed for {symbol}: {e}")
-                current_step += 1
-                task.progress = int(current_step / total_steps * 100)
-                db.commit()
+                update_progress()
                 await asyncio.sleep(3)
 
             task.status = "completed"
@@ -131,15 +143,82 @@ class BinanceBackfillService:
         finally:
             db.close()
 
-    async def _backfill_klines(self, symbol: str, period: str, persistence: ExchangeDataPersistence):
-        """Backfill K-line data for a period"""
-        logger.info(f"Backfilling klines for {symbol}/{period}")
-        klines = self.adapter.fetch_klines(symbol, period, limit=KLINE_BACKFILL_LIMIT)
-        if klines:
-            result = persistence.save_klines(klines)
-            if period == '1m':
-                persistence.save_taker_volumes_from_klines(klines)
-            logger.info(f"Klines backfill {symbol}/{period}: {result}")
+    def _get_backfill_days(self, db) -> int:
+        config = db.query(SystemConfig).filter(SystemConfig.key == BINANCE_RETENTION_KEY).first()
+        if config and config.value:
+            try:
+                return max(7, min(730, int(config.value)))
+            except ValueError:
+                logger.warning("Invalid Binance retention days config: %s", config.value)
+        return KLINE_BACKFILL_DAYS_DEFAULT
+
+    def _estimate_kline_pages(self, backfill_days: int) -> int:
+        total_pages = 0
+        total_seconds = backfill_days * 24 * 60 * 60
+        for period in KLINE_PERIODS:
+            interval_seconds = BINANCE_KLINE_INTERVAL_SECONDS.get(period, 60)
+            expected_records = max(1, math.ceil(total_seconds / interval_seconds))
+            total_pages += max(1, math.ceil(expected_records / KLINE_BACKFILL_LIMIT))
+        return total_pages
+
+    async def _backfill_klines(
+        self,
+        symbol: str,
+        period: str,
+        persistence: ExchangeDataPersistence,
+        start_time_ms: int,
+        end_time_ms: int,
+        backfill_days: int,
+        update_progress,
+    ):
+        """Backfill K-line data for a period using Binance time-range pagination."""
+        logger.info(
+            "Backfilling klines for %s/%s (%s days, %s to %s)",
+            symbol,
+            period,
+            backfill_days,
+            start_time_ms,
+            end_time_ms,
+        )
+        current_start_ms = start_time_ms
+        total_upserted = 0
+        page = 0
+
+        while current_start_ms <= end_time_ms:
+            klines = self.adapter.fetch_klines(
+                symbol,
+                period,
+                limit=KLINE_BACKFILL_LIMIT,
+                start_time=current_start_ms,
+                end_time=end_time_ms,
+            )
+            if not klines:
+                if page == 0:
+                    update_progress()
+                break
+
+            page += 1
+            result = persistence.upsert_klines_bulk(klines)
+            if period == "1m":
+                persistence.upsert_taker_volumes_from_klines_bulk(klines)
+            total_upserted += result.get("upserted", 0)
+            update_progress()
+
+            last_open_ms = klines[-1].timestamp * 1000
+            next_start_ms = last_open_ms + 1
+            if len(klines) < KLINE_BACKFILL_LIMIT or next_start_ms <= current_start_ms:
+                break
+
+            current_start_ms = next_start_ms
+            await asyncio.sleep(KLINE_PAGE_DELAY_SECONDS)
+
+        logger.info(
+            "Klines backfill %s/%s completed: pages=%s, upserted=%s",
+            symbol,
+            period,
+            page,
+            total_upserted,
+        )
 
     async def _backfill_oi(self, symbol: str, persistence: ExchangeDataPersistence):
         """

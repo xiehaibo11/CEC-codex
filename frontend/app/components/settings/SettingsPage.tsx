@@ -13,9 +13,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  getHyperliquidAvailableSymbols,
-  getHyperliquidWatchlist,
-  updateHyperliquidWatchlist,
   getBinanceAvailableSymbols,
   getBinanceWatchlist,
   updateBinanceWatchlist,
@@ -25,7 +22,6 @@ import {
   getNewsStats,
 } from '@/lib/api'
 import type {
-  HyperliquidSymbolMeta,
   BinanceSymbolMeta,
   NewsSourceConfig,
   NewsStatsResponse,
@@ -44,22 +40,30 @@ interface StorageStats {
   estimated_per_symbol_per_day_mb: number
 }
 
+const BINANCE_KLINE_PERIODS = [
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '2h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '3d',
+  '1w',
+  '1M',
+]
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState('watchlist')
 
   // Language state
   const currentLang = i18n.language === 'zh' ? 'zh' : 'en'
-
-  // Hyperliquid Watchlist state
-  const [hlAvailableSymbols, setHlAvailableSymbols] = useState<HyperliquidSymbolMeta[]>([])
-  const [hlWatchlistSymbols, setHlWatchlistSymbols] = useState<string[]>([])
-  const [hlMaxSymbols, setHlMaxSymbols] = useState(10)
-  const [hlLoading, setHlLoading] = useState(true)
-  const [hlSaving, setHlSaving] = useState(false)
-  const [hlError, setHlError] = useState<string | null>(null)
-  const [hlSuccess, setHlSuccess] = useState<string | null>(null)
-  const [hlSearchQuery, setHlSearchQuery] = useState('')
 
   // Binance Watchlist state
   const [bnAvailableSymbols, setBnAvailableSymbols] = useState<BinanceSymbolMeta[]>([])
@@ -71,20 +75,10 @@ export default function SettingsPage() {
   const [bnSuccess, setBnSuccess] = useState<string | null>(null)
   const [bnSearchQuery, setBnSearchQuery] = useState('')
 
-  // Legacy aliases for compatibility
-  const availableSymbols = hlAvailableSymbols
-  const watchlistSymbols = hlWatchlistSymbols
-  const maxWatchlistSymbols = hlMaxSymbols
-  const watchlistLoading = hlLoading
-  const watchlistSaving = hlSaving
-  const watchlistError = hlError
-  const watchlistSuccess = hlSuccess
-
   // Storage stats state - per exchange
   const [storageStats, setStorageStats] = useState<Record<string, StorageStats>>({})
   const [storageLoading, setStorageLoading] = useState(false)
   const [retentionDays, setRetentionDays] = useState<Record<string, string>>({
-    hyperliquid: '365',
     binance: '365',
   })
   const [retentionSaving, setRetentionSaving] = useState(false)
@@ -121,7 +115,7 @@ export default function SettingsPage() {
   const [newsTestResult, setNewsTestResult] = useState<TestNewsSourceResponse | null>(null)
 
   // Determine current exchange from active tab
-  const currentExchange = activeTab === 'hyperliquid-data' ? 'hyperliquid' : activeTab === 'binance-data' ? 'binance' : null
+  const currentExchange = activeTab === 'binance-data' ? 'binance' : null
 
   const toggleLanguage = (lang: 'en' | 'zh') => {
     i18n.changeLanguage(lang)
@@ -134,30 +128,20 @@ export default function SettingsPage() {
   }
 
   const fetchWatchlist = useCallback(async () => {
-    setHlLoading(true)
     setBnLoading(true)
-    setHlError(null)
     setBnError(null)
     try {
-      // Fetch both Hyperliquid and Binance data in parallel
-      const [hlAvailable, hlWatchlist, bnAvailable, bnWatchlist] = await Promise.all([
-        getHyperliquidAvailableSymbols(),
-        getHyperliquidWatchlist(),
+      const [bnAvailable, bnWatchlist] = await Promise.all([
         getBinanceAvailableSymbols(),
         getBinanceWatchlist(),
       ])
-      setHlAvailableSymbols(hlAvailable.symbols || [])
-      setHlMaxSymbols(hlWatchlist.max_symbols ?? 10)
-      setHlWatchlistSymbols(hlWatchlist.symbols || [])
       setBnAvailableSymbols(bnAvailable.symbols || [])
       setBnMaxSymbols(bnWatchlist.max_symbols ?? 10)
       setBnWatchlistSymbols(bnWatchlist.symbols || [])
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load watchlist'
-      setHlError(errorMsg)
       setBnError(errorMsg)
     } finally {
-      setHlLoading(false)
       setBnLoading(false)
     }
   }, [])
@@ -292,22 +276,6 @@ export default function SettingsPage() {
     }
   }
 
-  const toggleWatchlistSymbol = (symbol: string) => {
-    const symbolUpper = symbol.toUpperCase()
-    setHlError(null)
-    setHlSuccess(null)
-    setHlWatchlistSymbols((prev) => {
-      if (prev.includes(symbolUpper)) {
-        return prev.filter((s) => s !== symbolUpper)
-      }
-      if (prev.length >= hlMaxSymbols) {
-        setHlError(t('settings.maxSymbolsReached', `Maximum ${hlMaxSymbols} symbols`))
-        return prev
-      }
-      return [...prev, symbolUpper]
-    })
-  }
-
   const toggleBnWatchlistSymbol = (symbol: string) => {
     const symbolUpper = symbol.toUpperCase()
     setBnError(null)
@@ -322,20 +290,6 @@ export default function SettingsPage() {
       }
       return [...prev, symbolUpper]
     })
-  }
-
-  const handleSaveWatchlist = async () => {
-    setHlSaving(true)
-    setHlError(null)
-    setHlSuccess(null)
-    try {
-      await updateHyperliquidWatchlist(hlWatchlistSymbols)
-      setHlSuccess(t('settings.watchlistSaved', 'Watchlist saved'))
-    } catch (err) {
-      setHlError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setHlSaving(false)
-    }
   }
 
   const handleSaveBnWatchlist = async () => {
@@ -353,14 +307,6 @@ export default function SettingsPage() {
   }
 
   // Filtered symbols for search
-  const filteredHlSymbols = useMemo(() => {
-    if (!hlSearchQuery.trim()) return hlAvailableSymbols
-    const query = hlSearchQuery.toUpperCase()
-    return hlAvailableSymbols.filter((sym) =>
-      sym.name?.toUpperCase().includes(query) || sym.symbol?.toUpperCase().includes(query)
-    )
-  }, [hlAvailableSymbols, hlSearchQuery])
-
   const filteredBnSymbols = useMemo(() => {
     if (!bnSearchQuery.trim()) return bnAvailableSymbols
     const query = bnSearchQuery.toUpperCase()
@@ -595,14 +541,10 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      {/* Tabs: Watchlist | Hyperliquid Data | Binance Data | News Sources */}
+      {/* Tabs: Watchlist | Binance Data | News Sources */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-4 max-w-3xl shrink-0">
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl shrink-0">
           <TabsTrigger value="watchlist">{t('settings.watchlist', 'Watchlist')}</TabsTrigger>
-          <TabsTrigger value="hyperliquid-data" className="flex items-center gap-1.5">
-            <ExchangeIcon exchangeId="hyperliquid" size={16} />
-            Hyperliquid
-          </TabsTrigger>
           <TabsTrigger value="binance-data" className="flex items-center gap-1.5">
             <ExchangeIcon exchangeId="binance" size={16} />
             Binance
@@ -613,66 +555,6 @@ export default function SettingsPage() {
         {/* Watchlist Tab */}
         <TabsContent value="watchlist" className="mt-4 flex-1 min-h-0 flex flex-col overflow-auto">
           <div className="space-y-6">
-            {/* Hyperliquid Watchlist */}
-            <Card>
-              <CardHeader className="shrink-0 pb-3">
-                <div className="flex items-center gap-2">
-                  <ExchangeIcon exchangeId="hyperliquid" size={24} />
-                  <CardTitle className="text-base">Hyperliquid</CardTitle>
-                </div>
-                <CardDescription className="text-xs">
-                  {t('settings.selectedCount', 'Selected')}: {hlWatchlistSymbols.length} / {hlMaxSymbols}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {hlLoading ? (
-                  <div className="text-muted-foreground text-sm">{t('common.loading', 'Loading...')}</div>
-                ) : (
-                  <>
-                    {/* Search input */}
-                    <div className="mb-3">
-                      <Input
-                        type="text"
-                        placeholder={t('settings.searchSymbol', 'Search symbol...')}
-                        value={hlSearchQuery}
-                        onChange={(e) => setHlSearchQuery(e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                      {filteredHlSymbols.map((sym) => {
-                        const symbolName = sym.name || sym.symbol || ''
-                        const isSelected = hlWatchlistSymbols.includes(symbolName.toUpperCase())
-                        return (
-                          <Button
-                            key={symbolName}
-                            variant={isSelected ? 'default' : 'outline'}
-                            size="sm"
-                            className="h-7 px-2 text-xs gap-1.5"
-                            onClick={() => toggleWatchlistSymbol(symbolName)}
-                          >
-                            <CoinIcon symbol={symbolName} size={14} />
-                            {symbolName}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-              <CardFooter className="shrink-0 border-t pt-3 flex items-center gap-3">
-                <Button
-                  size="sm"
-                  onClick={handleSaveWatchlist}
-                  disabled={hlSaving || hlLoading}
-                >
-                  {hlSaving ? t('common.saving', 'Saving...') : t('common.save', 'Save')}
-                </Button>
-                {hlError && <span className="text-red-500 text-xs">{hlError}</span>}
-                {hlSuccess && <span className="text-green-500 text-xs">{hlSuccess}</span>}
-              </CardFooter>
-            </Card>
-
             {/* Binance Watchlist */}
             <Card>
               <CardHeader className="shrink-0 pb-3">
@@ -735,137 +617,6 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Hyperliquid Data Tab */}
-        <TabsContent value="hyperliquid-data" className="mt-4 flex-1 min-h-0 flex flex-col">
-          <Card className="flex flex-col flex-1 min-h-0">
-            <CardHeader className="shrink-0">
-              <CardTitle className="flex items-center gap-2">
-                <ExchangeIcon exchangeId="hyperliquid" size={24} />
-                {t('settings.dataCollection', 'Data Collection')}
-              </CardTitle>
-              <CardDescription>
-                {t('settings.dataCollectionDesc', 'Market flow data storage statistics')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto min-h-0 space-y-6">
-              {storageLoading ? (
-                <div className="text-muted-foreground">{t('common.loading', 'Loading...')}</div>
-              ) : storageStats['hyperliquid'] ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground">
-                        {t('settings.currentStorage', 'Current Storage')}
-                      </div>
-                      <div className="text-xl font-semibold">{storageStats['hyperliquid'].total_size_mb} MB</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">
-                        {t('settings.collectedSymbols', 'Collected Symbols')}
-                      </div>
-                      <div className="text-xl font-semibold">{storageStats['hyperliquid'].symbol_count}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">
-                        {t('settings.retentionDays', 'Retention Days')}
-                      </div>
-                      <div className="text-xl font-semibold">{storageStats['hyperliquid'].retention_days}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">
-                        {t('settings.maxStorageEstimate', 'Max Storage Estimate')}
-                      </div>
-                      <div className="text-xl font-semibold">
-                        {(watchlistSymbols.length * parseInt(retentionDays['hyperliquid'] || '365', 10) * storageStats['hyperliquid'].estimated_per_symbol_per_day_mb).toFixed(1)} MB
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t">
-                    <div className="text-sm font-medium mb-2">
-                      {t('settings.setRetention', 'Set Retention Period')}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={retentionDays['hyperliquid'] || '365'}
-                        onChange={(e) => setRetentionDays((prev) => ({ ...prev, hyperliquid: e.target.value }))}
-                        className="w-24"
-                        min={7}
-                        max={730}
-                      />
-                      <span className="text-sm text-muted-foreground">{t('settings.days', 'days')}</span>
-                      <Button onClick={handleSaveRetention} disabled={retentionSaving} size="sm">
-                        {retentionSaving ? t('common.saving', 'Saving...') : t('common.save', 'Save')}
-                      </Button>
-                    </div>
-                    {retentionError && <div className="text-red-500 text-sm mt-2">{retentionError}</div>}
-                    {retentionSuccess && <div className="text-green-500 text-sm mt-2">{retentionSuccess}</div>}
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {t('settings.retentionHint', 'Data older than this will be automatically cleaned up (7-730 days)')}
-                    </div>
-                  </div>
-                  {/* Hyperliquid Backfill Section */}
-                  <div className="pt-4 border-t">
-                    <div className="text-sm font-medium mb-2">
-                      {t('settings.backfillHistory', 'Backfill Historical Data')}
-                    </div>
-                    <div className="text-xs text-muted-foreground mb-3">
-                      {t('settings.hyperliquidBackfillDesc', 'K-lines (~5000 records, ~3.5 days per symbol)')}
-                    </div>
-                    {backfillStatus['hyperliquid']?.status === 'running' || backfillStatus['hyperliquid']?.status === 'pending' ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary transition-all duration-300"
-                              style={{ width: `${backfillStatus['hyperliquid']?.progress || 0}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium">{backfillStatus['hyperliquid']?.progress || 0}%</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {t('settings.backfillRunning', 'Backfilling')} {backfillStatus['hyperliquid']?.symbols?.join(', ')}...
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Button
-                          onClick={() => handleStartBackfill('hyperliquid')}
-                          disabled={backfillStarting['hyperliquid']}
-                          size="sm"
-                          variant="outline"
-                        >
-                          {backfillStarting['hyperliquid'] ? t('common.loading', 'Loading...') : t('settings.startBackfill', 'Start Backfill')}
-                        </Button>
-                        {backfillJustCompleted['hyperliquid'] && (
-                          <div className="text-xs text-green-500">
-                            {t('settings.backfillCompleted', 'Last backfill completed successfully')}
-                          </div>
-                        )}
-                        {backfillStatus['hyperliquid']?.status === 'failed' && backfillStatus['hyperliquid']?.task_id && (
-                          <div className="text-xs text-red-500">
-                            {t('settings.backfillFailed', 'Last backfill failed')}: {backfillStatus['hyperliquid']?.error_message}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-muted-foreground">{t('settings.noData', 'No data available')}</div>
-              )}
-              <div className="pt-4 border-t">
-                <div className="text-sm font-medium mb-3">{t('settings.marketFlowCoverage', 'Market Flow Coverage')}</div>
-                <DataCoverageHeatmap exchange="hyperliquid" dataType="market_flow" />
-              </div>
-              <div className="pt-4 border-t">
-                <div className="text-sm font-medium mb-3">{t('settings.klineCoverage', 'K-line Coverage')}</div>
-                <DataCoverageHeatmap exchange="hyperliquid" dataType="klines" />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Binance Data Tab */}
         <TabsContent value="binance-data" className="mt-4 flex-1 min-h-0 flex flex-col">
           <Card className="flex flex-col flex-1 min-h-0">
@@ -907,7 +658,7 @@ export default function SettingsPage() {
                         {t('settings.maxStorageEstimate', 'Max Storage Estimate')}
                       </div>
                       <div className="text-xl font-semibold">
-                        {(watchlistSymbols.length * parseInt(retentionDays['binance'] || '365', 10) * storageStats['binance'].estimated_per_symbol_per_day_mb).toFixed(1)} MB
+                        {(bnWatchlistSymbols.length * parseInt(retentionDays['binance'] || '365', 10) * storageStats['binance'].estimated_per_symbol_per_day_mb).toFixed(1)} MB
                       </div>
                     </div>
                   </div>
@@ -941,7 +692,7 @@ export default function SettingsPage() {
                       {t('settings.backfillHistory', 'Backfill Historical Data')}
                     </div>
                     <div className="text-xs text-muted-foreground mb-3">
-                      {t('settings.backfillDesc', 'K-lines (25h), OI (30d), Funding Rate (365d), Long/Short Ratio (30d)')}
+                      {t('settings.backfillDesc', 'K-lines 1m-1M for the retention period, OI (real-time only), Funding Rate (365d), Long/Short Ratio (30d)')}
                     </div>
                     {backfillStatus['binance']?.status === 'running' || backfillStatus['binance']?.status === 'pending' ? (
                       <div className="space-y-2">
@@ -1001,8 +752,16 @@ export default function SettingsPage() {
                 <DataCoverageHeatmap exchange="binance" dataType="market_flow" />
               </div>
               <div className="pt-4 border-t">
-                <div className="text-sm font-medium mb-3">{t('settings.klineCoverage', 'K-line Coverage')}</div>
-                <DataCoverageHeatmap exchange="binance" dataType="klines" />
+                <div className="text-sm font-medium mb-1">{t('settings.klineCoverage', 'K-line Coverage')}</div>
+                <div className="text-xs text-muted-foreground mb-3">
+                  {BINANCE_KLINE_PERIODS.join(', ')}
+                </div>
+                <DataCoverageHeatmap
+                  exchange="binance"
+                  dataType="klines"
+                  periodOptions={BINANCE_KLINE_PERIODS}
+                  defaultPeriod="1m"
+                />
               </div>
             </CardContent>
           </Card>

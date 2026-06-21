@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,16 +8,58 @@ import BalanceCard from './BalanceCard';
 import PositionsTable from './PositionsTable';
 import OrderForm from './OrderForm';
 import WalletApiUsage from './WalletApiUsage';
-
-const AVAILABLE_SYMBOLS = ['BTC', 'ETH', 'SOL', 'AVAX', 'MATIC', 'ARB', 'OP'];
+import {
+  DEFAULT_MANUAL_TRADING_EXCHANGE,
+  MANUAL_TRADING_EXCHANGES,
+  getManualTradingExchangeConfig,
+} from './manualTradingExchanges';
 
 export default function HyperliquidPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('overview');
-  const [exchange, setExchange] = useState<ExchangeType>('hyperliquid');
+  const [exchange, setExchange] = useState<ExchangeType>(DEFAULT_MANUAL_TRADING_EXCHANGE);
   const [selectedWallet, setSelectedWallet] = useState<WalletOption | null>(null);
+  const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isWalletSwitching, setIsWalletSwitching] = useState(false);
+  const exchangeConfig = useMemo(() => getManualTradingExchangeConfig(exchange), [exchange]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSymbols = async () => {
+      setSymbolsLoading(true);
+      try {
+        const response = await fetch(exchangeConfig.watchlistEndpoint);
+        if (!response.ok) {
+          throw new Error('Failed to load trading symbols');
+        }
+        const data = await response.json();
+        const symbols = Array.isArray(data.symbols)
+          ? data.symbols.map((symbol: string) => symbol.toUpperCase())
+          : [];
+        if (!cancelled) {
+          setAvailableSymbols(symbols.length > 0 ? symbols : exchangeConfig.defaultSymbols);
+        }
+      } catch (error) {
+        console.error('Failed to load trading symbols:', error);
+        if (!cancelled) {
+          setAvailableSymbols(exchangeConfig.defaultSymbols);
+        }
+      } finally {
+        if (!cancelled) {
+          setSymbolsLoading(false);
+        }
+      }
+    };
+
+    loadSymbols();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exchangeConfig]);
 
   const handleExchangeChange = (newExchange: ExchangeType) => {
     setExchange(newExchange);
@@ -60,8 +102,11 @@ export default function HyperliquidPage() {
               onChange={(e) => handleExchangeChange(e.target.value as ExchangeType)}
               className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 h-10"
             >
-              <option value="hyperliquid">Hyperliquid</option>
-              <option value="binance">Binance Futures</option>
+              {MANUAL_TRADING_EXCHANGES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -150,7 +195,7 @@ export default function HyperliquidPage() {
                   onPositionClosed={handlePositionClosed}
                 />
 
-                {exchange === 'hyperliquid' && (
+                {exchangeConfig.supportsApiUsage && (
                   <WalletApiUsage
                     accountId={selectedWallet.account_id}
                     environment={selectedWallet.environment}
@@ -166,7 +211,8 @@ export default function HyperliquidPage() {
                       accountId={selectedWallet.account_id}
                       environment={selectedWallet.environment}
                       exchange={exchange}
-                      availableSymbols={AVAILABLE_SYMBOLS}
+                      availableSymbols={availableSymbols}
+                      symbolsLoading={symbolsLoading}
                       maxLeverage={selectedWallet.max_leverage}
                       defaultLeverage={selectedWallet.default_leverage}
                       onOrderPlaced={handleOrderPlaced}

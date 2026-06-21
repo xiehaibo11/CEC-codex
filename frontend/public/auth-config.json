@@ -1,7 +1,22 @@
 {
-  "authProvider": "https://account.akooi.com",
-  "clientId": "4db5ed37c6d34d03d656",
+  "authProvider": "https://auth.bocail.com",
+  "authProxyProvider": "https://www.bocail.com",
+  "clientId": "41837caf0514413bb14b",
   "appName": "hyper-alpha-arena",
-  "organizationName": "built-in",
-  "redirectPath": "/callback"
+  "organizationName": "hyper-alpha-arena",
+  "redirectPath": "/callback",
+  "oauthProviders": [
+    {
+      "type": "GitHub",
+      "name": "github_login",
+      "displayName": "GitHub",
+      "clientId": "Ov23liwdTwGyhQkcFrYK"
+    },
+    {
+      "type": "Google",
+      "name": "google_login",
+      "displayName": "Google",
+      "clientId": "GOOGLE_CLIENT_ID_REDACTED"
+    }
+  ]
 }

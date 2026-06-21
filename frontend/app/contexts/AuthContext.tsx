@@ -2,18 +2,23 @@
 
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
 import Cookies from 'js-cookie'
-import { getUserInfo, loadAuthConfig, type User, isTokenExpiringSoon, refreshAccessToken, getTokenExpiryTime } from '@/lib/auth'
-import { getMembershipInfo, type MembershipInfo } from '@/lib/api'
+import {
+  getTokenExpiryTime,
+  getUserInfo,
+  isTokenExpiringSoon,
+  loadAuthConfig,
+  markNextLoginForFreshAuthorization,
+  refreshAccessToken,
+  ssoLogout,
+  type User,
+} from '@/lib/auth'
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   authEnabled: boolean
-  membership: MembershipInfo | null
-  membershipLoading: boolean
   setUser: (user: User | null) => void
   logout: () => void
-  refreshMembership: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -22,8 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [authEnabled, setAuthEnabled] = useState(false)
-  const [membership, setMembership] = useState<MembershipInfo | null>(null)
-  const [membershipLoading, setMembershipLoading] = useState(false)
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const clearAuthState = () => {
@@ -31,7 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Cookies.remove('arena_refresh_token')
     Cookies.remove('arena_user')
     setUser(null)
-    setMembership(null)
   }
 
   const syncHyperInsightRuntimeToken = async (token: string | null) => {
@@ -167,47 +169,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, delayMs)
   }
 
-  // Function to refresh membership data
-  const refreshMembership = async () => {
-    if (!authEnabled || !user) {
-      setMembership(null)
-      return
-    }
-
-    setMembershipLoading(true)
-    try {
-      const result = await getMembershipInfo()
-      setMembership(result.membership)
-
-      // Sync membership info to local backend database
-      // This keeps the local UserSubscription table in sync with www.akooi.com
-      if (result.membership) {
-        try {
-          await fetch('/api/users/sync-membership', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              username: user.name,
-              status: result.membership.status,
-              current_period_end: result.membership.currentPeriodEnd,
-            }),
-          })
-          console.log('[AuthContext] Membership synced to local database')
-        } catch (syncError) {
-          // Don't fail if sync fails - membership is already loaded from www.akooi.com
-          console.warn('[AuthContext] Failed to sync membership to local database:', syncError)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to refresh membership:', error)
-      setMembership(null)
-    } finally {
-      setMembershipLoading(false)
-    }
-  }
-
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -271,13 +232,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth()
   }, [])
 
-  // Fetch membership info when user is authenticated
-  useEffect(() => {
-    if (!loading && user && authEnabled) {
-      refreshMembership()
-    }
-  }, [user, loading, authEnabled])
-
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
@@ -290,23 +244,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = async () => {
-    // Clear backend membership subscription first
-    try {
-      await fetch('/api/users/clear-membership', { method: 'POST' })
-      console.log('[AuthContext] Backend membership cleared')
-    } catch (e) {
-      console.warn('[AuthContext] Failed to clear backend membership:', e)
+    const currentToken = Cookies.get('arena_token')
+    markNextLoginForFreshAuthorization()
+    if (currentToken) {
+      await ssoLogout(currentToken)
     }
 
-    // Local logout: clear Arena cookies and state
-    // Casdoor session remains active, but next login will show account selection
-    // because we use prompt=select_account in getSignInUrl()
     Cookies.remove('arena_token')
     Cookies.remove('arena_refresh_token')
     Cookies.remove('arena_user')
     await syncHyperInsightRuntimeToken(null)
     setUser(null)
-    setMembership(null)
 
     // Clear refresh timer
     if (refreshTimerRef.current) {
@@ -314,8 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimerRef.current = null
     }
 
-    // Refresh page to show logged-out state
-    window.location.href = '/'
+    window.location.href = '/login'
   }
 
   return (
@@ -323,11 +270,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       authEnabled,
-      membership,
-      membershipLoading,
       setUser,
-      logout,
-      refreshMembership
+      logout
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,0 +1,5860 @@
+{
+  "generated_at": "2026-06-21T19:35:40.643Z",
+  "symbols_source": "http://127.0.0.1:8802/api/binance/symbols/available",
+  "total": 528,
+  "local_icon_count": 790,
+  "matched_count": 398,
+  "missing_count": 130,
+  "matched_pct": 75.38,
+  "missing_pct": 24.62,
+  "matched": [
+    {
+      "symbol": "BTC",
+      "name": "BTC",
+      "label": "BTC",
+      "type": "perpetual",
+      "candidates": [
+        "BTC"
+      ],
+      "matched_icon_key": "BTC",
+      "icon_path": "/crypto-icons/color/btc.svg"
+    },
+    {
+      "symbol": "ETH",
+      "name": "ETH",
+      "label": "ETH",
+      "type": "perpetual",
+      "candidates": [
+        "ETH"
+      ],
+      "matched_icon_key": "ETH",
+      "icon_path": "/crypto-icons/color/eth.svg"
+    },
+    {
+      "symbol": "BCH",
+      "name": "BCH",
+      "label": "BCH",
+      "type": "perpetual",
+      "candidates": [
+        "BCH"
+      ],
+      "matched_icon_key": "BCH",
+      "icon_path": "/crypto-icons/color/bch.svg"
+    },
+    {
+      "symbol": "XRP",
+      "name": "XRP",
+      "label": "XRP",
+      "type": "perpetual",
+      "candidates": [
+        "XRP"
+      ],
+      "matched_icon_key": "XRP",
+      "icon_path": "/crypto-icons/color/xrp.svg"
+    },
+    {
+      "symbol": "LTC",
+      "name": "LTC",
+      "label": "LTC",
+      "type": "perpetual",
+      "candidates": [
+        "LTC"
+      ],
+      "matched_icon_key": "LTC",
+      "icon_path": "/crypto-icons/color/ltc.svg"
+    },
+    {
+      "symbol": "TRX",
+      "name": "TRX",
+      "label": "TRX",
+      "type": "perpetual",
+      "candidates": [
+        "TRX",
+        "TR"
+      ],
+      "matched_icon_key": "TRX",
+      "icon_path": "/crypto-icons/color/trx.svg"
+    },
+    {
+      "symbol": "ETC",
+      "name": "ETC",
+      "label": "ETC",
+      "type": "perpetual",
+      "candidates": [
+        "ETC"
+      ],
+      "matched_icon_key": "ETC",
+      "icon_path": "/crypto-icons/color/etc.svg"
+    },
+    {
+      "symbol": "LINK",
+      "name": "LINK",
+      "label": "LINK",
+      "type": "perpetual",
+      "candidates": [
+        "LINK"
+      ],
+      "matched_icon_key": "LINK",
+      "icon_path": "/crypto-icons/color/link.svg"
+    },
+    {
+      "symbol": "XLM",
+      "name": "XLM",
+      "label": "XLM",
+      "type": "perpetual",
+      "candidates": [
+        "XLM"
+      ],
+      "matched_icon_key": "XLM",
+      "icon_path": "/crypto-icons/color/xlm.svg"
+    },
+    {
+      "symbol": "ADA",
+      "name": "ADA",
+      "label": "ADA",
+      "type": "perpetual",
+      "candidates": [
+        "ADA"
+      ],
+      "matched_icon_key": "ADA",
+      "icon_path": "/crypto-icons/color/ada.svg"
+    },
+    {
+      "symbol": "XMR",
+      "name": "XMR",
+      "label": "XMR",
+      "type": "perpetual",
+      "candidates": [
+        "XMR"
+      ],
+      "matched_icon_key": "XMR",
+      "icon_path": "/crypto-icons/color/xmr.svg"
+    },
+    {
+      "symbol": "DASH",
+      "name": "DASH",
+      "label": "DASH",
+      "type": "perpetual",
+      "candidates": [
+        "DASH"
+      ],
+      "matched_icon_key": "DASH",
+      "icon_path": "/crypto-icons/color/dash.svg"
+    },
+    {
+      "symbol": "ZEC",
+      "name": "ZEC",
+      "label": "ZEC",
+      "type": "perpetual",
+      "candidates": [
+        "ZEC"
+      ],
+      "matched_icon_key": "ZEC",
+      "icon_path": "/crypto-icons/color/zec.svg"
+    },
+    {
+      "symbol": "XTZ",
+      "name": "XTZ",
+      "label": "XTZ",
+      "type": "perpetual",
+      "candidates": [
+        "XTZ"
+      ],
+      "matched_icon_key": "XTZ",
+      "icon_path": "/crypto-icons/color/xtz.svg"
+    },
+    {
+      "symbol": "BNB",
+      "name": "BNB",
+      "label": "BNB",
+      "type": "perpetual",
+      "candidates": [
+        "BNB"
+      ],
+      "matched_icon_key": "BNB",
+      "icon_path": "/crypto-icons/color/bnb.svg"
+    },
+    {
+      "symbol": "ATOM",
+      "name": "ATOM",
+      "label": "ATOM",
+      "type": "perpetual",
+      "candidates": [
+        "ATOM"
+      ],
+      "matched_icon_key": "ATOM",
+      "icon_path": "/crypto-icons/color/atom.svg"
+    },
+    {
+      "symbol": "ONT",
+      "name": "ONT",
+      "label": "ONT",
+      "type": "perpetual",
+      "candidates": [
+        "ONT"
+      ],
+      "matched_icon_key": "ONT",
+      "icon_path": "/crypto-icons/color/ont.svg"
+    },
+    {
+      "symbol": "IOTA",
+      "name": "IOTA",
+      "label": "IOTA",
+      "type": "perpetual",
+      "candidates": [
+        "IOTA",
+        "MIOTA"
+      ],
+      "matched_icon_key": "MIOTA",
+      "icon_path": "/crypto-icons/color/miota.svg"
+    },
+    {
+      "symbol": "BAT",
+      "name": "BAT",
+      "label": "BAT",
+      "type": "perpetual",
+      "candidates": [
+        "BAT"
+      ],
+      "matched_icon_key": "BAT",
+      "icon_path": "/crypto-icons/color/bat.svg"
+    },
+    {
+      "symbol": "VET",
+      "name": "VET",
+      "label": "VET",
+      "type": "perpetual",
+      "candidates": [
+        "VET"
+      ],
+      "matched_icon_key": "VET",
+      "icon_path": "/crypto-icons/color/vet.svg"
+    },
+    {
+      "symbol": "NEO",
+      "name": "NEO",
+      "label": "NEO",
+      "type": "perpetual",
+      "candidates": [
+        "NEO"
+      ],
+      "matched_icon_key": "NEO",
+      "icon_path": "/crypto-icons/color/neo.svg"
+    },
+    {
+      "symbol": "QTUM",
+      "name": "QTUM",
+      "label": "QTUM",
+      "type": "perpetual",
+      "candidates": [
+        "QTUM"
+      ],
+      "matched_icon_key": "QTUM",
+      "icon_path": "/crypto-icons/color/qtum.svg"
+    },
+    {
+      "symbol": "IOST",
+      "name": "IOST",
+      "label": "IOST",
+      "type": "perpetual",
+      "candidates": [
+        "IOST"
+      ],
+      "matched_icon_key": "IOST",
+      "icon_path": "/crypto-icons/color/iost.svg"
+    },
+    {
+      "symbol": "THETA",
+      "name": "THETA",
+      "label": "THETA",
+      "type": "perpetual",
+      "candidates": [
+        "THETA"
+      ],
+      "matched_icon_key": "THETA",
+      "icon_path": "/crypto-icons/color/theta.svg"
+    },
+    {
+      "symbol": "ALGO",
+      "name": "ALGO",
+      "label": "ALGO",
+      "type": "perpetual",
+      "candidates": [
+        "ALGO"
+      ],
+      "matched_icon_key": "ALGO",
+      "icon_path": "/crypto-icons/color/algo.svg"
+    },
+    {
+      "symbol": "ZIL",
+      "name": "ZIL",
+      "label": "ZIL",
+      "type": "perpetual",
+      "candidates": [
+        "ZIL"
+      ],
+      "matched_icon_key": "ZIL",
+      "icon_path": "/crypto-icons/color/zil.svg"
+    },
+    {
+      "symbol": "KNC",
+      "name": "KNC",
+      "label": "KNC",
+      "type": "perpetual",
+      "candidates": [
+        "KNC"
+      ],
+      "matched_icon_key": "KNC",
+      "icon_path": "/crypto-icons/color/knc.svg"
+    },
+    {
+      "symbol": "ZRX",
+      "name": "ZRX",
+      "label": "ZRX",
+      "type": "perpetual",
+      "candidates": [
+        "ZRX",
+        "ZR"
+      ],
+      "matched_icon_key": "ZRX",
+      "icon_path": "/crypto-icons/color/zrx.svg"
+    },
+    {
+      "symbol": "COMP",
+      "name": "COMP",
+      "label": "COMP",
+      "type": "perpetual",
+      "candidates": [
+        "COMP"
+      ],
+      "matched_icon_key": "COMP",
+      "icon_path": "/crypto-icons/color/comp.svg"
+    },
+    {
+      "symbol": "DOGE",
+      "name": "DOGE",
+      "label": "DOGE",
+      "type": "perpetual",
+      "candidates": [
+        "DOGE"
+      ],
+      "matched_icon_key": "DOGE",
+      "icon_path": "/crypto-icons/color/doge.svg"
+    },
+    {
+      "symbol": "KAVA",
+      "name": "KAVA",
+      "label": "KAVA",
+      "type": "perpetual",
+      "candidates": [
+        "KAVA"
+      ],
+      "matched_icon_key": "KAVA",
+      "icon_path": "/crypto-icons/binance/kava.png"
+    },
+    {
+      "symbol": "BAND",
+      "name": "BAND",
+      "label": "BAND",
+      "type": "perpetual",
+      "candidates": [
+        "BAND"
+      ],
+      "matched_icon_key": "BAND",
+      "icon_path": "/crypto-icons/color/band.svg"
+    },
+    {
+      "symbol": "RLC",
+      "name": "RLC",
+      "label": "RLC",
+      "type": "perpetual",
+      "candidates": [
+        "RLC"
+      ],
+      "matched_icon_key": "RLC",
+      "icon_path": "/crypto-icons/color/rlc.svg"
+    },
+    {
+      "symbol": "SNX",
+      "name": "SNX",
+      "label": "SNX",
+      "type": "perpetual",
+      "candidates": [
+        "SNX",
+        "SN"
+      ],
+      "matched_icon_key": "SNX",
+      "icon_path": "/crypto-icons/color/snx.svg"
+    },
+    {
+      "symbol": "DOT",
+      "name": "DOT",
+      "label": "DOT",
+      "type": "perpetual",
+      "candidates": [
+        "DOT"
+      ],
+      "matched_icon_key": "DOT",
+      "icon_path": "/crypto-icons/color/dot.svg"
+    },
+    {
+      "symbol": "YFI",
+      "name": "YFI",
+      "label": "YFI",
+      "type": "perpetual",
+      "candidates": [
+        "YFI"
+      ],
+      "matched_icon_key": "YFI",
+      "icon_path": "/crypto-icons/color/yfi.svg"
+    },
+    {
+      "symbol": "CRV",
+      "name": "CRV",
+      "label": "CRV",
+      "type": "perpetual",
+      "candidates": [
+        "CRV"
+      ],
+      "matched_icon_key": "CRV",
+      "icon_path": "/crypto-icons/color/crv.svg"
+    },
+    {
+      "symbol": "TRB",
+      "name": "TRB",
+      "label": "TRB",
+      "type": "perpetual",
+      "candidates": [
+        "TRB"
+      ],
+      "matched_icon_key": "TRB",
+      "icon_path": "/crypto-icons/binance/trb.png"
+    },
+    {
+      "symbol": "RUNE",
+      "name": "RUNE",
+      "label": "RUNE",
+      "type": "perpetual",
+      "candidates": [
+        "RUNE"
+      ],
+      "matched_icon_key": "RUNE",
+      "icon_path": "/crypto-icons/binance/rune.png"
+    },
+    {
+      "symbol": "SUSHI",
+      "name": "SUSHI",
+      "label": "SUSHI",
+      "type": "perpetual",
+      "candidates": [
+        "SUSHI"
+      ],
+      "matched_icon_key": "SUSHI",
+      "icon_path": "/crypto-icons/color/sushi.svg"
+    },
+    {
+      "symbol": "EGLD",
+      "name": "EGLD",
+      "label": "EGLD",
+      "type": "perpetual",
+      "candidates": [
+        "EGLD"
+      ],
+      "matched_icon_key": "EGLD",
+      "icon_path": "/crypto-icons/binance/egld.png"
+    },
+    {
+      "symbol": "SOL",
+      "name": "SOL",
+      "label": "SOL",
+      "type": "perpetual",
+      "candidates": [
+        "SOL"
+      ],
+      "matched_icon_key": "SOL",
+      "icon_path": "/crypto-icons/color/sol.svg"
+    },
+    {
+      "symbol": "ICX",
+      "name": "ICX",
+      "label": "ICX",
+      "type": "perpetual",
+      "candidates": [
+        "ICX",
+        "IC"
+      ],
+      "matched_icon_key": "ICX",
+      "icon_path": "/crypto-icons/color/icx.svg"
+    },
+    {
+      "symbol": "STORJ",
+      "name": "STORJ",
+      "label": "STORJ",
+      "type": "perpetual",
+      "candidates": [
+        "STORJ"
+      ],
+      "matched_icon_key": "STORJ",
+      "icon_path": "/crypto-icons/color/storj.svg"
+    },
+    {
+      "symbol": "UNI",
+      "name": "UNI",
+      "label": "UNI",
+      "type": "perpetual",
+      "candidates": [
+        "UNI"
+      ],
+      "matched_icon_key": "UNI",
+      "icon_path": "/crypto-icons/color/uni.svg"
+    },
+    {
+      "symbol": "AVAX",
+      "name": "AVAX",
+      "label": "AVAX",
+      "type": "perpetual",
+      "candidates": [
+        "AVAX",
+        "AVA"
+      ],
+      "matched_icon_key": "AVAX",
+      "icon_path": "/crypto-icons/color/avax.svg"
+    },
+    {
+      "symbol": "ENJ",
+      "name": "ENJ",
+      "label": "ENJ",
+      "type": "perpetual",
+      "candidates": [
+        "ENJ"
+      ],
+      "matched_icon_key": "ENJ",
+      "icon_path": "/crypto-icons/color/enj.svg"
+    },
+    {
+      "symbol": "KSM",
+      "name": "KSM",
+      "label": "KSM",
+      "type": "perpetual",
+      "candidates": [
+        "KSM"
+      ],
+      "matched_icon_key": "KSM",
+      "icon_path": "/crypto-icons/color/ksm.svg"
+    },
+    {
+      "symbol": "NEAR",
+      "name": "NEAR",
+      "label": "NEAR",
+      "type": "perpetual",
+      "candidates": [
+        "NEAR"
+      ],
+      "matched_icon_key": "NEAR",
+      "icon_path": "/crypto-icons/binance/near.png"
+    },
+    {
+      "symbol": "AAVE",
+      "name": "AAVE",
+      "label": "AAVE",
+      "type": "perpetual",
+      "candidates": [
+        "AAVE"
+      ],
+      "matched_icon_key": "AAVE",
+      "icon_path": "/crypto-icons/color/aave.svg"
+    },
+    {
+      "symbol": "FIL",
+      "name": "FIL",
+      "label": "FIL",
+      "type": "perpetual",
+      "candidates": [
+        "FIL"
+      ],
+      "matched_icon_key": "FIL",
+      "icon_path": "/crypto-icons/color/fil.svg"
+    },
+    {
+      "symbol": "RSR",
+      "name": "RSR",
+      "label": "RSR",
+      "type": "perpetual",
+      "candidates": [
+        "RSR"
+      ],
+      "matched_icon_key": "RSR",
+      "icon_path": "/crypto-icons/binance/rsr.png"
+    },
+    {
+      "symbol": "BEL",
+      "name": "BEL",
+      "label": "BEL",
+      "type": "perpetual",
+      "candidates": [
+        "BEL"
+      ],
+      "matched_icon_key": "BEL",
+      "icon_path": "/crypto-icons/binance/bel.png"
+    },
+    {
+      "symbol": "AXS",
+      "name": "AXS",
+      "label": "AXS",
+      "type": "perpetual",
+      "candidates": [
+        "AXS"
+      ],
+      "matched_icon_key": "AXS",
+      "icon_path": "/crypto-icons/binance/axs.png"
+    },
+    {
+      "symbol": "ZEN",
+      "name": "ZEN",
+      "label": "ZEN",
+      "type": "perpetual",
+      "candidates": [
+        "ZEN"
+      ],
+      "matched_icon_key": "ZEN",
+      "icon_path": "/crypto-icons/color/zen.svg"
+    },
+    {
+      "symbol": "SKL",
+      "name": "SKL",
+      "label": "SKL",
+      "type": "perpetual",
+      "candidates": [
+        "SKL"
+      ],
+      "matched_icon_key": "SKL",
+      "icon_path": "/crypto-icons/color/skl.svg"
+    },
+    {
+      "symbol": "GRT",
+      "name": "GRT",
+      "label": "GRT",
+      "type": "perpetual",
+      "candidates": [
+        "GRT"
+      ],
+      "matched_icon_key": "GRT",
+      "icon_path": "/crypto-icons/color/grt.svg"
+    },
+    {
+      "symbol": "1INCH",
+      "name": "1INCH",
+      "label": "1INCH",
+      "type": "perpetual",
+      "candidates": [
+        "1INCH",
+        "INCH"
+      ],
+      "matched_icon_key": "1INCH",
+      "icon_path": "/crypto-icons/color/1inch.svg"
+    },
+    {
+      "symbol": "CHZ",
+      "name": "CHZ",
+      "label": "CHZ",
+      "type": "perpetual",
+      "candidates": [
+        "CHZ"
+      ],
+      "matched_icon_key": "CHZ",
+      "icon_path": "/crypto-icons/color/chz.svg"
+    },
+    {
+      "symbol": "SAND",
+      "name": "SAND",
+      "label": "SAND",
+      "type": "perpetual",
+      "candidates": [
+        "SAND"
+      ],
+      "matched_icon_key": "SAND",
+      "icon_path": "/crypto-icons/color/sand.svg"
+    },
+    {
+      "symbol": "ANKR",
+      "name": "ANKR",
+      "label": "ANKR",
+      "type": "perpetual",
+      "candidates": [
+        "ANKR"
+      ],
+      "matched_icon_key": "ANKR",
+      "icon_path": "/crypto-icons/color/ankr.svg"
+    },
+    {
+      "symbol": "RVN",
+      "name": "RVN",
+      "label": "RVN",
+      "type": "perpetual",
+      "candidates": [
+        "RVN"
+      ],
+      "matched_icon_key": "RVN",
+      "icon_path": "/crypto-icons/color/rvn.svg"
+    },
+    {
+      "symbol": "SFP",
+      "name": "SFP",
+      "label": "SFP",
+      "type": "perpetual",
+      "candidates": [
+        "SFP"
+      ],
+      "matched_icon_key": "SFP",
+      "icon_path": "/crypto-icons/binance/sfp.png"
+    },
+    {
+      "symbol": "COTI",
+      "name": "COTI",
+      "label": "COTI",
+      "type": "perpetual",
+      "candidates": [
+        "COTI"
+      ],
+      "matched_icon_key": "COTI",
+      "icon_path": "/crypto-icons/binance/coti.png"
+    },
+    {
+      "symbol": "CHR",
+      "name": "CHR",
+      "label": "CHR",
+      "type": "perpetual",
+      "candidates": [
+        "CHR"
+      ],
+      "matched_icon_key": "CHR",
+      "icon_path": "/crypto-icons/binance/chr.png"
+    },
+    {
+      "symbol": "MANA",
+      "name": "MANA",
+      "label": "MANA",
+      "type": "perpetual",
+      "candidates": [
+        "MANA"
+      ],
+      "matched_icon_key": "MANA",
+      "icon_path": "/crypto-icons/color/mana.svg"
+    },
+    {
+      "symbol": "ALICE",
+      "name": "ALICE",
+      "label": "ALICE",
+      "type": "perpetual",
+      "candidates": [
+        "ALICE"
+      ],
+      "matched_icon_key": "ALICE",
+      "icon_path": "/crypto-icons/binance/alice.png"
+    },
+    {
+      "symbol": "HBAR",
+      "name": "HBAR",
+      "label": "HBAR",
+      "type": "perpetual",
+      "candidates": [
+        "HBAR"
+      ],
+      "matched_icon_key": "HBAR",
+      "icon_path": "/crypto-icons/binance/hbar.png"
+    },
+    {
+      "symbol": "ONE",
+      "name": "ONE",
+      "label": "ONE",
+      "type": "perpetual",
+      "candidates": [
+        "ONE"
+      ],
+      "matched_icon_key": "ONE",
+      "icon_path": "/crypto-icons/color/one.svg"
+    },
+    {
+      "symbol": "CELR",
+      "name": "CELR",
+      "label": "CELR",
+      "type": "perpetual",
+      "candidates": [
+        "CELR"
+      ],
+      "matched_icon_key": "CELR",
+      "icon_path": "/crypto-icons/binance/celr.png"
+    },
+    {
+      "symbol": "HOT",
+      "name": "HOT",
+      "label": "HOT",
+      "type": "perpetual",
+      "candidates": [
+        "HOT"
+      ],
+      "matched_icon_key": "HOT",
+      "icon_path": "/crypto-icons/color/hot.svg"
+    },
+    {
+      "symbol": "MTL",
+      "name": "MTL",
+      "label": "MTL",
+      "type": "perpetual",
+      "candidates": [
+        "MTL"
+      ],
+      "matched_icon_key": "MTL",
+      "icon_path": "/crypto-icons/color/mtl.svg"
+    },
+    {
+      "symbol": "OGN",
+      "name": "OGN",
+      "label": "OGN",
+      "type": "perpetual",
+      "candidates": [
+        "OGN"
+      ],
+      "matched_icon_key": "OGN",
+      "icon_path": "/crypto-icons/binance/ogn.png"
+    },
+    {
+      "symbol": "1000SHIB",
+      "name": "1000SHIB",
+      "label": "1000SHIB",
+      "type": "perpetual",
+      "candidates": [
+        "1000SHIB",
+        "SHIB"
+      ],
+      "matched_icon_key": "SHIB",
+      "icon_path": "/crypto-icons/binance/shib.png"
+    },
+    {
+      "symbol": "GTC",
+      "name": "GTC",
+      "label": "GTC",
+      "type": "perpetual",
+      "candidates": [
+        "GTC"
+      ],
+      "matched_icon_key": "GTC",
+      "icon_path": "/crypto-icons/binance/gtc.png"
+    },
+    {
+      "symbol": "IOTX",
+      "name": "IOTX",
+      "label": "IOTX",
+      "type": "perpetual",
+      "candidates": [
+        "IOTX",
+        "IOT"
+      ],
+      "matched_icon_key": "IOTX",
+      "icon_path": "/crypto-icons/color/iotx.svg"
+    },
+    {
+      "symbol": "C98",
+      "name": "C98",
+      "label": "C98",
+      "type": "perpetual",
+      "candidates": [
+        "C98"
+      ],
+      "matched_icon_key": "C98",
+      "icon_path": "/crypto-icons/binance/c98.png"
+    },
+    {
+      "symbol": "MASK",
+      "name": "MASK",
+      "label": "MASK",
+      "type": "perpetual",
+      "candidates": [
+        "MASK"
+      ],
+      "matched_icon_key": "MASK",
+      "icon_path": "/crypto-icons/binance/mask.png"
+    },
+    {
+      "symbol": "DYDX",
+      "name": "DYDX",
+      "label": "DYDX",
+      "type": "perpetual",
+      "candidates": [
+        "DYDX",
+        "DYD"
+      ],
+      "matched_icon_key": "DYDX",
+      "icon_path": "/crypto-icons/binance/dydx.png"
+    },
+    {
+      "symbol": "1000XEC",
+      "name": "1000XEC",
+      "label": "1000XEC",
+      "type": "perpetual",
+      "candidates": [
+        "1000XEC",
+        "XEC"
+      ],
+      "matched_icon_key": "XEC",
+      "icon_path": "/crypto-icons/binance/xec.png"
+    },
+    {
+      "symbol": "GALA",
+      "name": "GALA",
+      "label": "GALA",
+      "type": "perpetual",
+      "candidates": [
+        "GALA"
+      ],
+      "matched_icon_key": "GALA",
+      "icon_path": "/crypto-icons/binance/gala.png"
+    },
+    {
+      "symbol": "CELO",
+      "name": "CELO",
+      "label": "CELO",
+      "type": "perpetual",
+      "candidates": [
+        "CELO"
+      ],
+      "matched_icon_key": "CELO",
+      "icon_path": "/crypto-icons/binance/celo.png"
+    },
+    {
+      "symbol": "AR",
+      "name": "AR",
+      "label": "AR",
+      "type": "perpetual",
+      "candidates": [
+        "AR"
+      ],
+      "matched_icon_key": "AR",
+      "icon_path": "/crypto-icons/binance/ar.png"
+    },
+    {
+      "symbol": "ARPA",
+      "name": "ARPA",
+      "label": "ARPA",
+      "type": "perpetual",
+      "candidates": [
+        "ARPA"
+      ],
+      "matched_icon_key": "ARPA",
+      "icon_path": "/crypto-icons/binance/arpa.png"
+    },
+    {
+      "symbol": "CTSI",
+      "name": "CTSI",
+      "label": "CTSI",
+      "type": "perpetual",
+      "candidates": [
+        "CTSI"
+      ],
+      "matched_icon_key": "CTSI",
+      "icon_path": "/crypto-icons/binance/ctsi.png"
+    },
+    {
+      "symbol": "LPT",
+      "name": "LPT",
+      "label": "LPT",
+      "type": "perpetual",
+      "candidates": [
+        "LPT"
+      ],
+      "matched_icon_key": "LPT",
+      "icon_path": "/crypto-icons/color/lpt.svg"
+    },
+    {
+      "symbol": "ENS",
+      "name": "ENS",
+      "label": "ENS",
+      "type": "perpetual",
+      "candidates": [
+        "ENS"
+      ],
+      "matched_icon_key": "ENS",
+      "icon_path": "/crypto-icons/binance/ens.png"
+    },
+    {
+      "symbol": "PEOPLE",
+      "name": "PEOPLE",
+      "label": "PEOPLE",
+      "type": "perpetual",
+      "candidates": [
+        "PEOPLE"
+      ],
+      "matched_icon_key": "PEOPLE",
+      "icon_path": "/crypto-icons/binance/people.png"
+    },
+    {
+      "symbol": "ROSE",
+      "name": "ROSE",
+      "label": "ROSE",
+      "type": "perpetual",
+      "candidates": [
+        "ROSE"
+      ],
+      "matched_icon_key": "ROSE",
+      "icon_path": "/crypto-icons/binance/rose.png"
+    },
+    {
+      "symbol": "DUSK",
+      "name": "DUSK",
+      "label": "DUSK",
+      "type": "perpetual",
+      "candidates": [
+        "DUSK"
+      ],
+      "matched_icon_key": "DUSK",
+      "icon_path": "/crypto-icons/binance/dusk.png"
+    },
+    {
+      "symbol": "FLOW",
+      "name": "FLOW",
+      "label": "FLOW",
+      "type": "perpetual",
+      "candidates": [
+        "FLOW"
+      ],
+      "matched_icon_key": "FLOW",
+      "icon_path": "/crypto-icons/binance/flow.png"
+    },
+    {
+      "symbol": "IMX",
+      "name": "IMX",
+      "label": "IMX",
+      "type": "perpetual",
+      "candidates": [
+        "IMX",
+        "IM"
+      ],
+      "matched_icon_key": "IMX",
+      "icon_path": "/crypto-icons/binance/imx.png"
+    },
+    {
+      "symbol": "API3",
+      "name": "API3",
+      "label": "API3",
+      "type": "perpetual",
+      "candidates": [
+        "API3"
+      ],
+      "matched_icon_key": "API3",
+      "icon_path": "/crypto-icons/binance/api3.jpg"
+    },
+    {
+      "symbol": "GMT",
+      "name": "GMT",
+      "label": "GMT",
+      "type": "perpetual",
+      "candidates": [
+        "GMT"
+      ],
+      "matched_icon_key": "GMT",
+      "icon_path": "/crypto-icons/color/gmt.svg"
+    },
+    {
+      "symbol": "APE",
+      "name": "APE",
+      "label": "APE",
+      "type": "perpetual",
+      "candidates": [
+        "APE"
+      ],
+      "matched_icon_key": "APE",
+      "icon_path": "/crypto-icons/color/ape.svg"
+    },
+    {
+      "symbol": "WOO",
+      "name": "WOO",
+      "label": "WOO",
+      "type": "perpetual",
+      "candidates": [
+        "WOO"
+      ],
+      "matched_icon_key": "WOO",
+      "icon_path": "/crypto-icons/binance/woo.png"
+    },
+    {
+      "symbol": "JASMY",
+      "name": "JASMY",
+      "label": "JASMY",
+      "type": "perpetual",
+      "candidates": [
+        "JASMY"
+      ],
+      "matched_icon_key": "JASMY",
+      "icon_path": "/crypto-icons/binance/jasmy.png"
+    },
+    {
+      "symbol": "OP",
+      "name": "OP",
+      "label": "OP",
+      "type": "perpetual",
+      "candidates": [
+        "OP"
+      ],
+      "matched_icon_key": "OP",
+      "icon_path": "/crypto-icons/binance/op.png"
+    },
+    {
+      "symbol": "INJ",
+      "name": "INJ",
+      "label": "INJ",
+      "type": "perpetual",
+      "candidates": [
+        "INJ"
+      ],
+      "matched_icon_key": "INJ",
+      "icon_path": "/crypto-icons/binance/inj.png"
+    },
+    {
+      "symbol": "STG",
+      "name": "STG",
+      "label": "STG",
+      "type": "perpetual",
+      "candidates": [
+        "STG"
+      ],
+      "matched_icon_key": "STG",
+      "icon_path": "/crypto-icons/binance/stg.png"
+    },
+    {
+      "symbol": "SPELL",
+      "name": "SPELL",
+      "label": "SPELL",
+      "type": "perpetual",
+      "candidates": [
+        "SPELL"
+      ],
+      "matched_icon_key": "SPELL",
+      "icon_path": "/crypto-icons/binance/spell.png"
+    },
+    {
+      "symbol": "1000LUNC",
+      "name": "1000LUNC",
+      "label": "1000LUNC",
+      "type": "perpetual",
+      "candidates": [
+        "1000LUNC",
+        "LUNC"
+      ],
+      "matched_icon_key": "LUNC",
+      "icon_path": "/crypto-icons/binance/lunc.png"
+    },
+    {
+      "symbol": "LUNA2",
+      "name": "LUNA2",
+      "label": "LUNA2",
+      "type": "perpetual",
+      "candidates": [
+        "LUNA2",
+        "LUNA"
+      ],
+      "matched_icon_key": "LUNA",
+      "icon_path": "/crypto-icons/binance/luna.png"
+    },
+    {
+      "symbol": "LDO",
+      "name": "LDO",
+      "label": "LDO",
+      "type": "perpetual",
+      "candidates": [
+        "LDO"
+      ],
+      "matched_icon_key": "LDO",
+      "icon_path": "/crypto-icons/binance/ldo.png"
+    },
+    {
+      "symbol": "ICP",
+      "name": "ICP",
+      "label": "ICP",
+      "type": "perpetual",
+      "candidates": [
+        "ICP"
+      ],
+      "matched_icon_key": "ICP",
+      "icon_path": "/crypto-icons/color/icp.svg"
+    },
+    {
+      "symbol": "APT",
+      "name": "APT",
+      "label": "APT",
+      "type": "perpetual",
+      "candidates": [
+        "APT"
+      ],
+      "matched_icon_key": "APT",
+      "icon_path": "/crypto-icons/binance/apt.png"
+    },
+    {
+      "symbol": "QNT",
+      "name": "QNT",
+      "label": "QNT",
+      "type": "perpetual",
+      "candidates": [
+        "QNT"
+      ],
+      "matched_icon_key": "QNT",
+      "icon_path": "/crypto-icons/color/qnt.svg"
+    },
+    {
+      "symbol": "FET",
+      "name": "FET",
+      "label": "FET",
+      "type": "perpetual",
+      "candidates": [
+        "FET"
+      ],
+      "matched_icon_key": "FET",
+      "icon_path": "/crypto-icons/binance/fet.png"
+    },
+    {
+      "symbol": "MAGIC",
+      "name": "MAGIC",
+      "label": "MAGIC",
+      "type": "perpetual",
+      "candidates": [
+        "MAGIC"
+      ],
+      "matched_icon_key": "MAGIC",
+      "icon_path": "/crypto-icons/binance/magic.png"
+    },
+    {
+      "symbol": "T",
+      "name": "T",
+      "label": "T",
+      "type": "perpetual",
+      "candidates": [
+        "T"
+      ],
+      "matched_icon_key": "T",
+      "icon_path": "/crypto-icons/binance/t.png"
+    },
+    {
+      "symbol": "MINA",
+      "name": "MINA",
+      "label": "MINA",
+      "type": "perpetual",
+      "candidates": [
+        "MINA"
+      ],
+      "matched_icon_key": "MINA",
+      "icon_path": "/crypto-icons/binance/mina.png"
+    },
+    {
+      "symbol": "ASTR",
+      "name": "ASTR",
+      "label": "ASTR",
+      "type": "perpetual",
+      "candidates": [
+        "ASTR"
+      ],
+      "matched_icon_key": "ASTR",
+      "icon_path": "/crypto-icons/binance/astr.png"
+    },
+    {
+      "symbol": "GMX",
+      "name": "GMX",
+      "label": "GMX",
+      "type": "perpetual",
+      "candidates": [
+        "GMX",
+        "GM"
+      ],
+      "matched_icon_key": "GMX",
+      "icon_path": "/crypto-icons/binance/gmx.png"
+    },
+    {
+      "symbol": "CFX",
+      "name": "CFX",
+      "label": "CFX",
+      "type": "perpetual",
+      "candidates": [
+        "CFX",
+        "CF"
+      ],
+      "matched_icon_key": "CFX",
+      "icon_path": "/crypto-icons/binance/cfx.png"
+    },
+    {
+      "symbol": "STX",
+      "name": "STX",
+      "label": "STX",
+      "type": "perpetual",
+      "candidates": [
+        "STX",
+        "ST"
+      ],
+      "matched_icon_key": "STX",
+      "icon_path": "/crypto-icons/color/stx.svg"
+    },
+    {
+      "symbol": "ACH",
+      "name": "ACH",
+      "label": "ACH",
+      "type": "perpetual",
+      "candidates": [
+        "ACH"
+      ],
+      "matched_icon_key": "ACH",
+      "icon_path": "/crypto-icons/binance/ach.png"
+    },
+    {
+      "symbol": "SSV",
+      "name": "SSV",
+      "label": "SSV",
+      "type": "perpetual",
+      "candidates": [
+        "SSV"
+      ],
+      "matched_icon_key": "SSV",
+      "icon_path": "/crypto-icons/binance/ssv.png"
+    },
+    {
+      "symbol": "CKB",
+      "name": "CKB",
+      "label": "CKB",
+      "type": "perpetual",
+      "candidates": [
+        "CKB"
+      ],
+      "matched_icon_key": "CKB",
+      "icon_path": "/crypto-icons/binance/ckb.png"
+    },
+    {
+      "symbol": "LQTY",
+      "name": "LQTY",
+      "label": "LQTY",
+      "type": "perpetual",
+      "candidates": [
+        "LQTY"
+      ],
+      "matched_icon_key": "LQTY",
+      "icon_path": "/crypto-icons/binance/lqty.png"
+    },
+    {
+      "symbol": "USDC",
+      "name": "USDC",
+      "label": "USDC",
+      "type": "perpetual",
+      "candidates": [
+        "USDC"
+      ],
+      "matched_icon_key": "USDC",
+      "icon_path": "/crypto-icons/color/usdc.svg"
+    },
+    {
+      "symbol": "ID",
+      "name": "ID",
+      "label": "ID",
+      "type": "perpetual",
+      "candidates": [
+        "ID"
+      ],
+      "matched_icon_key": "ID",
+      "icon_path": "/crypto-icons/binance/id.png"
+    },
+    {
+      "symbol": "ARB",
+      "name": "ARB",
+      "label": "ARB",
+      "type": "perpetual",
+      "candidates": [
+        "ARB"
+      ],
+      "matched_icon_key": "ARB",
+      "icon_path": "/crypto-icons/binance/arb.png"
+    },
+    {
+      "symbol": "JOE",
+      "name": "JOE",
+      "label": "JOE",
+      "type": "perpetual",
+      "candidates": [
+        "JOE"
+      ],
+      "matched_icon_key": "JOE",
+      "icon_path": "/crypto-icons/binance/joe.png"
+    },
+    {
+      "symbol": "TLM",
+      "name": "TLM",
+      "label": "TLM",
+      "type": "perpetual",
+      "candidates": [
+        "TLM"
+      ],
+      "matched_icon_key": "TLM",
+      "icon_path": "/crypto-icons/binance/tlm.png"
+    },
+    {
+      "symbol": "HFT",
+      "name": "HFT",
+      "label": "HFT",
+      "type": "perpetual",
+      "candidates": [
+        "HFT"
+      ],
+      "matched_icon_key": "HFT",
+      "icon_path": "/crypto-icons/binance/hft.png"
+    },
+    {
+      "symbol": "XVS",
+      "name": "XVS",
+      "label": "XVS",
+      "type": "perpetual",
+      "candidates": [
+        "XVS"
+      ],
+      "matched_icon_key": "XVS",
+      "icon_path": "/crypto-icons/binance/xvs.png"
+    },
+    {
+      "symbol": "BLUR",
+      "name": "BLUR",
+      "label": "BLUR",
+      "type": "perpetual",
+      "candidates": [
+        "BLUR"
+      ],
+      "matched_icon_key": "BLUR",
+      "icon_path": "/crypto-icons/binance/blur.png"
+    },
+    {
+      "symbol": "EDU",
+      "name": "EDU",
+      "label": "EDU",
+      "type": "perpetual",
+      "candidates": [
+        "EDU"
+      ],
+      "matched_icon_key": "EDU",
+      "icon_path": "/crypto-icons/binance/edu.png"
+    },
+    {
+      "symbol": "SUI",
+      "name": "SUI",
+      "label": "SUI",
+      "type": "perpetual",
+      "candidates": [
+        "SUI"
+      ],
+      "matched_icon_key": "SUI",
+      "icon_path": "/crypto-icons/binance/sui.jpg"
+    },
+    {
+      "symbol": "1000PEPE",
+      "name": "1000PEPE",
+      "label": "1000PEPE",
+      "type": "perpetual",
+      "candidates": [
+        "1000PEPE",
+        "PEPE"
+      ],
+      "matched_icon_key": "PEPE",
+      "icon_path": "/crypto-icons/binance/pepe.png"
+    },
+    {
+      "symbol": "1000FLOKI",
+      "name": "1000FLOKI",
+      "label": "1000FLOKI",
+      "type": "perpetual",
+      "candidates": [
+        "1000FLOKI",
+        "FLOKI"
+      ],
+      "matched_icon_key": "FLOKI",
+      "icon_path": "/crypto-icons/binance/floki.png"
+    },
+    {
+      "symbol": "UMA",
+      "name": "UMA",
+      "label": "UMA",
+      "type": "perpetual",
+      "candidates": [
+        "UMA"
+      ],
+      "matched_icon_key": "UMA",
+      "icon_path": "/crypto-icons/color/uma.svg"
+    },
+    {
+      "symbol": "NMR",
+      "name": "NMR",
+      "label": "NMR",
+      "type": "perpetual",
+      "candidates": [
+        "NMR"
+      ],
+      "matched_icon_key": "NMR",
+      "icon_path": "/crypto-icons/color/nmr.svg"
+    },
+    {
+      "symbol": "MAV",
+      "name": "MAV",
+      "label": "MAV",
+      "type": "perpetual",
+      "candidates": [
+        "MAV"
+      ],
+      "matched_icon_key": "MAV",
+      "icon_path": "/crypto-icons/binance/mav.png"
+    },
+    {
+      "symbol": "XVG",
+      "name": "XVG",
+      "label": "XVG",
+      "type": "perpetual",
+      "candidates": [
+        "XVG"
+      ],
+      "matched_icon_key": "XVG",
+      "icon_path": "/crypto-icons/color/xvg.svg"
+    },
+    {
+      "symbol": "WLD",
+      "name": "WLD",
+      "label": "WLD",
+      "type": "perpetual",
+      "candidates": [
+        "WLD"
+      ],
+      "matched_icon_key": "WLD",
+      "icon_path": "/crypto-icons/binance/wld.png"
+    },
+    {
+      "symbol": "PENDLE",
+      "name": "PENDLE",
+      "label": "PENDLE",
+      "type": "perpetual",
+      "candidates": [
+        "PENDLE"
+      ],
+      "matched_icon_key": "PENDLE",
+      "icon_path": "/crypto-icons/binance/pendle.png"
+    },
+    {
+      "symbol": "ARKM",
+      "name": "ARKM",
+      "label": "ARKM",
+      "type": "perpetual",
+      "candidates": [
+        "ARKM"
+      ],
+      "matched_icon_key": "ARKM",
+      "icon_path": "/crypto-icons/binance/arkm.png"
+    },
+    {
+      "symbol": "AGLD",
+      "name": "AGLD",
+      "label": "AGLD",
+      "type": "perpetual",
+      "candidates": [
+        "AGLD"
+      ],
+      "matched_icon_key": "AGLD",
+      "icon_path": "/crypto-icons/binance/agld.png"
+    },
+    {
+      "symbol": "YGG",
+      "name": "YGG",
+      "label": "YGG",
+      "type": "perpetual",
+      "candidates": [
+        "YGG"
+      ],
+      "matched_icon_key": "YGG",
+      "icon_path": "/crypto-icons/binance/ygg.png"
+    },
+    {
+      "symbol": "DODOX",
+      "name": "DODOX",
+      "label": "DODOX",
+      "type": "perpetual",
+      "candidates": [
+        "DODOX",
+        "DODO"
+      ],
+      "matched_icon_key": "DODO",
+      "icon_path": "/crypto-icons/binance/dodo.png"
+    },
+    {
+      "symbol": "BNT",
+      "name": "BNT",
+      "label": "BNT",
+      "type": "perpetual",
+      "candidates": [
+        "BNT"
+      ],
+      "matched_icon_key": "BNT",
+      "icon_path": "/crypto-icons/color/bnt.svg"
+    },
+    {
+      "symbol": "SEI",
+      "name": "SEI",
+      "label": "SEI",
+      "type": "perpetual",
+      "candidates": [
+        "SEI"
+      ],
+      "matched_icon_key": "SEI",
+      "icon_path": "/crypto-icons/binance/sei.png"
+    },
+    {
+      "symbol": "CYBER",
+      "name": "CYBER",
+      "label": "CYBER",
+      "type": "perpetual",
+      "candidates": [
+        "CYBER"
+      ],
+      "matched_icon_key": "CYBER",
+      "icon_path": "/crypto-icons/binance/cyber.png"
+    },
+    {
+      "symbol": "ARK",
+      "name": "ARK",
+      "label": "ARK",
+      "type": "perpetual",
+      "candidates": [
+        "ARK"
+      ],
+      "matched_icon_key": "ARK",
+      "icon_path": "/crypto-icons/color/ark.svg"
+    },
+    {
+      "symbol": "BICO",
+      "name": "BICO",
+      "label": "BICO",
+      "type": "perpetual",
+      "candidates": [
+        "BICO"
+      ],
+      "matched_icon_key": "BICO",
+      "icon_path": "/crypto-icons/binance/bico.png"
+    },
+    {
+      "symbol": "BIGTIME",
+      "name": "BIGTIME",
+      "label": "BIGTIME",
+      "type": "perpetual",
+      "candidates": [
+        "BIGTIME"
+      ],
+      "matched_icon_key": "BIGTIME",
+      "icon_path": "/crypto-icons/binance/bigtime.png"
+    },
+    {
+      "symbol": "WAXP",
+      "name": "WAXP",
+      "label": "WAXP",
+      "type": "perpetual",
+      "candidates": [
+        "WAXP"
+      ],
+      "matched_icon_key": "WAXP",
+      "icon_path": "/crypto-icons/binance/waxp.png"
+    },
+    {
+      "symbol": "BSV",
+      "name": "BSV",
+      "label": "BSV",
+      "type": "perpetual",
+      "candidates": [
+        "BSV"
+      ],
+      "matched_icon_key": "BSV",
+      "icon_path": "/crypto-icons/color/bsv.svg"
+    },
+    {
+      "symbol": "RIF",
+      "name": "RIF",
+      "label": "RIF",
+      "type": "perpetual",
+      "candidates": [
+        "RIF"
+      ],
+      "matched_icon_key": "RIF",
+      "icon_path": "/crypto-icons/binance/rif.png"
+    },
+    {
+      "symbol": "POLYX",
+      "name": "POLYX",
+      "label": "POLYX",
+      "type": "perpetual",
+      "candidates": [
+        "POLYX",
+        "POLY"
+      ],
+      "matched_icon_key": "POLY",
+      "icon_path": "/crypto-icons/color/poly.svg"
+    },
+    {
+      "symbol": "GAS",
+      "name": "GAS",
+      "label": "GAS",
+      "type": "perpetual",
+      "candidates": [
+        "GAS"
+      ],
+      "matched_icon_key": "GAS",
+      "icon_path": "/crypto-icons/color/gas.svg"
+    },
+    {
+      "symbol": "POWR",
+      "name": "POWR",
+      "label": "POWR",
+      "type": "perpetual",
+      "candidates": [
+        "POWR"
+      ],
+      "matched_icon_key": "POWR",
+      "icon_path": "/crypto-icons/color/powr.svg"
+    },
+    {
+      "symbol": "TIA",
+      "name": "TIA",
+      "label": "TIA",
+      "type": "perpetual",
+      "candidates": [
+        "TIA"
+      ],
+      "matched_icon_key": "TIA",
+      "icon_path": "/crypto-icons/binance/tia.png"
+    },
+    {
+      "symbol": "CAKE",
+      "name": "CAKE",
+      "label": "CAKE",
+      "type": "perpetual",
+      "candidates": [
+        "CAKE"
+      ],
+      "matched_icon_key": "CAKE",
+      "icon_path": "/crypto-icons/binance/cake.png"
+    },
+    {
+      "symbol": "MEME",
+      "name": "MEME",
+      "label": "MEME",
+      "type": "perpetual",
+      "candidates": [
+        "MEME"
+      ],
+      "matched_icon_key": "MEME",
+      "icon_path": "/crypto-icons/binance/meme.png"
+    },
+    {
+      "symbol": "TWT",
+      "name": "TWT",
+      "label": "TWT",
+      "type": "perpetual",
+      "candidates": [
+        "TWT"
+      ],
+      "matched_icon_key": "TWT",
+      "icon_path": "/crypto-icons/binance/twt.png"
+    },
+    {
+      "symbol": "ORDI",
+      "name": "ORDI",
+      "label": "ORDI",
+      "type": "perpetual",
+      "candidates": [
+        "ORDI"
+      ],
+      "matched_icon_key": "ORDI",
+      "icon_path": "/crypto-icons/binance/ordi.png"
+    },
+    {
+      "symbol": "STEEM",
+      "name": "STEEM",
+      "label": "STEEM",
+      "type": "perpetual",
+      "candidates": [
+        "STEEM"
+      ],
+      "matched_icon_key": "STEEM",
+      "icon_path": "/crypto-icons/color/steem.svg"
+    },
+    {
+      "symbol": "ILV",
+      "name": "ILV",
+      "label": "ILV",
+      "type": "perpetual",
+      "candidates": [
+        "ILV"
+      ],
+      "matched_icon_key": "ILV",
+      "icon_path": "/crypto-icons/binance/ilv.png"
+    },
+    {
+      "symbol": "BEAMX",
+      "name": "BEAMX",
+      "label": "BEAMX",
+      "type": "perpetual",
+      "candidates": [
+        "BEAMX",
+        "BEAM"
+      ],
+      "matched_icon_key": "BEAM",
+      "icon_path": "/crypto-icons/color/beam.svg"
+    },
+    {
+      "symbol": "1000BONK",
+      "name": "1000BONK",
+      "label": "1000BONK",
+      "type": "perpetual",
+      "candidates": [
+        "1000BONK",
+        "BONK"
+      ],
+      "matched_icon_key": "BONK",
+      "icon_path": "/crypto-icons/binance/bonk.png"
+    },
+    {
+      "symbol": "PYTH",
+      "name": "PYTH",
+      "label": "PYTH",
+      "type": "perpetual",
+      "candidates": [
+        "PYTH"
+      ],
+      "matched_icon_key": "PYTH",
+      "icon_path": "/crypto-icons/binance/pyth.png"
+    },
+    {
+      "symbol": "SUPER",
+      "name": "SUPER",
+      "label": "SUPER",
+      "type": "perpetual",
+      "candidates": [
+        "SUPER"
+      ],
+      "matched_icon_key": "SUPER",
+      "icon_path": "/crypto-icons/binance/super.png"
+    },
+    {
+      "symbol": "USTC",
+      "name": "USTC",
+      "label": "USTC",
+      "type": "perpetual",
+      "candidates": [
+        "USTC"
+      ],
+      "matched_icon_key": "USTC",
+      "icon_path": "/crypto-icons/binance/ustc.png"
+    },
+    {
+      "symbol": "ONG",
+      "name": "ONG",
+      "label": "ONG",
+      "type": "perpetual",
+      "candidates": [
+        "ONG"
+      ],
+      "matched_icon_key": "ONG",
+      "icon_path": "/crypto-icons/color/ong.svg"
+    },
+    {
+      "symbol": "ETHW",
+      "name": "ETHW",
+      "label": "ETHW",
+      "type": "perpetual",
+      "candidates": [
+        "ETHW"
+      ],
+      "matched_icon_key": "ETHW",
+      "icon_path": "/crypto-icons/binance/ethw.png"
+    },
+    {
+      "symbol": "JTO",
+      "name": "JTO",
+      "label": "JTO",
+      "type": "perpetual",
+      "candidates": [
+        "JTO"
+      ],
+      "matched_icon_key": "JTO",
+      "icon_path": "/crypto-icons/binance/jto.png"
+    },
+    {
+      "symbol": "1000SATS",
+      "name": "1000SATS",
+      "label": "1000SATS",
+      "type": "perpetual",
+      "candidates": [
+        "1000SATS",
+        "SATS"
+      ],
+      "matched_icon_key": "1000SATS",
+      "icon_path": "/crypto-icons/binance/1000sats.png"
+    },
+    {
+      "symbol": "AUCTION",
+      "name": "AUCTION",
+      "label": "AUCTION",
+      "type": "perpetual",
+      "candidates": [
+        "AUCTION"
+      ],
+      "matched_icon_key": "AUCTION",
+      "icon_path": "/crypto-icons/binance/auction.png"
+    },
+    {
+      "symbol": "ACE",
+      "name": "ACE",
+      "label": "ACE",
+      "type": "perpetual",
+      "candidates": [
+        "ACE"
+      ],
+      "matched_icon_key": "ACE",
+      "icon_path": "/crypto-icons/binance/ace.png"
+    },
+    {
+      "symbol": "MOVR",
+      "name": "MOVR",
+      "label": "MOVR",
+      "type": "perpetual",
+      "candidates": [
+        "MOVR"
+      ],
+      "matched_icon_key": "MOVR",
+      "icon_path": "/crypto-icons/binance/movr.png"
+    },
+    {
+      "symbol": "NFP",
+      "name": "NFP",
+      "label": "NFP",
+      "type": "perpetual",
+      "candidates": [
+        "NFP"
+      ],
+      "matched_icon_key": "NFP",
+      "icon_path": "/crypto-icons/binance/nfp.png"
+    },
+    {
+      "symbol": "XAI",
+      "name": "XAI",
+      "label": "XAI",
+      "type": "perpetual",
+      "candidates": [
+        "XAI"
+      ],
+      "matched_icon_key": "XAI",
+      "icon_path": "/crypto-icons/binance/xai.jpg"
+    },
+    {
+      "symbol": "WIF",
+      "name": "WIF",
+      "label": "WIF",
+      "type": "perpetual",
+      "candidates": [
+        "WIF"
+      ],
+      "matched_icon_key": "WIF",
+      "icon_path": "/crypto-icons/binance/wif.png"
+    },
+    {
+      "symbol": "MANTA",
+      "name": "MANTA",
+      "label": "MANTA",
+      "type": "perpetual",
+      "candidates": [
+        "MANTA"
+      ],
+      "matched_icon_key": "MANTA",
+      "icon_path": "/crypto-icons/binance/manta.png"
+    },
+    {
+      "symbol": "ONDO",
+      "name": "ONDO",
+      "label": "ONDO",
+      "type": "perpetual",
+      "candidates": [
+        "ONDO"
+      ],
+      "matched_icon_key": "ONDO",
+      "icon_path": "/crypto-icons/binance/ondo.png"
+    },
+    {
+      "symbol": "LSK",
+      "name": "LSK",
+      "label": "LSK",
+      "type": "perpetual",
+      "candidates": [
+        "LSK"
+      ],
+      "matched_icon_key": "LSK",
+      "icon_path": "/crypto-icons/color/lsk.svg"
+    },
+    {
+      "symbol": "ALT",
+      "name": "ALT",
+      "label": "ALT",
+      "type": "perpetual",
+      "candidates": [
+        "ALT"
+      ],
+      "matched_icon_key": "ALT",
+      "icon_path": "/crypto-icons/binance/alt.png"
+    },
+    {
+      "symbol": "JUP",
+      "name": "JUP",
+      "label": "JUP",
+      "type": "perpetual",
+      "candidates": [
+        "JUP"
+      ],
+      "matched_icon_key": "JUP",
+      "icon_path": "/crypto-icons/binance/jup.png"
+    },
+    {
+      "symbol": "RONIN",
+      "name": "RONIN",
+      "label": "RONIN",
+      "type": "perpetual",
+      "candidates": [
+        "RONIN"
+      ],
+      "matched_icon_key": "RONIN",
+      "icon_path": "/crypto-icons/binance/ronin.png"
+    },
+    {
+      "symbol": "DYM",
+      "name": "DYM",
+      "label": "DYM",
+      "type": "perpetual",
+      "candidates": [
+        "DYM"
+      ],
+      "matched_icon_key": "DYM",
+      "icon_path": "/crypto-icons/binance/dym.png"
+    },
+    {
+      "symbol": "PIXEL",
+      "name": "PIXEL",
+      "label": "PIXEL",
+      "type": "perpetual",
+      "candidates": [
+        "PIXEL"
+      ],
+      "matched_icon_key": "PIXEL",
+      "icon_path": "/crypto-icons/binance/pixel.png"
+    },
+    {
+      "symbol": "STRK",
+      "name": "STRK",
+      "label": "STRK",
+      "type": "perpetual",
+      "candidates": [
+        "STRK"
+      ],
+      "matched_icon_key": "STRK",
+      "icon_path": "/crypto-icons/binance/strk.png"
+    },
+    {
+      "symbol": "GLM",
+      "name": "GLM",
+      "label": "GLM",
+      "type": "perpetual",
+      "candidates": [
+        "GLM"
+      ],
+      "matched_icon_key": "GLM",
+      "icon_path": "/crypto-icons/binance/glm.png"
+    },
+    {
+      "symbol": "PORTAL",
+      "name": "PORTAL",
+      "label": "PORTAL",
+      "type": "perpetual",
+      "candidates": [
+        "PORTAL"
+      ],
+      "matched_icon_key": "PORTAL",
+      "icon_path": "/crypto-icons/binance/portal.png"
+    },
+    {
+      "symbol": "TON",
+      "name": "TON",
+      "label": "TON",
+      "type": "perpetual",
+      "candidates": [
+        "TON"
+      ],
+      "matched_icon_key": "TON",
+      "icon_path": "/crypto-icons/binance/ton.png"
+    },
+    {
+      "symbol": "AXL",
+      "name": "AXL",
+      "label": "AXL",
+      "type": "perpetual",
+      "candidates": [
+        "AXL"
+      ],
+      "matched_icon_key": "AXL",
+      "icon_path": "/crypto-icons/binance/axl.png"
+    },
+    {
+      "symbol": "METIS",
+      "name": "METIS",
+      "label": "METIS",
+      "type": "perpetual",
+      "candidates": [
+        "METIS"
+      ],
+      "matched_icon_key": "METIS",
+      "icon_path": "/crypto-icons/binance/metis.png"
+    },
+    {
+      "symbol": "AEVO",
+      "name": "AEVO",
+      "label": "AEVO",
+      "type": "perpetual",
+      "candidates": [
+        "AEVO"
+      ],
+      "matched_icon_key": "AEVO",
+      "icon_path": "/crypto-icons/binance/aevo.png"
+    },
+    {
+      "symbol": "VANRY",
+      "name": "VANRY",
+      "label": "VANRY",
+      "type": "perpetual",
+      "candidates": [
+        "VANRY"
+      ],
+      "matched_icon_key": "VANRY",
+      "icon_path": "/crypto-icons/binance/vanry.png"
+    },
+    {
+      "symbol": "BOME",
+      "name": "BOME",
+      "label": "BOME",
+      "type": "perpetual",
+      "candidates": [
+        "BOME"
+      ],
+      "matched_icon_key": "BOME",
+      "icon_path": "/crypto-icons/binance/bome.png"
+    },
+    {
+      "symbol": "ETHFI",
+      "name": "ETHFI",
+      "label": "ETHFI",
+      "type": "perpetual",
+      "candidates": [
+        "ETHFI"
+      ],
+      "matched_icon_key": "ETHFI",
+      "icon_path": "/crypto-icons/binance/ethfi.png"
+    },
+    {
+      "symbol": "ENA",
+      "name": "ENA",
+      "label": "ENA",
+      "type": "perpetual",
+      "candidates": [
+        "ENA"
+      ],
+      "matched_icon_key": "ENA",
+      "icon_path": "/crypto-icons/binance/ena.png"
+    },
+    {
+      "symbol": "W",
+      "name": "W",
+      "label": "W",
+      "type": "perpetual",
+      "candidates": [
+        "W"
+      ],
+      "matched_icon_key": "W",
+      "icon_path": "/crypto-icons/binance/w.png"
+    },
+    {
+      "symbol": "TNSR",
+      "name": "TNSR",
+      "label": "TNSR",
+      "type": "perpetual",
+      "candidates": [
+        "TNSR"
+      ],
+      "matched_icon_key": "TNSR",
+      "icon_path": "/crypto-icons/binance/tnsr.png"
+    },
+    {
+      "symbol": "SAGA",
+      "name": "SAGA",
+      "label": "SAGA",
+      "type": "perpetual",
+      "candidates": [
+        "SAGA"
+      ],
+      "matched_icon_key": "SAGA",
+      "icon_path": "/crypto-icons/binance/saga.png"
+    },
+    {
+      "symbol": "TAO",
+      "name": "TAO",
+      "label": "TAO",
+      "type": "perpetual",
+      "candidates": [
+        "TAO"
+      ],
+      "matched_icon_key": "TAO",
+      "icon_path": "/crypto-icons/binance/tao.png"
+    },
+    {
+      "symbol": "REZ",
+      "name": "REZ",
+      "label": "REZ",
+      "type": "perpetual",
+      "candidates": [
+        "REZ"
+      ],
+      "matched_icon_key": "REZ",
+      "icon_path": "/crypto-icons/binance/rez.png"
+    },
+    {
+      "symbol": "BB",
+      "name": "BB",
+      "label": "BB",
+      "type": "perpetual",
+      "candidates": [
+        "BB"
+      ],
+      "matched_icon_key": "BB",
+      "icon_path": "/crypto-icons/binance/bb.png"
+    },
+    {
+      "symbol": "NOT",
+      "name": "NOT",
+      "label": "NOT",
+      "type": "perpetual",
+      "candidates": [
+        "NOT"
+      ],
+      "matched_icon_key": "NOT",
+      "icon_path": "/crypto-icons/binance/not.png"
+    },
+    {
+      "symbol": "TURBO",
+      "name": "TURBO",
+      "label": "TURBO",
+      "type": "perpetual",
+      "candidates": [
+        "TURBO"
+      ],
+      "matched_icon_key": "TURBO",
+      "icon_path": "/crypto-icons/binance/turbo.png"
+    },
+    {
+      "symbol": "IO",
+      "name": "IO",
+      "label": "IO",
+      "type": "perpetual",
+      "candidates": [
+        "IO"
+      ],
+      "matched_icon_key": "IO",
+      "icon_path": "/crypto-icons/binance/io.png"
+    },
+    {
+      "symbol": "ZK",
+      "name": "ZK",
+      "label": "ZK",
+      "type": "perpetual",
+      "candidates": [
+        "ZK"
+      ],
+      "matched_icon_key": "ZK",
+      "icon_path": "/crypto-icons/binance/zk.png"
+    },
+    {
+      "symbol": "MEW",
+      "name": "MEW",
+      "label": "MEW",
+      "type": "perpetual",
+      "candidates": [
+        "MEW"
+      ],
+      "matched_icon_key": "MEW",
+      "icon_path": "/crypto-icons/binance/mew.png"
+    },
+    {
+      "symbol": "LISTA",
+      "name": "LISTA",
+      "label": "LISTA",
+      "type": "perpetual",
+      "candidates": [
+        "LISTA"
+      ],
+      "matched_icon_key": "LISTA",
+      "icon_path": "/crypto-icons/binance/lista.png"
+    },
+    {
+      "symbol": "ZRO",
+      "name": "ZRO",
+      "label": "ZRO",
+      "type": "perpetual",
+      "candidates": [
+        "ZRO"
+      ],
+      "matched_icon_key": "ZRO",
+      "icon_path": "/crypto-icons/binance/zro.png"
+    },
+    {
+      "symbol": "RENDER",
+      "name": "RENDER",
+      "label": "RENDER",
+      "type": "perpetual",
+      "candidates": [
+        "RENDER"
+      ],
+      "matched_icon_key": "RENDER",
+      "icon_path": "/crypto-icons/binance/render.png"
+    },
+    {
+      "symbol": "BANANA",
+      "name": "BANANA",
+      "label": "BANANA",
+      "type": "perpetual",
+      "candidates": [
+        "BANANA"
+      ],
+      "matched_icon_key": "BANANA",
+      "icon_path": "/crypto-icons/binance/banana.png"
+    },
+    {
+      "symbol": "RARE",
+      "name": "RARE",
+      "label": "RARE",
+      "type": "perpetual",
+      "candidates": [
+        "RARE"
+      ],
+      "matched_icon_key": "RARE",
+      "icon_path": "/crypto-icons/binance/rare.png"
+    },
+    {
+      "symbol": "G",
+      "name": "G",
+      "label": "G",
+      "type": "perpetual",
+      "candidates": [
+        "G"
+      ],
+      "matched_icon_key": "G",
+      "icon_path": "/crypto-icons/binance/g.png"
+    },
+    {
+      "symbol": "SYN",
+      "name": "SYN",
+      "label": "SYN",
+      "type": "perpetual",
+      "candidates": [
+        "SYN"
+      ],
+      "matched_icon_key": "SYN",
+      "icon_path": "/crypto-icons/binance/syn.png"
+    },
+    {
+      "symbol": "POPCAT",
+      "name": "POPCAT",
+      "label": "POPCAT",
+      "type": "perpetual",
+      "candidates": [
+        "POPCAT"
+      ],
+      "matched_icon_key": "POPCAT",
+      "icon_path": "/crypto-icons/binance/popcat.png"
+    },
+    {
+      "symbol": "SUN",
+      "name": "SUN",
+      "label": "SUN",
+      "type": "perpetual",
+      "candidates": [
+        "SUN"
+      ],
+      "matched_icon_key": "SUN",
+      "icon_path": "/crypto-icons/binance/sun.png"
+    },
+    {
+      "symbol": "DOGS",
+      "name": "DOGS",
+      "label": "DOGS",
+      "type": "perpetual",
+      "candidates": [
+        "DOGS"
+      ],
+      "matched_icon_key": "DOGS",
+      "icon_path": "/crypto-icons/binance/dogs.png"
+    },
+    {
+      "symbol": "FLUX",
+      "name": "FLUX",
+      "label": "FLUX",
+      "type": "perpetual",
+      "candidates": [
+        "FLUX",
+        "FLU"
+      ],
+      "matched_icon_key": "FLUX",
+      "icon_path": "/crypto-icons/color/flux.svg"
+    },
+    {
+      "symbol": "RPL",
+      "name": "RPL",
+      "label": "RPL",
+      "type": "perpetual",
+      "candidates": [
+        "RPL"
+      ],
+      "matched_icon_key": "RPL",
+      "icon_path": "/crypto-icons/binance/rpl.png"
+    },
+    {
+      "symbol": "POL",
+      "name": "POL",
+      "label": "POL",
+      "type": "perpetual",
+      "candidates": [
+        "POL"
+      ],
+      "matched_icon_key": "POL",
+      "icon_path": "/crypto-icons/binance/pol.png"
+    },
+    {
+      "symbol": "1MBABYDOGE",
+      "name": "1MBABYDOGE",
+      "label": "1MBABYDOGE",
+      "type": "perpetual",
+      "candidates": [
+        "1MBABYDOGE",
+        "MBABYDOGE",
+        "BABYDOGE"
+      ],
+      "matched_icon_key": "1MBABYDOGE",
+      "icon_path": "/crypto-icons/binance/1mbabydoge.png"
+    },
+    {
+      "symbol": "NEIRO",
+      "name": "NEIRO",
+      "label": "NEIRO",
+      "type": "perpetual",
+      "candidates": [
+        "NEIRO"
+      ],
+      "matched_icon_key": "NEIRO",
+      "icon_path": "/crypto-icons/binance/neiro.png"
+    },
+    {
+      "symbol": "FIDA",
+      "name": "FIDA",
+      "label": "FIDA",
+      "type": "perpetual",
+      "candidates": [
+        "FIDA"
+      ],
+      "matched_icon_key": "FIDA",
+      "icon_path": "/crypto-icons/color/fida.svg"
+    },
+    {
+      "symbol": "CATI",
+      "name": "CATI",
+      "label": "CATI",
+      "type": "perpetual",
+      "candidates": [
+        "CATI"
+      ],
+      "matched_icon_key": "CATI",
+      "icon_path": "/crypto-icons/binance/cati.png"
+    },
+    {
+      "symbol": "HMSTR",
+      "name": "HMSTR",
+      "label": "HMSTR",
+      "type": "perpetual",
+      "candidates": [
+        "HMSTR"
+      ],
+      "matched_icon_key": "HMSTR",
+      "icon_path": "/crypto-icons/binance/hmstr.png"
+    },
+    {
+      "symbol": "EIGEN",
+      "name": "EIGEN",
+      "label": "EIGEN",
+      "type": "perpetual",
+      "candidates": [
+        "EIGEN"
+      ],
+      "matched_icon_key": "EIGEN",
+      "icon_path": "/crypto-icons/binance/eigen.png"
+    },
+    {
+      "symbol": "DIA",
+      "name": "DIA",
+      "label": "DIA",
+      "type": "perpetual",
+      "candidates": [
+        "DIA"
+      ],
+      "matched_icon_key": "DIA",
+      "icon_path": "/crypto-icons/binance/dia.png"
+    },
+    {
+      "symbol": "1000CAT",
+      "name": "1000CAT",
+      "label": "1000CAT",
+      "type": "perpetual",
+      "candidates": [
+        "1000CAT",
+        "CAT"
+      ],
+      "matched_icon_key": "1000CAT",
+      "icon_path": "/crypto-icons/binance/1000cat.png"
+    },
+    {
+      "symbol": "SCR",
+      "name": "SCR",
+      "label": "SCR",
+      "type": "perpetual",
+      "candidates": [
+        "SCR"
+      ],
+      "matched_icon_key": "SCR",
+      "icon_path": "/crypto-icons/binance/scr.png"
+    },
+    {
+      "symbol": "GOAT",
+      "name": "GOAT",
+      "label": "GOAT",
+      "type": "perpetual",
+      "candidates": [
+        "GOAT"
+      ],
+      "matched_icon_key": "GOAT",
+      "icon_path": "/crypto-icons/binance/goat.png"
+    },
+    {
+      "symbol": "MOODENG",
+      "name": "MOODENG",
+      "label": "MOODENG",
+      "type": "perpetual",
+      "candidates": [
+        "MOODENG"
+      ],
+      "matched_icon_key": "MOODENG",
+      "icon_path": "/crypto-icons/binance/moodeng.png"
+    },
+    {
+      "symbol": "SAFE",
+      "name": "SAFE",
+      "label": "SAFE",
+      "type": "perpetual",
+      "candidates": [
+        "SAFE"
+      ],
+      "matched_icon_key": "SAFE",
+      "icon_path": "/crypto-icons/color/safe.svg"
+    },
+    {
+      "symbol": "SANTOS",
+      "name": "SANTOS",
+      "label": "SANTOS",
+      "type": "perpetual",
+      "candidates": [
+        "SANTOS"
+      ],
+      "matched_icon_key": "SANTOS",
+      "icon_path": "/crypto-icons/binance/santos.png"
+    },
+    {
+      "symbol": "COW",
+      "name": "COW",
+      "label": "COW",
+      "type": "perpetual",
+      "candidates": [
+        "COW"
+      ],
+      "matched_icon_key": "COW",
+      "icon_path": "/crypto-icons/binance/cow.png"
+    },
+    {
+      "symbol": "CETUS",
+      "name": "CETUS",
+      "label": "CETUS",
+      "type": "perpetual",
+      "candidates": [
+        "CETUS"
+      ],
+      "matched_icon_key": "CETUS",
+      "icon_path": "/crypto-icons/binance/cetus.png"
+    },
+    {
+      "symbol": "GRASS",
+      "name": "GRASS",
+      "label": "GRASS",
+      "type": "perpetual",
+      "candidates": [
+        "GRASS"
+      ],
+      "matched_icon_key": "GRASS",
+      "icon_path": "/crypto-icons/binance/grass.png"
+    },
+    {
+      "symbol": "ACT",
+      "name": "ACT",
+      "label": "ACT",
+      "type": "perpetual",
+      "candidates": [
+        "ACT"
+      ],
+      "matched_icon_key": "ACT",
+      "icon_path": "/crypto-icons/color/act.svg"
+    },
+    {
+      "symbol": "PNUT",
+      "name": "PNUT",
+      "label": "PNUT",
+      "type": "perpetual",
+      "candidates": [
+        "PNUT"
+      ],
+      "matched_icon_key": "PNUT",
+      "icon_path": "/crypto-icons/binance/pnut.png"
+    },
+    {
+      "symbol": "SCRT",
+      "name": "SCRT",
+      "label": "SCRT",
+      "type": "perpetual",
+      "candidates": [
+        "SCRT"
+      ],
+      "matched_icon_key": "SCRT",
+      "icon_path": "/crypto-icons/binance/scrt.jpg"
+    },
+    {
+      "symbol": "1000CHEEMS",
+      "name": "1000CHEEMS",
+      "label": "1000CHEEMS",
+      "type": "perpetual",
+      "candidates": [
+        "1000CHEEMS",
+        "CHEEMS"
+      ],
+      "matched_icon_key": "1000CHEEMS",
+      "icon_path": "/crypto-icons/binance/1000cheems.png"
+    },
+    {
+      "symbol": "THE",
+      "name": "THE",
+      "label": "THE",
+      "type": "perpetual",
+      "candidates": [
+        "THE"
+      ],
+      "matched_icon_key": "THE",
+      "icon_path": "/crypto-icons/binance/the.png"
+    },
+    {
+      "symbol": "MORPHO",
+      "name": "MORPHO",
+      "label": "MORPHO",
+      "type": "perpetual",
+      "candidates": [
+        "MORPHO"
+      ],
+      "matched_icon_key": "MORPHO",
+      "icon_path": "/crypto-icons/binance/morpho.png"
+    },
+    {
+      "symbol": "KAIA",
+      "name": "KAIA",
+      "label": "KAIA",
+      "type": "perpetual",
+      "candidates": [
+        "KAIA"
+      ],
+      "matched_icon_key": "KAIA",
+      "icon_path": "/crypto-icons/binance/kaia.png"
+    },
+    {
+      "symbol": "ACX",
+      "name": "ACX",
+      "label": "ACX",
+      "type": "perpetual",
+      "candidates": [
+        "ACX",
+        "AC"
+      ],
+      "matched_icon_key": "ACX",
+      "icon_path": "/crypto-icons/binance/acx.png"
+    },
+    {
+      "symbol": "ORCA",
+      "name": "ORCA",
+      "label": "ORCA",
+      "type": "perpetual",
+      "candidates": [
+        "ORCA"
+      ],
+      "matched_icon_key": "ORCA",
+      "icon_path": "/crypto-icons/binance/orca.png"
+    },
+    {
+      "symbol": "MOVE",
+      "name": "MOVE",
+      "label": "MOVE",
+      "type": "perpetual",
+      "candidates": [
+        "MOVE"
+      ],
+      "matched_icon_key": "MOVE",
+      "icon_path": "/crypto-icons/binance/move.png"
+    },
+    {
+      "symbol": "VIRTUAL",
+      "name": "VIRTUAL",
+      "label": "VIRTUAL",
+      "type": "perpetual",
+      "candidates": [
+        "VIRTUAL"
+      ],
+      "matched_icon_key": "VIRTUAL",
+      "icon_path": "/crypto-icons/binance/virtual.png"
+    },
+    {
+      "symbol": "SPX",
+      "name": "SPX",
+      "label": "SPX",
+      "type": "perpetual",
+      "candidates": [
+        "SPX",
+        "SP"
+      ],
+      "matched_icon_key": "SPX",
+      "icon_path": "/crypto-icons/binance/spx.png"
+    },
+    {
+      "symbol": "ME",
+      "name": "ME",
+      "label": "ME",
+      "type": "perpetual",
+      "candidates": [
+        "ME"
+      ],
+      "matched_icon_key": "ME",
+      "icon_path": "/crypto-icons/binance/me.jpg"
+    },
+    {
+      "symbol": "AVA",
+      "name": "AVA",
+      "label": "AVA",
+      "type": "perpetual",
+      "candidates": [
+        "AVA"
+      ],
+      "matched_icon_key": "AVA",
+      "icon_path": "/crypto-icons/binance/ava.png"
+    },
+    {
+      "symbol": "VELODROME",
+      "name": "VELODROME",
+      "label": "VELODROME",
+      "type": "perpetual",
+      "candidates": [
+        "VELODROME"
+      ],
+      "matched_icon_key": "VELODROME",
+      "icon_path": "/crypto-icons/binance/velodrome.png"
+    },
+    {
+      "symbol": "VANA",
+      "name": "VANA",
+      "label": "VANA",
+      "type": "perpetual",
+      "candidates": [
+        "VANA"
+      ],
+      "matched_icon_key": "VANA",
+      "icon_path": "/crypto-icons/binance/vana.png"
+    },
+    {
+      "symbol": "PENGU",
+      "name": "PENGU",
+      "label": "PENGU",
+      "type": "perpetual",
+      "candidates": [
+        "PENGU"
+      ],
+      "matched_icon_key": "PENGU",
+      "icon_path": "/crypto-icons/binance/pengu.png"
+    },
+    {
+      "symbol": "LUMIA",
+      "name": "LUMIA",
+      "label": "LUMIA",
+      "type": "perpetual",
+      "candidates": [
+        "LUMIA"
+      ],
+      "matched_icon_key": "LUMIA",
+      "icon_path": "/crypto-icons/binance/lumia.png"
+    },
+    {
+      "symbol": "USUAL",
+      "name": "USUAL",
+      "label": "USUAL",
+      "type": "perpetual",
+      "candidates": [
+        "USUAL"
+      ],
+      "matched_icon_key": "USUAL",
+      "icon_path": "/crypto-icons/binance/usual.png"
+    },
+    {
+      "symbol": "AIXBT",
+      "name": "AIXBT",
+      "label": "AIXBT",
+      "type": "perpetual",
+      "candidates": [
+        "AIXBT"
+      ],
+      "matched_icon_key": "AIXBT",
+      "icon_path": "/crypto-icons/binance/aixbt.png"
+    },
+    {
+      "symbol": "FARTCOIN",
+      "name": "FARTCOIN",
+      "label": "FARTCOIN",
+      "type": "perpetual",
+      "candidates": [
+        "FARTCOIN"
+      ],
+      "matched_icon_key": "FARTCOIN",
+      "icon_path": "/crypto-icons/binance/fartcoin.png"
+    },
+    {
+      "symbol": "KMNO",
+      "name": "KMNO",
+      "label": "KMNO",
+      "type": "perpetual",
+      "candidates": [
+        "KMNO"
+      ],
+      "matched_icon_key": "KMNO",
+      "icon_path": "/crypto-icons/binance/kmno.png"
+    },
+    {
+      "symbol": "CGPT",
+      "name": "CGPT",
+      "label": "CGPT",
+      "type": "perpetual",
+      "candidates": [
+        "CGPT"
+      ],
+      "matched_icon_key": "CGPT",
+      "icon_path": "/crypto-icons/binance/cgpt.png"
+    },
+    {
+      "symbol": "HIVE",
+      "name": "HIVE",
+      "label": "HIVE",
+      "type": "perpetual",
+      "candidates": [
+        "HIVE"
+      ],
+      "matched_icon_key": "HIVE",
+      "icon_path": "/crypto-icons/binance/hive.png"
+    },
+    {
+      "symbol": "DEXE",
+      "name": "DEXE",
+      "label": "DEXE",
+      "type": "perpetual",
+      "candidates": [
+        "DEXE"
+      ],
+      "matched_icon_key": "DEXE",
+      "icon_path": "/crypto-icons/binance/dexe.png"
+    },
+    {
+      "symbol": "PHA",
+      "name": "PHA",
+      "label": "PHA",
+      "type": "perpetual",
+      "candidates": [
+        "PHA"
+      ],
+      "matched_icon_key": "PHA",
+      "icon_path": "/crypto-icons/binance/pha.png"
+    },
+    {
+      "symbol": "BIO",
+      "name": "BIO",
+      "label": "BIO",
+      "type": "perpetual",
+      "candidates": [
+        "BIO"
+      ],
+      "matched_icon_key": "BIO",
+      "icon_path": "/crypto-icons/binance/bio.png"
+    },
+    {
+      "symbol": "COOKIE",
+      "name": "COOKIE",
+      "label": "COOKIE",
+      "type": "perpetual",
+      "candidates": [
+        "COOKIE"
+      ],
+      "matched_icon_key": "COOKIE",
+      "icon_path": "/crypto-icons/binance/cookie.png"
+    },
+    {
+      "symbol": "ALCH",
+      "name": "ALCH",
+      "label": "ALCH",
+      "type": "perpetual",
+      "candidates": [
+        "ALCH"
+      ],
+      "matched_icon_key": "ALCH",
+      "icon_path": "/crypto-icons/binance/alch.png"
+    },
+    {
+      "symbol": "PROM",
+      "name": "PROM",
+      "label": "PROM",
+      "type": "perpetual",
+      "candidates": [
+        "PROM"
+      ],
+      "matched_icon_key": "PROM",
+      "icon_path": "/crypto-icons/binance/prom.png"
+    },
+    {
+      "symbol": "S",
+      "name": "S",
+      "label": "S",
+      "type": "perpetual",
+      "candidates": [
+        "S"
+      ],
+      "matched_icon_key": "S",
+      "icon_path": "/crypto-icons/binance/s.png"
+    },
+    {
+      "symbol": "SOLV",
+      "name": "SOLV",
+      "label": "SOLV",
+      "type": "perpetual",
+      "candidates": [
+        "SOLV"
+      ],
+      "matched_icon_key": "SOLV",
+      "icon_path": "/crypto-icons/binance/solv.png"
+    },
+    {
+      "symbol": "TRUMP",
+      "name": "TRUMP",
+      "label": "TRUMP",
+      "type": "perpetual",
+      "candidates": [
+        "TRUMP"
+      ],
+      "matched_icon_key": "TRUMP",
+      "icon_path": "/crypto-icons/binance/trump.png"
+    },
+    {
+      "symbol": "VTHO",
+      "name": "VTHO",
+      "label": "VTHO",
+      "type": "perpetual",
+      "candidates": [
+        "VTHO"
+      ],
+      "matched_icon_key": "VTHO",
+      "icon_path": "/crypto-icons/color/vtho.svg"
+    },
+    {
+      "symbol": "ANIME",
+      "name": "ANIME",
+      "label": "ANIME",
+      "type": "perpetual",
+      "candidates": [
+        "ANIME"
+      ],
+      "matched_icon_key": "ANIME",
+      "icon_path": "/crypto-icons/binance/anime.png"
+    },
+    {
+      "symbol": "BERA",
+      "name": "BERA",
+      "label": "BERA",
+      "type": "perpetual",
+      "candidates": [
+        "BERA"
+      ],
+      "matched_icon_key": "BERA",
+      "icon_path": "/crypto-icons/binance/bera.png"
+    },
+    {
+      "symbol": "TST",
+      "name": "TST",
+      "label": "TST",
+      "type": "perpetual",
+      "candidates": [
+        "TST"
+      ],
+      "matched_icon_key": "TST",
+      "icon_path": "/crypto-icons/binance/tst.png"
+    },
+    {
+      "symbol": "LAYER",
+      "name": "LAYER",
+      "label": "LAYER",
+      "type": "perpetual",
+      "candidates": [
+        "LAYER"
+      ],
+      "matched_icon_key": "LAYER",
+      "icon_path": "/crypto-icons/binance/layer.png"
+    },
+    {
+      "symbol": "HEI",
+      "name": "HEI",
+      "label": "HEI",
+      "type": "perpetual",
+      "candidates": [
+        "HEI"
+      ],
+      "matched_icon_key": "HEI",
+      "icon_path": "/crypto-icons/binance/hei.png"
+    },
+    {
+      "symbol": "GPS",
+      "name": "GPS",
+      "label": "GPS",
+      "type": "perpetual",
+      "candidates": [
+        "GPS"
+      ],
+      "matched_icon_key": "GPS",
+      "icon_path": "/crypto-icons/binance/gps.png"
+    },
+    {
+      "symbol": "SHELL",
+      "name": "SHELL",
+      "label": "SHELL",
+      "type": "perpetual",
+      "candidates": [
+        "SHELL"
+      ],
+      "matched_icon_key": "SHELL",
+      "icon_path": "/crypto-icons/binance/shell.jpg"
+    },
+    {
+      "symbol": "KAITO",
+      "name": "KAITO",
+      "label": "KAITO",
+      "type": "perpetual",
+      "candidates": [
+        "KAITO"
+      ],
+      "matched_icon_key": "KAITO",
+      "icon_path": "/crypto-icons/binance/kaito.png"
+    },
+    {
+      "symbol": "RED",
+      "name": "RED",
+      "label": "RED",
+      "type": "perpetual",
+      "candidates": [
+        "RED"
+      ],
+      "matched_icon_key": "RED",
+      "icon_path": "/crypto-icons/binance/red.png"
+    },
+    {
+      "symbol": "VIC",
+      "name": "VIC",
+      "label": "VIC",
+      "type": "perpetual",
+      "candidates": [
+        "VIC"
+      ],
+      "matched_icon_key": "VIC",
+      "icon_path": "/crypto-icons/binance/vic.png"
+    },
+    {
+      "symbol": "EPIC",
+      "name": "EPIC",
+      "label": "EPIC",
+      "type": "perpetual",
+      "candidates": [
+        "EPIC"
+      ],
+      "matched_icon_key": "EPIC",
+      "icon_path": "/crypto-icons/binance/epic.png"
+    },
+    {
+      "symbol": "BMT",
+      "name": "BMT",
+      "label": "BMT",
+      "type": "perpetual",
+      "candidates": [
+        "BMT"
+      ],
+      "matched_icon_key": "BMT",
+      "icon_path": "/crypto-icons/binance/bmt.png"
+    },
+    {
+      "symbol": "MUBARAK",
+      "name": "MUBARAK",
+      "label": "MUBARAK",
+      "type": "perpetual",
+      "candidates": [
+        "MUBARAK"
+      ],
+      "matched_icon_key": "MUBARAK",
+      "icon_path": "/crypto-icons/binance/mubarak.png"
+    },
+    {
+      "symbol": "FORM",
+      "name": "FORM",
+      "label": "FORM",
+      "type": "perpetual",
+      "candidates": [
+        "FORM"
+      ],
+      "matched_icon_key": "FORM",
+      "icon_path": "/crypto-icons/binance/form.png"
+    },
+    {
+      "symbol": "TUT",
+      "name": "TUT",
+      "label": "TUT",
+      "type": "perpetual",
+      "candidates": [
+        "TUT"
+      ],
+      "matched_icon_key": "TUT",
+      "icon_path": "/crypto-icons/binance/tut.png"
+    },
+    {
+      "symbol": "BROCCOLI714",
+      "name": "BROCCOLI714",
+      "label": "BROCCOLI714",
+      "type": "perpetual",
+      "candidates": [
+        "BROCCOLI714"
+      ],
+      "matched_icon_key": "BROCCOLI714",
+      "icon_path": "/crypto-icons/binance/broccoli714.png"
+    },
+    {
+      "symbol": "BANANAS31",
+      "name": "BANANAS31",
+      "label": "BANANAS31",
+      "type": "perpetual",
+      "candidates": [
+        "BANANAS31"
+      ],
+      "matched_icon_key": "BANANAS31",
+      "icon_path": "/crypto-icons/binance/bananas31.png"
+    },
+    {
+      "symbol": "BR",
+      "name": "BR",
+      "label": "BR",
+      "type": "perpetual",
+      "candidates": [
+        "BR"
+      ],
+      "matched_icon_key": "BR",
+      "icon_path": "/crypto-icons/binance/br.png"
+    },
+    {
+      "symbol": "PLUME",
+      "name": "PLUME",
+      "label": "PLUME",
+      "type": "perpetual",
+      "candidates": [
+        "PLUME"
+      ],
+      "matched_icon_key": "PLUME",
+      "icon_path": "/crypto-icons/binance/plume.png"
+    },
+    {
+      "symbol": "NIL",
+      "name": "NIL",
+      "label": "NIL",
+      "type": "perpetual",
+      "candidates": [
+        "NIL"
+      ],
+      "matched_icon_key": "NIL",
+      "icon_path": "/crypto-icons/binance/nil.png"
+    },
+    {
+      "symbol": "PARTI",
+      "name": "PARTI",
+      "label": "PARTI",
+      "type": "perpetual",
+      "candidates": [
+        "PARTI"
+      ],
+      "matched_icon_key": "PARTI",
+      "icon_path": "/crypto-icons/binance/parti.png"
+    },
+    {
+      "symbol": "JELLYJELLY",
+      "name": "JELLYJELLY",
+      "label": "JELLYJELLY",
+      "type": "perpetual",
+      "candidates": [
+        "JELLYJELLY"
+      ],
+      "matched_icon_key": "JELLYJELLY",
+      "icon_path": "/crypto-icons/binance/jellyjelly.png"
+    },
+    {
+      "symbol": "PAXG",
+      "name": "PAXG",
+      "label": "PAXG",
+      "type": "perpetual",
+      "candidates": [
+        "PAXG"
+      ],
+      "matched_icon_key": "PAXG",
+      "icon_path": "/crypto-icons/color/paxg.svg"
+    },
+    {
+      "symbol": "WAL",
+      "name": "WAL",
+      "label": "WAL",
+      "type": "perpetual",
+      "candidates": [
+        "WAL"
+      ],
+      "matched_icon_key": "WAL",
+      "icon_path": "/crypto-icons/binance/wal.png"
+    },
+    {
+      "symbol": "GUN",
+      "name": "GUN",
+      "label": "GUN",
+      "type": "perpetual",
+      "candidates": [
+        "GUN"
+      ],
+      "matched_icon_key": "GUN",
+      "icon_path": "/crypto-icons/binance/gun.png"
+    },
+    {
+      "symbol": "ATH",
+      "name": "ATH",
+      "label": "ATH",
+      "type": "perpetual",
+      "candidates": [
+        "ATH"
+      ],
+      "matched_icon_key": "ATH",
+      "icon_path": "/crypto-icons/binance/ath.jpg"
+    },
+    {
+      "symbol": "BABY",
+      "name": "BABY",
+      "label": "BABY",
+      "type": "perpetual",
+      "candidates": [
+        "BABY"
+      ],
+      "matched_icon_key": "BABY",
+      "icon_path": "/crypto-icons/binance/baby.png"
+    },
+    {
+      "symbol": "STO",
+      "name": "STO",
+      "label": "STO",
+      "type": "perpetual",
+      "candidates": [
+        "STO"
+      ],
+      "matched_icon_key": "STO",
+      "icon_path": "/crypto-icons/binance/sto.png"
+    },
+    {
+      "symbol": "KERNEL",
+      "name": "KERNEL",
+      "label": "KERNEL",
+      "type": "perpetual",
+      "candidates": [
+        "KERNEL"
+      ],
+      "matched_icon_key": "KERNEL",
+      "icon_path": "/crypto-icons/binance/kernel.png"
+    },
+    {
+      "symbol": "WCT",
+      "name": "WCT",
+      "label": "WCT",
+      "type": "perpetual",
+      "candidates": [
+        "WCT"
+      ],
+      "matched_icon_key": "WCT",
+      "icon_path": "/crypto-icons/binance/wct.png"
+    },
+    {
+      "symbol": "INIT",
+      "name": "INIT",
+      "label": "INIT",
+      "type": "perpetual",
+      "candidates": [
+        "INIT"
+      ],
+      "matched_icon_key": "INIT",
+      "icon_path": "/crypto-icons/binance/init.png"
+    },
+    {
+      "symbol": "AERGO",
+      "name": "AERGO",
+      "label": "AERGO",
+      "type": "perpetual",
+      "candidates": [
+        "AERGO"
+      ],
+      "matched_icon_key": "AERGO",
+      "icon_path": "/crypto-icons/binance/aergo.png"
+    },
+    {
+      "symbol": "BANK",
+      "name": "BANK",
+      "label": "BANK",
+      "type": "perpetual",
+      "candidates": [
+        "BANK"
+      ],
+      "matched_icon_key": "BANK",
+      "icon_path": "/crypto-icons/binance/bank.png"
+    },
+    {
+      "symbol": "HYPER",
+      "name": "HYPER",
+      "label": "HYPER",
+      "type": "perpetual",
+      "candidates": [
+        "HYPER"
+      ],
+      "matched_icon_key": "HYPER",
+      "icon_path": "/crypto-icons/binance/hyper.png"
+    },
+    {
+      "symbol": "JST",
+      "name": "JST",
+      "label": "JST",
+      "type": "perpetual",
+      "candidates": [
+        "JST"
+      ],
+      "matched_icon_key": "JST",
+      "icon_path": "/crypto-icons/binance/jst.png"
+    },
+    {
+      "symbol": "SIGN",
+      "name": "SIGN",
+      "label": "SIGN",
+      "type": "perpetual",
+      "candidates": [
+        "SIGN"
+      ],
+      "matched_icon_key": "SIGN",
+      "icon_path": "/crypto-icons/binance/sign.png"
+    },
+    {
+      "symbol": "PUNDIX",
+      "name": "PUNDIX",
+      "label": "PUNDIX",
+      "type": "perpetual",
+      "candidates": [
+        "PUNDIX",
+        "PUNDI"
+      ],
+      "matched_icon_key": "PUNDIX",
+      "icon_path": "/crypto-icons/binance/pundix.png"
+    },
+    {
+      "symbol": "CTK",
+      "name": "CTK",
+      "label": "CTK",
+      "type": "perpetual",
+      "candidates": [
+        "CTK"
+      ],
+      "matched_icon_key": "CTK",
+      "icon_path": "/crypto-icons/binance/ctk.png"
+    },
+    {
+      "symbol": "DOLO",
+      "name": "DOLO",
+      "label": "DOLO",
+      "type": "perpetual",
+      "candidates": [
+        "DOLO"
+      ],
+      "matched_icon_key": "DOLO",
+      "icon_path": "/crypto-icons/binance/dolo.png"
+    },
+    {
+      "symbol": "HAEDAL",
+      "name": "HAEDAL",
+      "label": "HAEDAL",
+      "type": "perpetual",
+      "candidates": [
+        "HAEDAL"
+      ],
+      "matched_icon_key": "HAEDAL",
+      "icon_path": "/crypto-icons/binance/haedal.png"
+    },
+    {
+      "symbol": "SXT",
+      "name": "SXT",
+      "label": "SXT",
+      "type": "perpetual",
+      "candidates": [
+        "SXT"
+      ],
+      "matched_icon_key": "SXT",
+      "icon_path": "/crypto-icons/binance/sxt.png"
+    },
+    {
+      "symbol": "ASR",
+      "name": "ASR",
+      "label": "ASR",
+      "type": "perpetual",
+      "candidates": [
+        "ASR"
+      ],
+      "matched_icon_key": "ASR",
+      "icon_path": "/crypto-icons/binance/asr.png"
+    },
+    {
+      "symbol": "ALPINE",
+      "name": "ALPINE",
+      "label": "ALPINE",
+      "type": "perpetual",
+      "candidates": [
+        "ALPINE"
+      ],
+      "matched_icon_key": "ALPINE",
+      "icon_path": "/crypto-icons/binance/alpine.png"
+    },
+    {
+      "symbol": "SYRUP",
+      "name": "SYRUP",
+      "label": "SYRUP",
+      "type": "perpetual",
+      "candidates": [
+        "SYRUP"
+      ],
+      "matched_icon_key": "SYRUP",
+      "icon_path": "/crypto-icons/binance/syrup.png"
+    },
+    {
+      "symbol": "DOOD",
+      "name": "DOOD",
+      "label": "DOOD",
+      "type": "perpetual",
+      "candidates": [
+        "DOOD"
+      ],
+      "matched_icon_key": "DOOD",
+      "icon_path": "/crypto-icons/binance/dood.png"
+    },
+    {
+      "symbol": "OG",
+      "name": "OG",
+      "label": "OG",
+      "type": "perpetual",
+      "candidates": [
+        "OG"
+      ],
+      "matched_icon_key": "OG",
+      "icon_path": "/crypto-icons/binance/og.png"
+    },
+    {
+      "symbol": "SKYAI",
+      "name": "SKYAI",
+      "label": "SKYAI",
+      "type": "perpetual",
+      "candidates": [
+        "SKYAI"
+      ],
+      "matched_icon_key": "SKYAI",
+      "icon_path": "/crypto-icons/binance/skyai.png"
+    },
+    {
+      "symbol": "NXPC",
+      "name": "NXPC",
+      "label": "NXPC",
+      "type": "perpetual",
+      "candidates": [
+        "NXPC"
+      ],
+      "matched_icon_key": "NXPC",
+      "icon_path": "/crypto-icons/binance/nxpc.png"
+    },
+    {
+      "symbol": "CVC",
+      "name": "CVC",
+      "label": "CVC",
+      "type": "perpetual",
+      "candidates": [
+        "CVC"
+      ],
+      "matched_icon_key": "CVC",
+      "icon_path": "/crypto-icons/color/cvc.svg"
+    },
+    {
+      "symbol": "AWE",
+      "name": "AWE",
+      "label": "AWE",
+      "type": "perpetual",
+      "candidates": [
+        "AWE"
+      ],
+      "matched_icon_key": "AWE",
+      "icon_path": "/crypto-icons/binance/awe.png"
+    },
+    {
+      "symbol": "SOON",
+      "name": "SOON",
+      "label": "SOON",
+      "type": "perpetual",
+      "candidates": [
+        "SOON"
+      ],
+      "matched_icon_key": "SOON",
+      "icon_path": "/crypto-icons/binance/soon.png"
+    },
+    {
+      "symbol": "HUMA",
+      "name": "HUMA",
+      "label": "HUMA",
+      "type": "perpetual",
+      "candidates": [
+        "HUMA"
+      ],
+      "matched_icon_key": "HUMA",
+      "icon_path": "/crypto-icons/binance/huma.png"
+    },
+    {
+      "symbol": "A",
+      "name": "A",
+      "label": "A",
+      "type": "perpetual",
+      "candidates": [
+        "A"
+      ],
+      "matched_icon_key": "A",
+      "icon_path": "/crypto-icons/binance/a.png"
+    },
+    {
+      "symbol": "SOPH",
+      "name": "SOPH",
+      "label": "SOPH",
+      "type": "perpetual",
+      "candidates": [
+        "SOPH"
+      ],
+      "matched_icon_key": "SOPH",
+      "icon_path": "/crypto-icons/binance/soph.png"
+    },
+    {
+      "symbol": "MERL",
+      "name": "MERL",
+      "label": "MERL",
+      "type": "perpetual",
+      "candidates": [
+        "MERL"
+      ],
+      "matched_icon_key": "MERL",
+      "icon_path": "/crypto-icons/binance/merl.png"
+    },
+    {
+      "symbol": "1000000BOB",
+      "name": "1000000BOB",
+      "label": "1000000BOB",
+      "type": "perpetual",
+      "candidates": [
+        "1000000BOB",
+        "000BOB",
+        "BOB"
+      ],
+      "matched_icon_key": "BOB",
+      "icon_path": "/crypto-icons/binance/bob.png"
+    },
+    {
+      "symbol": "LA",
+      "name": "LA",
+      "label": "LA",
+      "type": "perpetual",
+      "candidates": [
+        "LA"
+      ],
+      "matched_icon_key": "LA",
+      "icon_path": "/crypto-icons/binance/la.png"
+    },
+    {
+      "symbol": "HOME",
+      "name": "HOME",
+      "label": "HOME",
+      "type": "perpetual",
+      "candidates": [
+        "HOME"
+      ],
+      "matched_icon_key": "HOME",
+      "icon_path": "/crypto-icons/binance/home.png"
+    },
+    {
+      "symbol": "RESOLV",
+      "name": "RESOLV",
+      "label": "RESOLV",
+      "type": "perpetual",
+      "candidates": [
+        "RESOLV"
+      ],
+      "matched_icon_key": "RESOLV",
+      "icon_path": "/crypto-icons/binance/resolv.png"
+    },
+    {
+      "symbol": "SPK",
+      "name": "SPK",
+      "label": "SPK",
+      "type": "perpetual",
+      "candidates": [
+        "SPK"
+      ],
+      "matched_icon_key": "SPK",
+      "icon_path": "/crypto-icons/binance/spk.png"
+    },
+    {
+      "symbol": "MYX",
+      "name": "MYX",
+      "label": "MYX",
+      "type": "perpetual",
+      "candidates": [
+        "MYX",
+        "MY"
+      ],
+      "matched_icon_key": "MYX",
+      "icon_path": "/crypto-icons/binance/myx.png"
+    },
+    {
+      "symbol": "F",
+      "name": "F",
+      "label": "F",
+      "type": "perpetual",
+      "candidates": [
+        "F"
+      ],
+      "matched_icon_key": "F",
+      "icon_path": "/crypto-icons/binance/f.png"
+    },
+    {
+      "symbol": "NEWT",
+      "name": "NEWT",
+      "label": "NEWT",
+      "type": "perpetual",
+      "candidates": [
+        "NEWT"
+      ],
+      "matched_icon_key": "NEWT",
+      "icon_path": "/crypto-icons/binance/newt.png"
+    },
+    {
+      "symbol": "SAHARA",
+      "name": "SAHARA",
+      "label": "SAHARA",
+      "type": "perpetual",
+      "candidates": [
+        "SAHARA"
+      ],
+      "matched_icon_key": "SAHARA",
+      "icon_path": "/crypto-icons/binance/sahara.png"
+    },
+    {
+      "symbol": "PUMP",
+      "name": "PUMP",
+      "label": "PUMP",
+      "type": "perpetual",
+      "candidates": [
+        "PUMP"
+      ],
+      "matched_icon_key": "PUMP",
+      "icon_path": "/crypto-icons/binance/pump.png"
+    },
+    {
+      "symbol": "C",
+      "name": "C",
+      "label": "C",
+      "type": "perpetual",
+      "candidates": [
+        "C"
+      ],
+      "matched_icon_key": "C",
+      "icon_path": "/crypto-icons/binance/c.png"
+    },
+    {
+      "symbol": "ERA",
+      "name": "ERA",
+      "label": "ERA",
+      "type": "perpetual",
+      "candidates": [
+        "ERA"
+      ],
+      "matched_icon_key": "ERA",
+      "icon_path": "/crypto-icons/binance/era.png"
+    },
+    {
+      "symbol": "CVX",
+      "name": "CVX",
+      "label": "CVX",
+      "type": "perpetual",
+      "candidates": [
+        "CVX",
+        "CV"
+      ],
+      "matched_icon_key": "CVX",
+      "icon_path": "/crypto-icons/binance/cvx.png"
+    },
+    {
+      "symbol": "SLP",
+      "name": "SLP",
+      "label": "SLP",
+      "type": "perpetual",
+      "candidates": [
+        "SLP"
+      ],
+      "matched_icon_key": "SLP",
+      "icon_path": "/crypto-icons/binance/slp.png"
+    },
+    {
+      "symbol": "TREE",
+      "name": "TREE",
+      "label": "TREE",
+      "type": "perpetual",
+      "candidates": [
+        "TREE"
+      ],
+      "matched_icon_key": "TREE",
+      "icon_path": "/crypto-icons/binance/tree.png"
+    },
+    {
+      "symbol": "TOWNS",
+      "name": "TOWNS",
+      "label": "TOWNS",
+      "type": "perpetual",
+      "candidates": [
+        "TOWNS"
+      ],
+      "matched_icon_key": "TOWNS",
+      "icon_path": "/crypto-icons/binance/towns.png"
+    },
+    {
+      "symbol": "PROVE",
+      "name": "PROVE",
+      "label": "PROVE",
+      "type": "perpetual",
+      "candidates": [
+        "PROVE"
+      ],
+      "matched_icon_key": "PROVE",
+      "icon_path": "/crypto-icons/binance/prove.png"
+    },
+    {
+      "symbol": "CARV",
+      "name": "CARV",
+      "label": "CARV",
+      "type": "perpetual",
+      "candidates": [
+        "CARV"
+      ],
+      "matched_icon_key": "CARV",
+      "icon_path": "/crypto-icons/binance/carv.png"
+    },
+    {
+      "symbol": "SAPIEN",
+      "name": "SAPIEN",
+      "label": "SAPIEN",
+      "type": "perpetual",
+      "candidates": [
+        "SAPIEN"
+      ],
+      "matched_icon_key": "SAPIEN",
+      "icon_path": "/crypto-icons/binance/sapien.png"
+    },
+    {
+      "symbol": "XPL",
+      "name": "XPL",
+      "label": "XPL",
+      "type": "perpetual",
+      "candidates": [
+        "XPL"
+      ],
+      "matched_icon_key": "XPL",
+      "icon_path": "/crypto-icons/binance/xpl.png"
+    },
+    {
+      "symbol": "WLFI",
+      "name": "WLFI",
+      "label": "WLFI",
+      "type": "perpetual",
+      "candidates": [
+        "WLFI"
+      ],
+      "matched_icon_key": "WLFI",
+      "icon_path": "/crypto-icons/binance/wlfi.png"
+    },
+    {
+      "symbol": "SOMI",
+      "name": "SOMI",
+      "label": "SOMI",
+      "type": "perpetual",
+      "candidates": [
+        "SOMI"
+      ],
+      "matched_icon_key": "SOMI",
+      "icon_path": "/crypto-icons/binance/somi.png"
+    },
+    {
+      "symbol": "MITO",
+      "name": "MITO",
+      "label": "MITO",
+      "type": "perpetual",
+      "candidates": [
+        "MITO"
+      ],
+      "matched_icon_key": "MITO",
+      "icon_path": "/crypto-icons/binance/mito.png"
+    },
+    {
+      "symbol": "HEMI",
+      "name": "HEMI",
+      "label": "HEMI",
+      "type": "perpetual",
+      "candidates": [
+        "HEMI"
+      ],
+      "matched_icon_key": "HEMI",
+      "icon_path": "/crypto-icons/binance/hemi.png"
+    },
+    {
+      "symbol": "LINEA",
+      "name": "LINEA",
+      "label": "LINEA",
+      "type": "perpetual",
+      "candidates": [
+        "LINEA"
+      ],
+      "matched_icon_key": "LINEA",
+      "icon_path": "/crypto-icons/binance/linea.png"
+    },
+    {
+      "symbol": "OPEN",
+      "name": "OPEN",
+      "label": "OPEN",
+      "type": "perpetual",
+      "candidates": [
+        "OPEN"
+      ],
+      "matched_icon_key": "OPEN",
+      "icon_path": "/crypto-icons/binance/open.png"
+    },
+    {
+      "symbol": "SKY",
+      "name": "SKY",
+      "label": "SKY",
+      "type": "perpetual",
+      "candidates": [
+        "SKY"
+      ],
+      "matched_icon_key": "SKY",
+      "icon_path": "/crypto-icons/color/sky.svg"
+    },
+    {
+      "symbol": "AVNT",
+      "name": "AVNT",
+      "label": "AVNT",
+      "type": "perpetual",
+      "candidates": [
+        "AVNT"
+      ],
+      "matched_icon_key": "AVNT",
+      "icon_path": "/crypto-icons/binance/avnt.png"
+    },
+    {
+      "symbol": "HOLO",
+      "name": "HOLO",
+      "label": "HOLO",
+      "type": "perpetual",
+      "candidates": [
+        "HOLO"
+      ],
+      "matched_icon_key": "HOLO",
+      "icon_path": "/crypto-icons/binance/holo.png"
+    },
+    {
+      "symbol": "ZKC",
+      "name": "ZKC",
+      "label": "ZKC",
+      "type": "perpetual",
+      "candidates": [
+        "ZKC"
+      ],
+      "matched_icon_key": "ZKC",
+      "icon_path": "/crypto-icons/binance/zkc.png"
+    },
+    {
+      "symbol": "0G",
+      "name": "0G",
+      "label": "0G",
+      "type": "perpetual",
+      "candidates": [
+        "0G",
+        "G"
+      ],
+      "matched_icon_key": "0G",
+      "icon_path": "/crypto-icons/binance/0g.png"
+    },
+    {
+      "symbol": "BARD",
+      "name": "BARD",
+      "label": "BARD",
+      "type": "perpetual",
+      "candidates": [
+        "BARD"
+      ],
+      "matched_icon_key": "BARD",
+      "icon_path": "/crypto-icons/binance/bard.png"
+    },
+    {
+      "symbol": "ASTER",
+      "name": "ASTER",
+      "label": "ASTER",
+      "type": "perpetual",
+      "candidates": [
+        "ASTER"
+      ],
+      "matched_icon_key": "ASTER",
+      "icon_path": "/crypto-icons/binance/aster.png"
+    },
+    {
+      "symbol": "MIRA",
+      "name": "MIRA",
+      "label": "MIRA",
+      "type": "perpetual",
+      "candidates": [
+        "MIRA"
+      ],
+      "matched_icon_key": "MIRA",
+      "icon_path": "/crypto-icons/binance/mira.png"
+    },
+    {
+      "symbol": "FF",
+      "name": "FF",
+      "label": "FF",
+      "type": "perpetual",
+      "candidates": [
+        "FF"
+      ],
+      "matched_icon_key": "FF",
+      "icon_path": "/crypto-icons/binance/ff.png"
+    },
+    {
+      "symbol": "EDEN",
+      "name": "EDEN",
+      "label": "EDEN",
+      "type": "perpetual",
+      "candidates": [
+        "EDEN"
+      ],
+      "matched_icon_key": "EDEN",
+      "icon_path": "/crypto-icons/binance/eden.png"
+    },
+    {
+      "symbol": "NOM",
+      "name": "NOM",
+      "label": "NOM",
+      "type": "perpetual",
+      "candidates": [
+        "NOM"
+      ],
+      "matched_icon_key": "NOM",
+      "icon_path": "/crypto-icons/binance/nom.png"
+    },
+    {
+      "symbol": "2Z",
+      "name": "2Z",
+      "label": "2Z",
+      "type": "perpetual",
+      "candidates": [
+        "2Z",
+        "Z"
+      ],
+      "matched_icon_key": "2Z",
+      "icon_path": "/crypto-icons/binance/2z.png"
+    },
+    {
+      "symbol": "GIGGLE",
+      "name": "GIGGLE",
+      "label": "GIGGLE",
+      "type": "perpetual",
+      "candidates": [
+        "GIGGLE"
+      ],
+      "matched_icon_key": "GIGGLE",
+      "icon_path": "/crypto-icons/binance/giggle.png"
+    },
+    {
+      "symbol": "YB",
+      "name": "YB",
+      "label": "YB",
+      "type": "perpetual",
+      "candidates": [
+        "YB"
+      ],
+      "matched_icon_key": "YB",
+      "icon_path": "/crypto-icons/binance/yb.png"
+    },
+    {
+      "symbol": "MET",
+      "name": "MET",
+      "label": "MET",
+      "type": "perpetual",
+      "candidates": [
+        "MET"
+      ],
+      "matched_icon_key": "MET",
+      "icon_path": "/crypto-icons/binance/met.png"
+    },
+    {
+      "symbol": "EUL",
+      "name": "EUL",
+      "label": "EUL",
+      "type": "perpetual",
+      "candidates": [
+        "EUL"
+      ],
+      "matched_icon_key": "EUL",
+      "icon_path": "/crypto-icons/binance/eul.png"
+    },
+    {
+      "symbol": "ENSO",
+      "name": "ENSO",
+      "label": "ENSO",
+      "type": "perpetual",
+      "candidates": [
+        "ENSO"
+      ],
+      "matched_icon_key": "ENSO",
+      "icon_path": "/crypto-icons/binance/enso.png"
+    },
+    {
+      "symbol": "ZBT",
+      "name": "ZBT",
+      "label": "ZBT",
+      "type": "perpetual",
+      "candidates": [
+        "ZBT"
+      ],
+      "matched_icon_key": "ZBT",
+      "icon_path": "/crypto-icons/binance/zbt.png"
+    },
+    {
+      "symbol": "TURTLE",
+      "name": "TURTLE",
+      "label": "TURTLE",
+      "type": "perpetual",
+      "candidates": [
+        "TURTLE"
+      ],
+      "matched_icon_key": "TURTLE",
+      "icon_path": "/crypto-icons/binance/turtle.png"
+    },
+    {
+      "symbol": "KITE",
+      "name": "KITE",
+      "label": "KITE",
+      "type": "perpetual",
+      "candidates": [
+        "KITE"
+      ],
+      "matched_icon_key": "KITE",
+      "icon_path": "/crypto-icons/binance/kite.png"
+    },
+    {
+      "symbol": "AT",
+      "name": "AT",
+      "label": "AT",
+      "type": "perpetual",
+      "candidates": [
+        "AT"
+      ],
+      "matched_icon_key": "AT",
+      "icon_path": "/crypto-icons/binance/at.png"
+    },
+    {
+      "symbol": "CC",
+      "name": "CC",
+      "label": "CC",
+      "type": "perpetual",
+      "candidates": [
+        "CC"
+      ],
+      "matched_icon_key": "CC",
+      "icon_path": "/crypto-icons/color/cc.svg"
+    },
+    {
+      "symbol": "MMT",
+      "name": "MMT",
+      "label": "MMT",
+      "type": "perpetual",
+      "candidates": [
+        "MMT"
+      ],
+      "matched_icon_key": "MMT",
+      "icon_path": "/crypto-icons/binance/mmt.png"
+    },
+    {
+      "symbol": "ALLO",
+      "name": "ALLO",
+      "label": "ALLO",
+      "type": "perpetual",
+      "candidates": [
+        "ALLO"
+      ],
+      "matched_icon_key": "ALLO",
+      "icon_path": "/crypto-icons/binance/allo.png"
+    },
+    {
+      "symbol": "SENT",
+      "name": "SENT",
+      "label": "SENT",
+      "type": "perpetual",
+      "candidates": [
+        "SENT"
+      ],
+      "matched_icon_key": "SENT",
+      "icon_path": "/crypto-icons/binance/sent.png"
+    },
+    {
+      "symbol": "NIGHT",
+      "name": "NIGHT",
+      "label": "NIGHT",
+      "type": "perpetual",
+      "candidates": [
+        "NIGHT"
+      ],
+      "matched_icon_key": "NIGHT",
+      "icon_path": "/crypto-icons/binance/night.png"
+    },
+    {
+      "symbol": "ZKP",
+      "name": "ZKP",
+      "label": "ZKP",
+      "type": "perpetual",
+      "candidates": [
+        "ZKP"
+      ],
+      "matched_icon_key": "ZKP",
+      "icon_path": "/crypto-icons/binance/zkp.png"
+    },
+    {
+      "symbol": "LIT",
+      "name": "LIT",
+      "label": "LIT",
+      "type": "perpetual",
+      "candidates": [
+        "LIT"
+      ],
+      "matched_icon_key": "LIT",
+      "icon_path": "/crypto-icons/binance/lit.png"
+    },
+    {
+      "symbol": "BREV",
+      "name": "BREV",
+      "label": "BREV",
+      "type": "perpetual",
+      "candidates": [
+        "BREV"
+      ],
+      "matched_icon_key": "BREV",
+      "icon_path": "/crypto-icons/binance/brev.png"
+    },
+    {
+      "symbol": "ZAMA",
+      "name": "ZAMA",
+      "label": "ZAMA",
+      "type": "perpetual",
+      "candidates": [
+        "ZAMA"
+      ],
+      "matched_icon_key": "ZAMA",
+      "icon_path": "/crypto-icons/binance/zama.png"
+    },
+    {
+      "symbol": "FOGO",
+      "name": "FOGO",
+      "label": "FOGO",
+      "type": "perpetual",
+      "candidates": [
+        "FOGO"
+      ],
+      "matched_icon_key": "FOGO",
+      "icon_path": "/crypto-icons/binance/fogo.png"
+    },
+    {
+      "symbol": "FRAX",
+      "name": "FRAX",
+      "label": "FRAX",
+      "type": "perpetual",
+      "candidates": [
+        "FRAX",
+        "FRA"
+      ],
+      "matched_icon_key": "FRAX",
+      "icon_path": "/crypto-icons/binance/frax.png"
+    },
+    {
+      "symbol": "MEGA",
+      "name": "MEGA",
+      "label": "MEGA",
+      "type": "perpetual",
+      "candidates": [
+        "MEGA"
+      ],
+      "matched_icon_key": "MEGA",
+      "icon_path": "/crypto-icons/binance/mega.jpg"
+    },
+    {
+      "symbol": "ESP",
+      "name": "ESP",
+      "label": "ESP",
+      "type": "perpetual",
+      "candidates": [
+        "ESP"
+      ],
+      "matched_icon_key": "ESP",
+      "icon_path": "/crypto-icons/binance/esp.png"
+    },
+    {
+      "symbol": "OPN",
+      "name": "OPN",
+      "label": "OPN",
+      "type": "perpetual",
+      "candidates": [
+        "OPN"
+      ],
+      "matched_icon_key": "OPN",
+      "icon_path": "/crypto-icons/binance/opn.png"
+    },
+    {
+      "symbol": "ROBO",
+      "name": "ROBO",
+      "label": "ROBO",
+      "type": "perpetual",
+      "candidates": [
+        "ROBO"
+      ],
+      "matched_icon_key": "ROBO",
+      "icon_path": "/crypto-icons/binance/robo.png"
+    },
+    {
+      "symbol": "KAT",
+      "name": "KAT",
+      "label": "KAT",
+      "type": "perpetual",
+      "candidates": [
+        "KAT"
+      ],
+      "matched_icon_key": "KAT",
+      "icon_path": "/crypto-icons/binance/kat.png"
+    },
+    {
+      "symbol": "MANTRA",
+      "name": "MANTRA",
+      "label": "MANTRA",
+      "type": "perpetual",
+      "candidates": [
+        "MANTRA"
+      ],
+      "matched_icon_key": "MANTRA",
+      "icon_path": "/crypto-icons/binance/mantra.png"
+    },
+    {
+      "symbol": "CFG",
+      "name": "CFG",
+      "label": "CFG",
+      "type": "perpetual",
+      "candidates": [
+        "CFG"
+      ],
+      "matched_icon_key": "CFG",
+      "icon_path": "/crypto-icons/binance/cfg.png"
+    },
+    {
+      "symbol": "XAUT",
+      "name": "XAUT",
+      "label": "XAUT",
+      "type": "perpetual",
+      "candidates": [
+        "XAUT"
+      ],
+      "matched_icon_key": "XAUT",
+      "icon_path": "/crypto-icons/binance/xaut.png"
+    },
+    {
+      "symbol": "BASED",
+      "name": "BASED",
+      "label": "BASED",
+      "type": "perpetual",
+      "candidates": [
+        "BASED"
+      ],
+      "matched_icon_key": "BASED",
+      "icon_path": "/crypto-icons/binance/based.png"
+    },
+    {
+      "symbol": "PRL",
+      "name": "PRL",
+      "label": "PRL",
+      "type": "perpetual",
+      "candidates": [
+        "PRL"
+      ],
+      "matched_icon_key": "PRL",
+      "icon_path": "/crypto-icons/color/prl.svg"
+    },
+    {
+      "symbol": "GENIUS",
+      "name": "GENIUS",
+      "label": "GENIUS",
+      "type": "perpetual",
+      "candidates": [
+        "GENIUS"
+      ],
+      "matched_icon_key": "GENIUS",
+      "icon_path": "/crypto-icons/binance/genius.png"
+    },
+    {
+      "symbol": "CHIP",
+      "name": "CHIP",
+      "label": "CHIP",
+      "type": "perpetual",
+      "candidates": [
+        "CHIP"
+      ],
+      "matched_icon_key": "CHIP",
+      "icon_path": "/crypto-icons/binance/chip.png"
+    },
+    {
+      "symbol": "OPG",
+      "name": "OPG",
+      "label": "OPG",
+      "type": "perpetual",
+      "candidates": [
+        "OPG"
+      ],
+      "matched_icon_key": "OPG",
+      "icon_path": "/crypto-icons/binance/opg.png"
+    },
+    {
+      "symbol": "AIGENSYN",
+      "name": "AIGENSYN",
+      "label": "AIGENSYN",
+      "type": "perpetual",
+      "candidates": [
+        "AIGENSYN"
+      ],
+      "matched_icon_key": "AIGENSYN",
+      "icon_path": "/crypto-icons/binance/aigensyn.png"
+    },
+    {
+      "symbol": "CTR",
+      "name": "CTR",
+      "label": "CTR",
+      "type": "perpetual",
+      "candidates": [
+        "CTR"
+      ],
+      "matched_icon_key": "CTR",
+      "icon_path": "/crypto-icons/color/ctr.svg"
+    },
+    {
+      "symbol": "ZEST",
+      "name": "ZEST",
+      "label": "ZEST",
+      "type": "perpetual",
+      "candidates": [
+        "ZEST"
+      ],
+      "matched_icon_key": "ZEST",
+      "icon_path": "/crypto-icons/color/zest.svg"
+    },
+    {
+      "symbol": "RE",
+      "name": "RE",
+      "label": "RE",
+      "type": "perpetual",
+      "candidates": [
+        "RE"
+      ],
+      "matched_icon_key": "RE",
+      "icon_path": "/crypto-icons/binance/re.png"
+    }
+  ],
+  "missing": [
+    {
+      "symbol": "BTCDOM",
+      "name": "BTCDOM",
+      "label": "BTCDOM",
+      "type": "perpetual",
+      "candidates": [
+        "BTCDOM"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "KAS",
+      "name": "KAS",
+      "label": "KAS",
+      "type": "perpetual",
+      "candidates": [
+        "KAS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "1000RATS",
+      "name": "1000RATS",
+      "label": "1000RATS",
+      "type": "perpetual",
+      "candidates": [
+        "1000RATS",
+        "RATS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ZETA",
+      "name": "ZETA",
+      "label": "ZETA",
+      "type": "perpetual",
+      "candidates": [
+        "ZETA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BRETT",
+      "name": "BRETT",
+      "label": "BRETT",
+      "type": "perpetual",
+      "candidates": [
+        "BRETT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "1000000MOG",
+      "name": "1000000MOG",
+      "label": "1000000MOG",
+      "type": "perpetual",
+      "candidates": [
+        "1000000MOG",
+        "000MOG",
+        "MOG"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "DRIFT",
+      "name": "DRIFT",
+      "label": "DRIFT",
+      "type": "perpetual",
+      "candidates": [
+        "DRIFT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BAN",
+      "name": "BAN",
+      "label": "BAN",
+      "type": "perpetual",
+      "candidates": [
+        "BAN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AKT",
+      "name": "AKT",
+      "label": "AKT",
+      "type": "perpetual",
+      "candidates": [
+        "AKT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "CHILLGUY",
+      "name": "CHILLGUY",
+      "label": "CHILLGUY",
+      "type": "perpetual",
+      "candidates": [
+        "CHILLGUY"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AERO",
+      "name": "AERO",
+      "label": "AERO",
+      "type": "perpetual",
+      "candidates": [
+        "AERO"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "RAYSOL",
+      "name": "RAYSOL",
+      "label": "RAYSOL",
+      "type": "perpetual",
+      "candidates": [
+        "RAYSOL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "KOMA",
+      "name": "KOMA",
+      "label": "KOMA",
+      "type": "perpetual",
+      "candidates": [
+        "KOMA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "MOCA",
+      "name": "MOCA",
+      "label": "MOCA",
+      "type": "perpetual",
+      "candidates": [
+        "MOCA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "GRIFFAIN",
+      "name": "GRIFFAIN",
+      "label": "GRIFFAIN",
+      "type": "perpetual",
+      "candidates": [
+        "GRIFFAIN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ZEREBRO",
+      "name": "ZEREBRO",
+      "label": "ZEREBRO",
+      "type": "perpetual",
+      "candidates": [
+        "ZEREBRO"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SWARMS",
+      "name": "SWARMS",
+      "label": "SWARMS",
+      "type": "perpetual",
+      "candidates": [
+        "SWARMS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SONIC",
+      "name": "SONIC",
+      "label": "SONIC",
+      "type": "perpetual",
+      "candidates": [
+        "SONIC"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ARC",
+      "name": "ARC",
+      "label": "ARC",
+      "type": "perpetual",
+      "candidates": [
+        "ARC"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AVAAI",
+      "name": "AVAAI",
+      "label": "AVAAI",
+      "type": "perpetual",
+      "candidates": [
+        "AVAAI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "MELANIA",
+      "name": "MELANIA",
+      "label": "MELANIA",
+      "type": "perpetual",
+      "candidates": [
+        "MELANIA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PIPPIN",
+      "name": "PIPPIN",
+      "label": "PIPPIN",
+      "type": "perpetual",
+      "candidates": [
+        "PIPPIN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "VVV",
+      "name": "VVV",
+      "label": "VVV",
+      "type": "perpetual",
+      "candidates": [
+        "VVV"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "IP",
+      "name": "IP",
+      "label": "IP",
+      "type": "perpetual",
+      "candidates": [
+        "IP"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BROCCOLIF3B",
+      "name": "BROCCOLIF3B",
+      "label": "BROCCOLIF3B",
+      "type": "perpetual",
+      "candidates": [
+        "BROCCOLIF3B"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SIREN",
+      "name": "SIREN",
+      "label": "SIREN",
+      "type": "perpetual",
+      "candidates": [
+        "SIREN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "MAVIA",
+      "name": "MAVIA",
+      "label": "MAVIA",
+      "type": "perpetual",
+      "candidates": [
+        "MAVIA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PROMPT",
+      "name": "PROMPT",
+      "label": "PROMPT",
+      "type": "perpetual",
+      "candidates": [
+        "PROMPT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "FHE",
+      "name": "FHE",
+      "label": "FHE",
+      "type": "perpetual",
+      "candidates": [
+        "FHE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "DEEP",
+      "name": "DEEP",
+      "label": "DEEP",
+      "type": "perpetual",
+      "candidates": [
+        "DEEP"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AIOT",
+      "name": "AIOT",
+      "label": "AIOT",
+      "type": "perpetual",
+      "candidates": [
+        "AIOT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "B2",
+      "name": "B2",
+      "label": "B2",
+      "type": "perpetual",
+      "candidates": [
+        "B2"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AGT",
+      "name": "AGT",
+      "label": "AGT",
+      "type": "perpetual",
+      "candidates": [
+        "AGT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "B",
+      "name": "B",
+      "label": "B",
+      "type": "perpetual",
+      "candidates": [
+        "B"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "HYPE",
+      "name": "HYPE",
+      "label": "HYPE",
+      "type": "perpetual",
+      "candidates": [
+        "HYPE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TAIKO",
+      "name": "TAIKO",
+      "label": "TAIKO",
+      "type": "perpetual",
+      "candidates": [
+        "TAIKO"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SQD",
+      "name": "SQD",
+      "label": "SQD",
+      "type": "perpetual",
+      "candidates": [
+        "SQD"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PUMPBTC",
+      "name": "PUMPBTC",
+      "label": "PUMPBTC",
+      "type": "perpetual",
+      "candidates": [
+        "PUMPBTC"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "H",
+      "name": "H",
+      "label": "H",
+      "type": "perpetual",
+      "candidates": [
+        "H"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ICNT",
+      "name": "ICNT",
+      "label": "ICNT",
+      "type": "perpetual",
+      "candidates": [
+        "ICNT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BULLA",
+      "name": "BULLA",
+      "label": "BULLA",
+      "type": "perpetual",
+      "candidates": [
+        "BULLA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "IDOL",
+      "name": "IDOL",
+      "label": "IDOL",
+      "type": "perpetual",
+      "candidates": [
+        "IDOL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "M",
+      "name": "M",
+      "label": "M",
+      "type": "perpetual",
+      "candidates": [
+        "M"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "CROSS",
+      "name": "CROSS",
+      "label": "CROSS",
+      "type": "perpetual",
+      "candidates": [
+        "CROSS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AIN",
+      "name": "AIN",
+      "label": "AIN",
+      "type": "perpetual",
+      "candidates": [
+        "AIN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "VELVET",
+      "name": "VELVET",
+      "label": "VELVET",
+      "type": "perpetual",
+      "candidates": [
+        "VELVET"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TAC",
+      "name": "TAC",
+      "label": "TAC",
+      "type": "perpetual",
+      "candidates": [
+        "TAC"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TA",
+      "name": "TA",
+      "label": "TA",
+      "type": "perpetual",
+      "candidates": [
+        "TA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ZORA",
+      "name": "ZORA",
+      "label": "ZORA",
+      "type": "perpetual",
+      "candidates": [
+        "ZORA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TAG",
+      "name": "TAG",
+      "label": "TAG",
+      "type": "perpetual",
+      "candidates": [
+        "TAG"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ESPORTS",
+      "name": "ESPORTS",
+      "label": "ESPORTS",
+      "type": "perpetual",
+      "candidates": [
+        "ESPORTS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PLAY",
+      "name": "PLAY",
+      "label": "PLAY",
+      "type": "perpetual",
+      "candidates": [
+        "PLAY"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "NAORIS",
+      "name": "NAORIS",
+      "label": "NAORIS",
+      "type": "perpetual",
+      "candidates": [
+        "NAORIS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ALL",
+      "name": "ALL",
+      "label": "ALL",
+      "type": "perpetual",
+      "candidates": [
+        "ALL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "IN",
+      "name": "IN",
+      "label": "IN",
+      "type": "perpetual",
+      "candidates": [
+        "IN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AIO",
+      "name": "AIO",
+      "label": "AIO",
+      "type": "perpetual",
+      "candidates": [
+        "AIO"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "XNY",
+      "name": "XNY",
+      "label": "XNY",
+      "type": "perpetual",
+      "candidates": [
+        "XNY"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "USELESS",
+      "name": "USELESS",
+      "label": "USELESS",
+      "type": "perpetual",
+      "candidates": [
+        "USELESS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BAS",
+      "name": "BAS",
+      "label": "BAS",
+      "type": "perpetual",
+      "candidates": [
+        "BAS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BTR",
+      "name": "BTR",
+      "label": "BTR",
+      "type": "perpetual",
+      "candidates": [
+        "BTR"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "Q",
+      "name": "Q",
+      "label": "Q",
+      "type": "perpetual",
+      "candidates": [
+        "Q"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ARIA",
+      "name": "ARIA",
+      "label": "ARIA",
+      "type": "perpetual",
+      "candidates": [
+        "ARIA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TAKE",
+      "name": "TAKE",
+      "label": "TAKE",
+      "type": "perpetual",
+      "candidates": [
+        "TAKE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PTB",
+      "name": "PTB",
+      "label": "PTB",
+      "type": "perpetual",
+      "candidates": [
+        "PTB"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "FLOCK",
+      "name": "FLOCK",
+      "label": "FLOCK",
+      "type": "perpetual",
+      "candidates": [
+        "FLOCK"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "XPIN",
+      "name": "XPIN",
+      "label": "XPIN",
+      "type": "perpetual",
+      "candidates": [
+        "XPIN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "UB",
+      "name": "UB",
+      "label": "UB",
+      "type": "perpetual",
+      "candidates": [
+        "UB"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TOSHI",
+      "name": "TOSHI",
+      "label": "TOSHI",
+      "type": "perpetual",
+      "candidates": [
+        "TOSHI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "STBL",
+      "name": "STBL",
+      "label": "STBL",
+      "type": "perpetual",
+      "candidates": [
+        "STBL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TRADOOR",
+      "name": "TRADOOR",
+      "label": "TRADOOR",
+      "type": "perpetual",
+      "candidates": [
+        "TRADOOR"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BLESS",
+      "name": "BLESS",
+      "label": "BLESS",
+      "type": "perpetual",
+      "candidates": [
+        "BLESS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "FLUID",
+      "name": "FLUID",
+      "label": "FLUID",
+      "type": "perpetual",
+      "candidates": [
+        "FLUID"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "COAI",
+      "name": "COAI",
+      "label": "COAI",
+      "type": "perpetual",
+      "candidates": [
+        "COAI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "HANA",
+      "name": "HANA",
+      "label": "HANA",
+      "type": "perpetual",
+      "candidates": [
+        "HANA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AKE",
+      "name": "AKE",
+      "label": "AKE",
+      "type": "perpetual",
+      "candidates": [
+        "AKE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ORDER",
+      "name": "ORDER",
+      "label": "ORDER",
+      "type": "perpetual",
+      "candidates": [
+        "ORDER"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "LIGHT",
+      "name": "LIGHT",
+      "label": "LIGHT",
+      "type": "perpetual",
+      "candidates": [
+        "LIGHT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "XAN",
+      "name": "XAN",
+      "label": "XAN",
+      "type": "perpetual",
+      "candidates": [
+        "XAN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TRUTH",
+      "name": "TRUTH",
+      "label": "TRUTH",
+      "type": "perpetual",
+      "candidates": [
+        "TRUTH"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "EVAA",
+      "name": "EVAA",
+      "label": "EVAA",
+      "type": "perpetual",
+      "candidates": [
+        "EVAA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "LYN",
+      "name": "LYN",
+      "label": "LYN",
+      "type": "perpetual",
+      "candidates": [
+        "LYN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "KGEN",
+      "name": "KGEN",
+      "label": "KGEN",
+      "type": "perpetual",
+      "candidates": [
+        "KGEN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "4",
+      "name": "4",
+      "label": "4",
+      "type": "perpetual",
+      "candidates": [
+        "4"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "MON",
+      "name": "MON",
+      "label": "MON",
+      "type": "perpetual",
+      "candidates": [
+        "MON"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "CLO",
+      "name": "CLO",
+      "label": "CLO",
+      "type": "perpetual",
+      "candidates": [
+        "CLO"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "RECALL",
+      "name": "RECALL",
+      "label": "RECALL",
+      "type": "perpetual",
+      "candidates": [
+        "RECALL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "LAB",
+      "name": "LAB",
+      "label": "LAB",
+      "type": "perpetual",
+      "candidates": [
+        "LAB"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "RIVER",
+      "name": "RIVER",
+      "label": "RIVER",
+      "type": "perpetual",
+      "candidates": [
+        "RIVER"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "币安人生",
+      "name": "币安人生",
+      "label": "币安人生",
+      "type": "perpetual",
+      "candidates": [],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BLUAI",
+      "name": "BLUAI",
+      "label": "BLUAI",
+      "type": "perpetual",
+      "candidates": [
+        "BLUAI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "APR",
+      "name": "APR",
+      "label": "APR",
+      "type": "perpetual",
+      "candidates": [
+        "APR"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ON",
+      "name": "ON",
+      "label": "ON",
+      "type": "perpetual",
+      "candidates": [
+        "ON"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TRUST",
+      "name": "TRUST",
+      "label": "TRUST",
+      "type": "perpetual",
+      "candidates": [
+        "TRUST"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "UAI",
+      "name": "UAI",
+      "label": "UAI",
+      "type": "perpetual",
+      "candidates": [
+        "UAI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "FOLKS",
+      "name": "FOLKS",
+      "label": "FOLKS",
+      "type": "perpetual",
+      "candidates": [
+        "FOLKS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "STABLE",
+      "name": "STABLE",
+      "label": "STABLE",
+      "type": "perpetual",
+      "candidates": [
+        "STABLE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "JCT",
+      "name": "JCT",
+      "label": "JCT",
+      "type": "perpetual",
+      "candidates": [
+        "JCT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "CLANKER",
+      "name": "CLANKER",
+      "label": "CLANKER",
+      "type": "perpetual",
+      "candidates": [
+        "CLANKER"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BEAT",
+      "name": "BEAT",
+      "label": "BEAT",
+      "type": "perpetual",
+      "candidates": [
+        "BEAT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PIEVERSE",
+      "name": "PIEVERSE",
+      "label": "PIEVERSE",
+      "type": "perpetual",
+      "candidates": [
+        "PIEVERSE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "IRYS",
+      "name": "IRYS",
+      "label": "IRYS",
+      "type": "perpetual",
+      "candidates": [
+        "IRYS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "POWER",
+      "name": "POWER",
+      "label": "POWER",
+      "type": "perpetual",
+      "candidates": [
+        "POWER"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "WET",
+      "name": "WET",
+      "label": "WET",
+      "type": "perpetual",
+      "candidates": [
+        "WET"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "US",
+      "name": "US",
+      "label": "US",
+      "type": "perpetual",
+      "candidates": [
+        "US"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "CYS",
+      "name": "CYS",
+      "label": "CYS",
+      "type": "perpetual",
+      "candidates": [
+        "CYS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "RAVE",
+      "name": "RAVE",
+      "label": "RAVE",
+      "type": "perpetual",
+      "candidates": [
+        "RAVE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "GUA",
+      "name": "GUA",
+      "label": "GUA",
+      "type": "perpetual",
+      "candidates": [
+        "GUA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "COLLECT",
+      "name": "COLLECT",
+      "label": "COLLECT",
+      "type": "perpetual",
+      "candidates": [
+        "COLLECT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "MAGMA",
+      "name": "MAGMA",
+      "label": "MAGMA",
+      "type": "perpetual",
+      "candidates": [
+        "MAGMA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SPORTFUN",
+      "name": "SPORTFUN",
+      "label": "SPORTFUN",
+      "type": "perpetual",
+      "candidates": [
+        "SPORTFUN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AIA",
+      "name": "AIA",
+      "label": "AIA",
+      "type": "perpetual",
+      "candidates": [
+        "AIA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ACU",
+      "name": "ACU",
+      "label": "ACU",
+      "type": "perpetual",
+      "candidates": [
+        "ACU"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "我踏马来了",
+      "name": "我踏马来了",
+      "label": "我踏马来了",
+      "type": "perpetual",
+      "candidates": [],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "ELSA",
+      "name": "ELSA",
+      "label": "ELSA",
+      "type": "perpetual",
+      "candidates": [
+        "ELSA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SKR",
+      "name": "SKR",
+      "label": "SKR",
+      "type": "perpetual",
+      "candidates": [
+        "SKR"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SPACE",
+      "name": "SPACE",
+      "label": "SPACE",
+      "type": "perpetual",
+      "candidates": [
+        "SPACE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "FIGHT",
+      "name": "FIGHT",
+      "label": "FIGHT",
+      "type": "perpetual",
+      "candidates": [
+        "FIGHT"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BIRB",
+      "name": "BIRB",
+      "label": "BIRB",
+      "type": "perpetual",
+      "candidates": [
+        "BIRB"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "GWEI",
+      "name": "GWEI",
+      "label": "GWEI",
+      "type": "perpetual",
+      "candidates": [
+        "GWEI"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "INX",
+      "name": "INX",
+      "label": "INX",
+      "type": "perpetual",
+      "candidates": [
+        "INX",
+        "IN"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "TRIA",
+      "name": "TRIA",
+      "label": "TRIA",
+      "type": "perpetual",
+      "candidates": [
+        "TRIA"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "AZTEC",
+      "name": "AZTEC",
+      "label": "AZTEC",
+      "type": "perpetual",
+      "candidates": [
+        "AZTEC"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "龙虾",
+      "name": "龙虾",
+      "label": "龙虾",
+      "type": "perpetual",
+      "candidates": [],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "EDGE",
+      "name": "EDGE",
+      "label": "EDGE",
+      "type": "perpetual",
+      "candidates": [
+        "EDGE"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BSB",
+      "name": "BSB",
+      "label": "BSB",
+      "type": "perpetual",
+      "candidates": [
+        "BSB"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BILL",
+      "name": "BILL",
+      "label": "BILL",
+      "type": "perpetual",
+      "candidates": [
+        "BILL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "PHAROS",
+      "name": "PHAROS",
+      "label": "PHAROS",
+      "type": "perpetual",
+      "candidates": [
+        "PHAROS"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "STAR",
+      "name": "STAR",
+      "label": "STAR",
+      "type": "perpetual",
+      "candidates": [
+        "STAR"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "SLX",
+      "name": "SLX",
+      "label": "SLX",
+      "type": "perpetual",
+      "candidates": [
+        "SLX",
+        "SL"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    },
+    {
+      "symbol": "BTW",
+      "name": "BTW",
+      "label": "BTW",
+      "type": "perpetual",
+      "candidates": [
+        "BTW"
+      ],
+      "matched_icon_key": null,
+      "icon_path": null
+    }
+  ]
+}

@@ -1,15 +1,17 @@
 /**
- * WalletSelector - Multi-exchange wallet selector component
- *
- * Supports both Hyperliquid and Binance wallets for manual trading.
- * Displays wallet info with appropriate format based on exchange type.
+ * WalletSelector - Multi-exchange wallet selector component.
  */
 import { useState, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useTranslation } from 'react-i18next'
+import {
+  DEFAULT_MANUAL_TRADING_EXCHANGE,
+  getManualTradingExchangeConfig,
+  type ManualTradingExchangeId,
+} from './manualTradingExchanges'
 
-export type ExchangeType = 'hyperliquid' | 'binance'
+export type ExchangeType = ManualTradingExchangeId
 
 export interface WalletOption {
   wallet_id: number
@@ -26,7 +28,7 @@ export interface WalletOption {
 }
 
 interface WalletSelectorProps {
-  exchange: ExchangeType
+  exchange?: ExchangeType
   selectedWalletId: number | null
   onSelect: (wallet: WalletOption) => void
   showLabel?: boolean
@@ -34,13 +36,14 @@ interface WalletSelectorProps {
 }
 
 export default function WalletSelector({
-  exchange,
+  exchange = DEFAULT_MANUAL_TRADING_EXCHANGE,
   selectedWalletId,
   onSelect,
   showLabel = true,
   compact = false
 }: WalletSelectorProps) {
   const { t } = useTranslation()
+  const exchangeConfig = getManualTradingExchangeConfig(exchange)
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -51,11 +54,7 @@ export default function WalletSelector({
   const loadWallets = async () => {
     try {
       setLoading(true)
-      const endpoint = exchange === 'hyperliquid'
-        ? '/api/hyperliquid/wallets/all'
-        : '/api/binance/wallets/all'
-
-      const response = await fetch(endpoint)
+      const response = await fetch(exchangeConfig.walletsEndpoint)
       if (!response.ok) {
         throw new Error('Failed to load wallets')
       }
@@ -106,7 +105,9 @@ export default function WalletSelector({
           <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
             <h3 className="font-medium text-yellow-900 text-sm">
-              {t('trade.noWalletsAvailable', 'No Wallets Available')}
+              {t('trade.noExchangeWalletsAvailable', 'No {{exchange}} Wallets Available', {
+                exchange: exchangeConfig.label,
+              })}
             </h3>
             <p className="text-xs text-yellow-800 mt-1">
               {t('trade.noWalletsHint', 'Please configure wallets for your AI Traders first.')}
@@ -121,12 +122,7 @@ export default function WalletSelector({
 
   // Format wallet identifier based on exchange
   const formatWalletId = (wallet: WalletOption): string => {
-    if (wallet.exchange === 'hyperliquid' && wallet.wallet_address) {
-      return `${wallet.wallet_address.slice(0, 6)}...${wallet.wallet_address.slice(-4)}`
-    } else if (wallet.exchange === 'binance' && wallet.api_key_masked) {
-      return wallet.api_key_masked
-    }
-    return ''
+    return getManualTradingExchangeConfig(wallet.exchange).formatWalletIdentifier(wallet)
   }
 
   return (

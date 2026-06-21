@@ -6,7 +6,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
-from database.models import HyperliquidExchangeAction
+from database.models import Account, HyperliquidExchangeAction, User
+from api.auth_dependencies import get_account_for_current_user, get_current_user
 
 router = APIRouter(prefix="/api/hyperliquid/actions", tags=["Hyperliquid Actions"])
 
@@ -19,8 +20,12 @@ def get_db():
         db.close()
 
 
-def _serialize_action(action: HyperliquidExchangeAction) -> Dict[str, Any]:
-    return {
+def _serialize_action(
+    action: HyperliquidExchangeAction,
+    *,
+    include_payloads: bool = False,
+) -> Dict[str, Any]:
+    data = {
         "id": action.id,
         "timestamp": action.created_at.isoformat() if action.created_at else None,
         "account_id": action.account_id,
@@ -36,9 +41,11 @@ def _serialize_action(action: HyperliquidExchangeAction) -> Dict[str, Any]:
         "notional": float(action.notional) if action.notional is not None else None,
         "request_weight": action.request_weight,
         "error_message": action.error_message,
-        "request_payload": action.request_payload,
-        "response_payload": action.response_payload,
     }
+    if include_payloads:
+        data["request_payload"] = action.request_payload
+        data["response_payload"] = action.response_payload
+    return data
 
 
 @router.get("/")
@@ -47,12 +54,22 @@ def list_exchange_actions(
     account_id: Optional[int] = Query(None),
     environment: Optional[str] = Query(None, regex="^(testnet|mainnet)$"),
     wallet_address: Optional[str] = Query(None),
+    include_payloads: bool = Query(False),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     query = db.query(HyperliquidExchangeAction)
 
     if account_id is not None:
+        get_account_for_current_user(account_id, current_user, db, active_only=False)
         query = query.filter(HyperliquidExchangeAction.account_id == account_id)
+    else:
+        owned_account_ids = db.query(Account.id).filter(
+            Account.user_id == current_user.id,
+            Account.is_deleted != True,
+        ).subquery()
+        query = query.filter(HyperliquidExchangeAction.account_id.in_(owned_account_ids))
+
     if environment is not None:
         query = query.filter(HyperliquidExchangeAction.environment == environment)
     if wallet_address is not None:
@@ -85,7 +102,10 @@ def list_exchange_actions(
     )
 
     return {
-        "entries": [_serialize_action(entry) for entry in entries],
+        "entries": [
+            _serialize_action(entry, include_payloads=include_payloads)
+            for entry in entries
+        ],
         "stats": {
             "total": total,
             "success": success_count,

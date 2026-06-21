@@ -3,10 +3,15 @@ import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, TrendingUp, AlertTriangle } from 'lucide-react';
-import { getHyperliquidBalance, getBinanceBalance, calculateMarginUsageColor } from '@/lib/hyperliquidApi';
+import { calculateMarginUsageColor } from '@/lib/hyperliquidApi';
 import type { HyperliquidBalance } from '@/lib/types/hyperliquid';
 import { formatDateTime } from '@/lib/dateTime';
 import type { ExchangeType } from './WalletSelector';
+import {
+  DEFAULT_MANUAL_TRADING_EXCHANGE,
+  getManualTradingExchangeConfig,
+} from './manualTradingExchanges';
+import { getManualTradingAdapter } from './manualTradingApi';
 
 interface BalanceCardProps {
   accountId: number;
@@ -20,11 +25,13 @@ interface BalanceCardProps {
 export default function BalanceCard({
   accountId,
   environment,
-  exchange = 'hyperliquid',
+  exchange = DEFAULT_MANUAL_TRADING_EXCHANGE,
   autoRefresh = false,
   refreshInterval = 300,
   refreshTrigger,
 }: BalanceCardProps) {
+  const exchangeConfig = getManualTradingExchangeConfig(exchange);
+  const exchangeAdapter = getManualTradingAdapter(exchange);
   const [balance, setBalance] = useState<HyperliquidBalance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -71,9 +78,7 @@ export default function BalanceCard({
         setIsInitialLoading(true);
       }
       setError(null);
-      const data = exchange === 'hyperliquid'
-        ? await getHyperliquidBalance(accountId, environment)
-        : await getBinanceBalance(accountId, environment);
+      const data = await exchangeAdapter.getBalance(accountId, environment);
       setBalance(data);
       setHasLoaded(true);
     } catch (error: any) {
@@ -127,7 +132,7 @@ export default function BalanceCard({
   return (
     <Card className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">{exchange === 'binance' ? 'Binance' : 'Hyperliquid'} Account Status</h2>
+        <h2 className="text-xl font-bold">{exchangeConfig.label} Account Status</h2>
         <Badge
           variant={environment === 'testnet' ? 'default' : 'destructive'}
           className="uppercase"

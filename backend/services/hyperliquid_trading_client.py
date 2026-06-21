@@ -343,31 +343,11 @@ class HyperliquidTradingClient:
             return None
 
         from config.settings import HYPERLIQUID_BUILDER_CONFIG
-        from database.models import User, UserSubscription
 
-        # Determine fee based on current logged-in user's subscription status
-        # Query non-default user's subscription (the current logged-in user)
-        builder_fee = HYPERLIQUID_BUILDER_CONFIG.builder_fee  # Default: 30
-
-        try:
-            db = SessionLocal()
-            subscription = db.query(UserSubscription).join(User).filter(
-                User.username != 'default',
-                UserSubscription.subscription_type == 'premium'
-            ).first()
-            if subscription:
-                builder_fee = 0  # Premium rate: 0% (FREE)
-                user = db.query(User).filter(User.id == subscription.user_id).first()
-                logger.info(f"[BUILDER FEE] Premium user '{user.username if user else 'unknown'}' detected, using FREE fee: 0%")
-            else:
-                logger.info(f"[BUILDER FEE] No premium user logged in, using default fee: 0.03%")
-            db.close()
-        except Exception as e:
-            logger.warning(f"[BUILDER FEE] Failed to check subscription status: {e}, using default fee")
-
+        # Membership removed: all users get the premium builder fee (0%) for self-hosted use.
         return {
             "b": HYPERLIQUID_BUILDER_CONFIG.builder_address,
-            "f": builder_fee
+            "f": 0
         }
 
     def _record_exchange_action(

@@ -592,6 +592,26 @@ class UserExchangeConfig(Base):
     user = relationship("User")
 
 
+class CoinGlassUserKey(Base):
+    """Store per-user CoinGlass API credentials."""
+    __tablename__ = "coinglass_user_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    api_key_encrypted = Column(Text, nullable=False)
+    key_masked = Column(String(32), nullable=True)
+    plan_level = Column(String(50), nullable=True)
+    expire_time = Column(BigInteger, nullable=True)
+    expired = Column(Boolean, nullable=True)
+    last_validated_at = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(
+        TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+    )
+
+    user = relationship("User")
+
+
 class KlineCollectionTask(Base):
     """Store K-line data collection task status"""
     __tablename__ = "kline_collection_tasks"
@@ -1434,6 +1454,65 @@ class BacktestTriggerLog(Base):
 
     # Relationships
     backtest = relationship("BacktestResult", back_populates="trigger_logs")
+
+
+# ============================================================================
+# EVENT CONTRACT BACKTEST SYSTEM
+# ============================================================================
+
+class EventContractBacktestRun(Base):
+    """5-minute event contract backtest run summary."""
+    __tablename__ = "event_contract_backtest_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    exchange = Column(String(20), nullable=False, default="binance", index=True)
+    environment = Column(String(20), nullable=False, default="mainnet", index=True)
+    period = Column(String(10), nullable=False, default="1m")
+    start_time = Column(TIMESTAMP, nullable=False, index=True)
+    end_time = Column(TIMESTAMP, nullable=False, index=True)
+    config = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    equity_curve = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="completed")
+    error_message = Column(Text, nullable=True)
+    total_trades = Column(Integer, nullable=False, default=0)
+    win_rate = Column(Float, nullable=False, default=0)
+    final_equity = Column(Float, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    trade_logs = relationship("EventContractTradeLog", back_populates="run", cascade="all, delete-orphan")
+
+
+class EventContractTradeLog(Base):
+    """Per-trade event contract settlement log."""
+    __tablename__ = "event_contract_trade_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("event_contract_backtest_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    trade_index = Column(Integer, nullable=False)
+    symbol = Column(String(20), nullable=False, index=True)
+    direction = Column(String(10), nullable=False)
+    entry_time = Column(TIMESTAMP, nullable=False, index=True)
+    entry_price = Column(Float, nullable=False)
+    expiry_time = Column(TIMESTAMP, nullable=False, index=True)
+    expiry_price = Column(Float, nullable=False)
+    result = Column(String(10), nullable=False, index=True)
+    profit_loss = Column(Float, nullable=False, default=0)
+    signal_strength = Column(Float, nullable=True)
+    ai_consensus_rate = Column(Float, nullable=True)
+    long_votes = Column(Integer, nullable=True)
+    short_votes = Column(Integer, nullable=True)
+    hold_votes = Column(Integer, nullable=True)
+    market_state = Column(String(50), nullable=True)
+    trap_risk = Column(Float, nullable=True)
+    fake_breakout_risk = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)
+    factor_snapshot = Column(Text, nullable=True)
+    ai_decision_snapshot = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    run = relationship("EventContractBacktestRun", back_populates="trade_logs")
 
 
 # ============================================================================

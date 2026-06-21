@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,26 +12,21 @@ import {
 } from '@/components/ui/select';
 import { AlertTriangle, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import {
-  placeManualOrder,
   estimateLiquidationPrice,
   calculateRequiredMargin,
-  getHyperliquidBalance,
-  getCurrentPrice,
-  getHyperliquidPositions,
-  getBinanceBalance,
-  getBinancePositions,
-  getBinancePrice,
-  placeBinanceOrder,
 } from '@/lib/hyperliquidApi';
-import type { ManualOrderRequest, HyperliquidBalance, HyperliquidPosition } from '@/lib/types/hyperliquid';
+import type { HyperliquidBalance, HyperliquidPosition } from '@/lib/types/hyperliquid';
 import { useTranslation } from 'react-i18next';
 import type { ExchangeType } from './WalletSelector';
+import { getManualTradingExchangeConfig } from './manualTradingExchanges';
+import { getManualTradingAdapter } from './manualTradingApi';
 
 interface OrderFormProps {
   accountId: number;
   environment: 'testnet' | 'mainnet';
   exchange: ExchangeType;
   availableSymbols: string[];
+  symbolsLoading?: boolean;
   maxLeverage: number;
   defaultLeverage: number;
   onOrderPlaced?: () => void;
@@ -45,12 +40,19 @@ export default function OrderForm({
   environment,
   exchange,
   availableSymbols,
+  symbolsLoading = false,
   maxLeverage,
   defaultLeverage,
   onOrderPlaced,
 }: OrderFormProps) {
   const { t } = useTranslation();
-  const [symbol, setSymbol] = useState(availableSymbols[0] || 'BTC');
+  const exchangeConfig = getManualTradingExchangeConfig(exchange);
+  const exchangeAdapter = getManualTradingAdapter(exchange);
+  const symbolOptions = useMemo(
+    () => (availableSymbols.length > 0 ? availableSymbols : exchangeConfig.defaultSymbols),
+    [availableSymbols, exchangeConfig]
+  );
+  const [symbol, setSymbol] = useState(symbolOptions[0] || 'BTC');
   const [side, setSide] = useState<OrderSide>('long');
   const [timeInForce, setTimeInForce] = useState<TimeInForce>('Ioc');
   const [size, setSize] = useState('');
@@ -66,13 +68,20 @@ export default function OrderForm({
   useEffect(() => {
     loadBalance();
     loadPositions();
-  }, [accountId, exchange]);
+  }, [accountId, environment, exchange]);
+
+  useEffect(() => {
+    if (symbolOptions.length > 0 && !symbolOptions.includes(symbol)) {
+      setSymbol(symbolOptions[0]);
+    }
+  }, [symbolOptions, symbol]);
 
   useEffect(() => {
     setLeverage(defaultLeverage);
   }, [defaultLeverage]);
 
   useEffect(() => {
+    setPrice('');
     loadCurrentPrice();
   }, [symbol, exchange]);
 
@@ -81,13 +90,11 @@ export default function OrderForm({
       const adjustedPrice = side === 'long' ? currentPrice * 1.001 : currentPrice * 0.999;
       setPrice(adjustedPrice.toFixed(2));
     }
-  }, [currentPrice, side]);
+  }, [currentPrice, side, price]);
 
   const loadBalance = async () => {
     try {
-      const data = exchange === 'hyperliquid'
-        ? await getHyperliquidBalance(accountId, environment)
-        : await getBinanceBalance(accountId, environment);
+      const data = await exchangeAdapter.getBalance(accountId, environment);
       setBalance(data);
     } catch (error) {
       console.error('Failed to load balance:', error);
@@ -96,9 +103,7 @@ export default function OrderForm({
 
   const loadCurrentPrice = async () => {
     try {
-      const priceValue = exchange === 'hyperliquid'
-        ? await getCurrentPrice(symbol)
-        : await getBinancePrice(symbol);
+      const priceValue = await exchangeAdapter.getPrice(symbol);
       setCurrentPrice(priceValue);
     } catch (error) {
       console.error('Failed to load current price:', error);
@@ -107,9 +112,7 @@ export default function OrderForm({
 
   const loadPositions = async () => {
     try {
-      const data = exchange === 'hyperliquid'
-        ? await getHyperliquidPositions(accountId, environment)
-        : await getBinancePositions(accountId, environment);
+      const data = await exchangeAdapter.getPositions(accountId, environment);
       setPositions(data.positions || []);
     } catch (error) {
       console.error('Failed to load positions:', error);
@@ -199,63 +202,27 @@ export default function OrderForm({
         }
       }
 
-      let result: any;
+      const result = await exchangeAdapter.placeOrder({
+        accountId,
+        environment,
+        symbol,
+        isBuy,
+        size: parseFloat(size),
+        price: parseFloat(price),
+        timeInForce,
+        reduceOnly: side === 'close',
+        leverage: side !== 'close' ? leverage : 1,
+        takeProfitPrice: takeProfitPrice && parseFloat(takeProfitPrice) > 0 ? parseFloat(takeProfitPrice) : undefined,
+        stopLossPrice: stopLossPrice && parseFloat(stopLossPrice) > 0 ? parseFloat(stopLossPrice) : undefined,
+      });
 
-      if (exchange === 'hyperliquid') {
-        const request: ManualOrderRequest = {
-          symbol,
-          is_buy: isBuy,
-          size: parseFloat(size),
-          price: parseFloat(price),
-          time_in_force: timeInForce,
-          reduce_only: side === 'close',
-          leverage: side !== 'close' ? leverage : 1,
-          take_profit_price: takeProfitPrice && parseFloat(takeProfitPrice) > 0 ? parseFloat(takeProfitPrice) : undefined,
-          stop_loss_price: stopLossPrice && parseFloat(stopLossPrice) > 0 ? parseFloat(stopLossPrice) : undefined,
-          environment,
-        };
-        result = await placeManualOrder(accountId, request);
-
-        const orderResult = result.order_result || result;
-        const avgPrice = orderResult.averagePrice || orderResult.average_price || orderResult.price;
-        const priceText = avgPrice ? ` @ $${avgPrice.toFixed(2)}` : '';
-        const status = orderResult.status;
-
-        if (status === 'filled') {
-          toast.success(`Order Filled! ${side.toUpperCase()} ${size} ${symbol}${priceText}`);
-        } else if (status === 'resting') {
-          toast.success(`Order Placed! ${side.toUpperCase()} ${size} ${symbol}${priceText} (waiting to fill)`);
-        } else if (status === 'error') {
-          toast.error(`Order failed: ${orderResult.error || 'Unknown error'}`);
-        } else {
-          toast.error(`Order failed: Unknown status (${status})`);
-        }
+      const priceText = result.averagePrice ? ` @ $${Number(result.averagePrice).toFixed(2)}` : '';
+      if (result.status === 'filled') {
+        toast.success(`Order Filled! ${side.toUpperCase()} ${size} ${symbol}${priceText}`);
+      } else if (result.status === 'resting') {
+        toast.success(`Order Placed! ${side.toUpperCase()} ${size} ${symbol}${priceText} (waiting to fill)`);
       } else {
-        // Binance order
-        result = await placeBinanceOrder(accountId, {
-          symbol,
-          side: isBuy ? 'BUY' : 'SELL',
-          quantity: parseFloat(size),
-          orderType: timeInForce === 'Ioc' ? 'MARKET' : 'LIMIT',
-          price: timeInForce !== 'Ioc' ? parseFloat(price) : undefined,
-          leverage: side !== 'close' ? leverage : 1,
-          reduceOnly: side === 'close',
-          takeProfitPrice: takeProfitPrice && parseFloat(takeProfitPrice) > 0 ? parseFloat(takeProfitPrice) : undefined,
-          stopLossPrice: stopLossPrice && parseFloat(stopLossPrice) > 0 ? parseFloat(stopLossPrice) : undefined,
-        }, environment);
-
-        const status = result.status;
-        const avgPrice = result.avg_price || result.price;
-        const priceText = avgPrice ? ` @ $${avgPrice.toFixed(2)}` : '';
-
-        // Unified status: "filled" or "resting" (same as Hyperliquid)
-        if (status === 'filled') {
-          toast.success(`Order Filled! ${side.toUpperCase()} ${size} ${symbol}${priceText}`);
-        } else if (status === 'resting') {
-          toast.success(`Order Placed! ${side.toUpperCase()} ${size} ${symbol}${priceText} (waiting to fill)`);
-        } else {
-          toast.error(`Order failed: ${result.error || status || 'Unknown error'}`);
-        }
+        toast.error(`Order failed: ${result.error || result.status || 'Unknown error'}`);
       }
 
       // Reset form
@@ -304,7 +271,11 @@ export default function OrderForm({
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
-          <h2 className="text-xl font-bold">{t('order.title', 'Place Hyperliquid Order (Manual)')}</h2>
+          <h2 className="text-xl font-bold">
+            {t('order.manualTitle', 'Place {{exchange}} Order (Manual)', {
+              exchange: exchangeConfig.label,
+            })}
+          </h2>
           <p className="text-sm text-gray-500">
             {t('order.description', 'Manual order placement for perpetual contracts')}
           </p>
@@ -315,12 +286,12 @@ export default function OrderForm({
           <label htmlFor="symbol" className="block text-sm font-medium">
             {t('order.symbol', 'Symbol')}
           </label>
-          <Select value={symbol} onValueChange={setSymbol}>
+          <Select value={symbol} onValueChange={setSymbol} disabled={symbolsLoading}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder={symbolsLoading ? t('common.loading', 'Loading...') : undefined} />
             </SelectTrigger>
             <SelectContent>
-              {availableSymbols.map((sym) => (
+              {symbolOptions.map((sym) => (
                 <SelectItem key={sym} value={sym}>
                   {sym}
                 </SelectItem>

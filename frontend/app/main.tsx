@@ -30,12 +30,13 @@ import SystemLogs from '@/components/layout/SystemLogs'
 import PromptManager from '@/components/prompt/PromptManager'
 import SignalManager from '@/components/signal/SignalManager'
 import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
+import BacktestTool from '@/components/backtest/BacktestTool'
 import FactorLibrary from '@/components/factor/FactorLibrary'
 import TraderManagement from '@/components/trader/TraderManagement'
 import { HyperliquidPage } from '@/components/hyperliquid'
 import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
-import PremiumFeaturesView from '@/components/premium/PremiumFeaturesView'
 import KlinesView from '@/components/klines/KlinesView'
+import CoinGlassView from '@/components/coinglass/CoinGlassView'
 import MobileModelChat from '@/components/mobile/MobileModelChat'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobilePrograms from '@/components/mobile/MobilePrograms'
@@ -43,6 +44,7 @@ import ProgramTrader from '@/components/program/ProgramTrader'
 import SettingsPage from '@/components/settings/SettingsPage'
 import { SplashScreen, HyperAiOnboarding, HyperAiPage } from '@/components/hyper-ai'
 import ArenaAssets from '@/components/arena/ArenaAssets'
+import LoginPage from '@/components/auth/LoginPage'
 // Remove CallbackPage import - handle inline
 import { AIDecision, getAccounts, checkMainnetAccounts, approveBuilder, type UnauthorizedAccount } from '@/lib/api'
 import { checkWalletUpgradeNeeded } from '@/lib/hyperliquidApi'
@@ -88,11 +90,12 @@ const PAGE_TITLES: Record<string, string> = {
   'program-trader': 'Programs',
   'signal-management': 'Signal System',
   'attribution': 'Attribution Analysis',
+  'backtest-tool': 'Backtest Tool',
   'factor-library': 'Factor Library',
   'trader-management': 'AI Trader Management',
-  'hyperliquid': 'Manual Trading',
+  'manual-trading': 'Manual Trading',
   'klines': 'K-Line Charts',
-  'premium-features': 'Premium Features',
+  'coinglass': 'CoinGlass',
   'model-chat': 'Model Chat',
   'settings': 'Settings',
   'arena-assets': 'Arena Assets',
@@ -127,6 +130,10 @@ function App() {
     setCurrentPage(page)
     window.location.hash = page
   }, [])
+
+  const normalizePageName = (pageName: string) => (
+    pageName === 'hyperliquid' ? 'manual-trading' : pageName
+  )
 
   // Hyper AI states - initialization happens during splash
   const [showSplash, setShowSplash] = useState(true)
@@ -177,8 +184,42 @@ function App() {
           const urlParams = new URLSearchParams(window.location.search)
           const sessionParam = urlParams.get('session')
 
-          const { decodeArenaSession, exchangeCodeForToken, getUserInfo } = await import('@/lib/auth')
+          const {
+            decodeArenaSession,
+            exchangeCodeForToken,
+            exchangeProviderCallbackForToken,
+            getUserInfo,
+            isProviderCallback,
+          } = await import('@/lib/auth')
           const Cookies = await import('js-cookie')
+
+          if (isProviderCallback(window.location.search)) {
+            const tokenResponse = await exchangeProviderCallbackForToken(window.location.search)
+            if (!tokenResponse?.access_token) {
+              console.error('Failed to exchange provider callback for token')
+              toast.error('Login failed: Unable to get access token')
+              window.location.href = '/login'
+              return
+            }
+
+            const userData = await getUserInfo(tokenResponse.access_token)
+            if (!userData) {
+              console.error('Failed to get user information')
+              toast.error('Login failed: Unable to get user information')
+              window.location.href = '/login'
+              return
+            }
+
+            Cookies.default.set('arena_token', tokenResponse.access_token, { expires: 7 })
+            if (tokenResponse.refresh_token) {
+              Cookies.default.set('arena_refresh_token', tokenResponse.refresh_token, { expires: 30 })
+            }
+            Cookies.default.set('arena_user', JSON.stringify(userData), { expires: 7 })
+            setAuthUser(userData)
+            toast.success('Login successful!')
+            window.location.href = '/'
+            return
+          }
 
           if (sessionParam) {
             const session = decodeArenaSession(sessionParam)
@@ -190,6 +231,9 @@ function App() {
             }
 
             Cookies.default.set('arena_token', session.token.access_token, { expires: 7 })
+            if (session.token.refresh_token) {
+              Cookies.default.set('arena_refresh_token', session.token.refresh_token, { expires: 30 })
+            }
             Cookies.default.set('arena_user', JSON.stringify(session.user), { expires: 7 })
             setAuthUser(session.user)
             toast.success('Login successful!')
@@ -245,15 +289,15 @@ function App() {
             return
           }
 
-          const accessToken = await exchangeCodeForToken(code, state || '')
-          if (!accessToken) {
+          const tokenResponse = await exchangeCodeForToken(code, state || '')
+          if (!tokenResponse?.access_token) {
             console.error('Failed to get access token')
             toast.error('Login failed: Unable to get access token')
             window.location.href = '/'
             return
           }
 
-          const userData = await getUserInfo(accessToken)
+          const userData = await getUserInfo(tokenResponse.access_token)
           if (!userData) {
             console.error('Failed to get user information')
             toast.error('Login failed: Unable to get user information')
@@ -261,7 +305,10 @@ function App() {
             return
           }
 
-          Cookies.default.set('arena_token', accessToken, { expires: 7 })
+          Cookies.default.set('arena_token', tokenResponse.access_token, { expires: 7 })
+          if (tokenResponse.refresh_token) {
+            Cookies.default.set('arena_refresh_token', tokenResponse.refresh_token, { expires: 30 })
+          }
           Cookies.default.set('arena_user', JSON.stringify(userData), { expires: 7 })
           setAuthUser(userData)
           toast.success('Login successful!')
@@ -283,7 +330,7 @@ function App() {
      */
     if (hash) {
       const hashParamIndex = hash.indexOf('?')
-      const pageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
+      const pageName = normalizePageName(hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash)
       if (PAGE_TITLES[pageName]) {
         setCurrentPage(pageName)
       }
@@ -296,7 +343,7 @@ function App() {
       const hash = window.location.hash.slice(1)
       if (hash) {
         const paramIdx = hash.indexOf('?')
-        const pageName = paramIdx !== -1 ? hash.slice(0, paramIdx) : hash
+        const pageName = normalizePageName(paramIdx !== -1 ? hash.slice(0, paramIdx) : hash)
         if (PAGE_TITLES[pageName]) setCurrentPage(pageName)
       }
     }
@@ -724,6 +771,10 @@ function App() {
   // Data ready when user and account are loaded (or non-paper mode with effectiveOverview)
   const isDataReady = !!(user && account && (effectiveOverview || tradingMode !== 'paper'))
 
+  if (window.location.pathname === '/login') {
+    return <LoginPage />
+  }
+
   // Show splash screen first (waits for both animation AND data ready)
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} isReady={isDataReady} />
@@ -821,6 +872,10 @@ function App() {
           <AttributionAnalysis />
         )}
 
+        {currentPage === 'backtest-tool' && (
+          <BacktestTool />
+        )}
+
         {currentPage === 'factor-library' && (
           <FactorLibrary />
         )}
@@ -829,7 +884,7 @@ function App() {
           <TraderManagement />
         )}
 
-        {currentPage === 'hyperliquid' && (
+        {currentPage === 'manual-trading' && (
           <HyperliquidPage accountId={account?.id || 1} />
         )}
 
@@ -837,8 +892,8 @@ function App() {
           <KlinesView onAccountUpdated={handleAccountUpdated} />
         )}
 
-        {currentPage === 'premium-features' && (
-          <PremiumFeaturesView onAccountUpdated={handleAccountUpdated} onPageChange={handlePageChange} />
+        {currentPage === 'coinglass' && (
+          <CoinGlassView />
         )}
 
         {currentPage === 'model-chat' && (

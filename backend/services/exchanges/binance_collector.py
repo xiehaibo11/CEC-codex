@@ -22,6 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from services.exchanges.binance_adapter import BinanceAdapter
+from services.exchanges.binance_constants import BINANCE_KLINE_INTERVALS
 from services.exchanges.data_persistence import ExchangeDataPersistence
 from database.connection import SessionLocal
 
@@ -31,8 +32,8 @@ logger = logging.getLogger(__name__)
 KLINE_INTERVAL_SECONDS = 60  # 1 minute
 OI_INTERVAL_SECONDS = 60  # 1 minute (using real-time API for finer granularity)
 
-# K-line periods to collect (matching Hyperliquid for consistency)
-KLINE_PERIODS = ['1m', '3m', '5m', '15m', '30m', '1h']
+# K-line periods to collect.
+KLINE_PERIODS = BINANCE_KLINE_INTERVALS
 FUNDING_INTERVAL_SECONDS = 60  # 1 minute (using premiumIndex for real-time rate)
 SENTIMENT_INTERVAL_SECONDS = 300  # 5 minutes
 ORDERBOOK_INTERVAL_SECONDS = 15  # 15 seconds

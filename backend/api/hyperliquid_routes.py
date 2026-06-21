@@ -18,7 +18,8 @@ import logging
 import time
 
 from database.connection import get_db
-from database.models import HyperliquidExchangeAction
+from database.models import HyperliquidExchangeAction, Account, User
+from api.auth_dependencies import get_current_user, get_account_for_current_user, require_path_account_owner
 from services.hyperliquid_environment import (
     setup_hyperliquid_account,
     get_hyperliquid_client,
@@ -42,7 +43,11 @@ from utils.runtime_diagnostics import get_current_thread_count, log_hot_path_del
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/hyperliquid", tags=["hyperliquid"])
+router = APIRouter(
+    prefix="/api/hyperliquid",
+    tags=["hyperliquid"],
+    dependencies=[Depends(require_path_account_owner)],
+)
 
 
 def _ts_to_iso(ts: float) -> str:
@@ -579,6 +584,7 @@ def update_symbol_watchlist(payload: HyperliquidSymbolSelectionRequest):
 def get_action_summary(
     window_minutes: int = 1440,
     account_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -600,7 +606,14 @@ def get_action_summary(
         ).filter(HyperliquidExchangeAction.created_at >= cutoff)
 
         if account_id is not None:
+            get_account_for_current_user(account_id, current_user, db, active_only=False)
             query = query.filter(HyperliquidExchangeAction.account_id == account_id)
+        else:
+            owned_account_ids = db.query(Account.id).filter(
+                Account.user_id == current_user.id,
+                Account.is_deleted != True,
+            ).subquery()
+            query = query.filter(HyperliquidExchangeAction.account_id.in_(owned_account_ids))
 
         rows = query.group_by(HyperliquidExchangeAction.action_type).all()
         total_actions = sum(row.count for row in rows)
@@ -1310,7 +1323,10 @@ def set_trading_mode(
 
 
 @router.get("/wallets/all")
-def get_all_wallets(db: Session = Depends(get_db)):
+def get_all_wallets(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Get all Hyperliquid wallets (both testnet and mainnet) across all AI Trader accounts
 
@@ -1326,7 +1342,9 @@ def get_all_wallets(db: Session = Depends(get_db)):
         wallets = db.query(HyperliquidWallet, Account).join(
             Account, HyperliquidWallet.account_id == Account.id
         ).filter(
-            Account.is_active == "true"
+            Account.user_id == current_user.id,
+            Account.is_active == "true",
+            Account.is_deleted != True,
         ).order_by(
             Account.name.asc(),
             HyperliquidWallet.environment.asc()
@@ -1710,7 +1728,10 @@ def get_agent_wallet_status(
 
 
 @router.get("/wallet-upgrade-check")
-def check_wallet_upgrade_needed(db: Session = Depends(get_db)):
+def check_wallet_upgrade_needed(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Check which wallets still use legacy private_key mode and should be upgraded.
     Returns list of wallets that need upgrade (for showing upgrade modal).
@@ -1722,6 +1743,7 @@ def check_wallet_upgrade_needed(db: Session = Depends(get_db)):
             Account, HyperliquidWallet.account_id == Account.id
         ).filter(
             HyperliquidWallet.is_active == "true",
+            Account.user_id == current_user.id,
             Account.is_deleted != True,
         ).all()
 

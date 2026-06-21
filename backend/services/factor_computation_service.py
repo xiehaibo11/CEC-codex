@@ -67,10 +67,10 @@ class FactorComputationService:
             symbols = self._get_symbols_for_exchange(db, exchange)
             if not symbols:
                 self._progress = {"status": "idle"}
-                return {"computed": 0, "exchange": exchange}
+                return {"computed": 0, "exchange": exchange, "period": period}
             total = len(symbols)
             self._progress = {
-                "status": "running", "phase": "values",
+                "status": "running", "phase": "values", "period": period,
                 "completed": 0, "total": total, "current_symbol": "",
             }
             count = 0
@@ -84,7 +84,7 @@ class FactorComputationService:
                     logger.warning(f"[FactorEngine] {exchange}/{symbol} err: {e}")
             self._progress = {"status": "idle"}
             self._last_compute_time[exchange] = time.time()
-            return {"computed": count, "exchange": exchange}
+            return {"computed": count, "exchange": exchange, "period": period}
         finally:
             db.close()
 

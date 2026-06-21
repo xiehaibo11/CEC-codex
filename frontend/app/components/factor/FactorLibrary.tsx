@@ -3,21 +3,51 @@ import { useTranslation } from 'react-i18next'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { apiRequest, getHyperliquidWatchlist, getBinanceWatchlist } from '@/lib/api'
+import { apiRequest, getHyperliquidWatchlist } from '@/lib/api'
 import { RefreshCw, Info, CheckCircle2, ArrowUpDown, FlaskConical, Plus, Trash2, Pencil, BarChart3 } from 'lucide-react'
 import FactorAnalysisDialog from './FactorAnalysisDialog'
-import ExchangeIcon from '@/components/exchange/ExchangeIcon'
 import PacmanLoader from '@/components/ui/pacman-loader'
-import type { ExchangeId } from '@/lib/types/exchange'
 
-const EXCHANGES: ExchangeId[] = ['hyperliquid', 'binance']
+const KLINE_PERIODS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '12h', '1d', '3d', '1w', '1M']
 const FORWARD_PERIODS = ['1h', '4h', '12h', '24h']
+const KLINE_PERIOD_SECONDS: Record<string, number> = {
+  '1m': 60,
+  '3m': 3 * 60,
+  '5m': 5 * 60,
+  '15m': 15 * 60,
+  '30m': 30 * 60,
+  '1h': 60 * 60,
+  '2h': 2 * 60 * 60,
+  '4h': 4 * 60 * 60,
+  '8h': 8 * 60 * 60,
+  '12h': 12 * 60 * 60,
+  '1d': 24 * 60 * 60,
+  '3d': 3 * 24 * 60 * 60,
+  '1w': 7 * 24 * 60 * 60,
+  '1M': 30 * 24 * 60 * 60,
+}
+const FORWARD_PERIOD_SECONDS: Record<string, number> = {
+  '1h': 60 * 60,
+  '4h': 4 * 60 * 60,
+  '12h': 12 * 60 * 60,
+  '24h': 24 * 60 * 60,
+}
+
+function getCompatibleForwardPeriods(period: string) {
+  const periodSeconds = KLINE_PERIOD_SECONDS[period]
+  if (!periodSeconds) return FORWARD_PERIODS
+  return FORWARD_PERIODS.filter((fp) => {
+    const forwardSeconds = FORWARD_PERIOD_SECONDS[fp]
+    return forwardSeconds >= periodSeconds && forwardSeconds % periodSeconds === 0
+  })
+}
 
 // Function categories for the picker in Custom Factor dialog
 const FUNC_CATEGORIES: { key: string; en: string; zh: string; fns: string[] }[] = [
@@ -89,11 +119,12 @@ export default function FactorLibrary() {
   const { t, i18n } = useTranslation()
   const isZh = i18n.language?.startsWith('zh')
 
-  const [exchange, setExchange] = useState<ExchangeId>('hyperliquid')
+  const exchange = 'hyperliquid'
   const [symbol, setSymbol] = useState('')
   const [symbols, setSymbols] = useState<string[]>([])
-  const [period] = useState('1h')
+  const [period, setPeriod] = useState('1h')
   const [forwardPeriod, setForwardPeriod] = useState('4h')
+  const [computeAllPeriods, setComputeAllPeriods] = useState(true)
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [library, setLibrary] = useState<{ factors: FactorDef[]; categories: string[]; category_labels: any }>()
   const [values, setValues] = useState<any[]>([])
@@ -134,9 +165,7 @@ export default function FactorLibrary() {
   useEffect(() => {
     const load = async () => {
       try {
-        const data = exchange === 'binance'
-          ? await getBinanceWatchlist()
-          : await getHyperliquidWatchlist()
+        const data = await getHyperliquidWatchlist()
         const syms = data.symbols || []
         setSymbols(syms)
         if (syms.length > 0 && !syms.includes(symbol)) setSymbol(syms[0])
@@ -163,6 +192,14 @@ export default function FactorLibrary() {
   }, [symbol, period, exchange, forwardPeriod])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const compatibleForwardPeriods = useMemo(() => getCompatibleForwardPeriods(period), [period])
+
+  useEffect(() => {
+    if (compatibleForwardPeriods.length > 0 && !compatibleForwardPeriods.includes(forwardPeriod)) {
+      setForwardPeriod(compatibleForwardPeriods[0])
+    }
+  }, [compatibleForwardPeriods, forwardPeriod])
 
   const loadCustomFactors = useCallback(async () => {
     try {
@@ -202,7 +239,7 @@ export default function FactorLibrary() {
     try {
       const res = await apiRequest('/factors/evaluate', {
         method: 'POST',
-        body: JSON.stringify({ expression: expression.trim(), symbol, exchange, period: '1h' }),
+        body: JSON.stringify({ expression: expression.trim(), symbol, exchange, period }),
       }).then(r => r.json())
       if (res.status === 'error') setEvalError(translateError(res.error, isZh ? 'zh' : 'en'))
       else setEvalResult(res)
@@ -273,6 +310,13 @@ export default function FactorLibrary() {
     return () => clearInterval(interval)
   }, [lastComputeTime])
 
+  const loadComputeEstimate = useCallback(async (allPeriods: boolean = computeAllPeriods) => {
+    const params = new URLSearchParams({ exchange, period })
+    if (allPeriods) params.set('all_periods', 'true')
+    const est = await apiRequest(`/factors/compute/estimate?${params.toString()}`).then(r => r.json())
+    setComputeEstimate(est)
+  }, [exchange, period, computeAllPeriods])
+
   const handleComputeClick = async () => {
     setComputeDialogOpen(true)
     setDialogStep('confirm')
@@ -280,8 +324,16 @@ export default function FactorLibrary() {
     setComputeProgress(null)
     setComputeEstimate(null)
     try {
-      const est = await apiRequest(`/factors/compute/estimate?exchange=${exchange}`).then(r => r.json())
-      setComputeEstimate(est)
+      await loadComputeEstimate(computeAllPeriods)
+    } catch { /* ignore */ }
+  }
+
+  const handleComputeAllPeriodsChange = async (checked: boolean | 'indeterminate') => {
+    const next = checked === true
+    setComputeAllPeriods(next)
+    setComputeEstimate(null)
+    try {
+      await loadComputeEstimate(next)
     } catch { /* ignore */ }
   }
 
@@ -291,7 +343,7 @@ export default function FactorLibrary() {
     setComputeProgress(null)
     try {
       const startRes = await apiRequest('/factors/compute', {
-        method: 'POST', body: JSON.stringify({ exchange, period }),
+        method: 'POST', body: JSON.stringify({ exchange, period, all_periods: computeAllPeriods }),
       }).then(r => r.json())
       if (startRes.status === 'already_running') {
         setComputeResult({ error: t('factors.alreadyRunning') })
@@ -368,28 +420,6 @@ export default function FactorLibrary() {
       <div className="flex flex-col flex-1 min-h-0 space-y-3">
         {/* Controls row */}
         <div className="flex items-end gap-3 flex-wrap">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">{t('factors.exchange')}</label>
-            <Select value={exchange} onValueChange={(v) => setExchange(v as ExchangeId)}>
-              <SelectTrigger className="w-36">
-                <div className="flex items-center gap-2">
-                  <ExchangeIcon exchangeId={exchange} size={16} />
-                  <span className="capitalize">{exchange}</span>
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {EXCHANGES.map(e => (
-                  <SelectItem key={e} value={e}>
-                    <div className="flex items-center gap-2">
-                      <ExchangeIcon exchangeId={e} size={16} />
-                      <span className="capitalize">{e}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {symbols.length > 0 ? (
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">Symbol</label>
@@ -408,19 +438,47 @@ export default function FactorLibrary() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <label className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
+                  {t('factors.klinePeriodLabel')}
+                  <Info className="h-3 w-3" />
+                </label>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs max-w-[240px]">{t('factors.klinePeriodHint')}</p></TooltipContent>
+            </Tooltip>
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {KLINE_PERIODS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <label className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
                   {t('factors.forwardPeriodLabel')}
                   <Info className="h-3 w-3" />
                 </label>
               </TooltipTrigger>
               <TooltipContent><p className="text-xs max-w-[200px]">{t('factors.forwardPeriodHint')}</p></TooltipContent>
             </Tooltip>
-            <Select value={forwardPeriod} onValueChange={setForwardPeriod}>
+            <Select value={forwardPeriod} onValueChange={setForwardPeriod} disabled={compatibleForwardPeriods.length === 0}>
               <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {FORWARD_PERIODS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                {FORWARD_PERIODS.map(p => (
+                  <SelectItem key={p} value={p} disabled={!compatibleForwardPeriods.includes(p)}>{p}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+
+          <span className="text-xs text-muted-foreground self-end pb-1">
+            {t('factors.predictionWindowsSummary', {
+              windows: compatibleForwardPeriods.length > 0
+                ? compatibleForwardPeriods.join(', ')
+                : t('factors.noCompatibleWindows'),
+            })}
+          </span>
 
           <Button variant="outline" size="sm" className="self-end" disabled={computing || !symbol}
             onClick={handleComputeClick}>
@@ -448,12 +506,28 @@ export default function FactorLibrary() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>{t('factors.computeConfirmTitle')}</DialogTitle>
-              <DialogDescription>{exchange} / {period} K-line</DialogDescription>
+              <DialogDescription className="space-y-1">
+                <span className="block">
+                  {t('factors.estimateKlinePeriods')}: {(computeEstimate?.kline_periods || (computeAllPeriods ? KLINE_PERIODS : [period])).join(', ')}
+                </span>
+                <span className="block">{t('factors.predictionWindowsSummary', { windows: computeEstimate?.forward_periods?.join(', ') || FORWARD_PERIODS.join(', ') })}</span>
+              </DialogDescription>
             </DialogHeader>
             {dialogStep === 'confirm' && (
               <>
                 <div className="py-4 space-y-3">
                   <p className="text-sm">{t('factors.confirmCompute')}</p>
+                  <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+                    <Checkbox
+                      id="compute-all-kline-periods"
+                      checked={computeAllPeriods}
+                      onCheckedChange={handleComputeAllPeriodsChange}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="compute-all-kline-periods" className="text-xs leading-5 cursor-pointer">
+                      {t('factors.computeAllKlinePeriods')}
+                    </label>
+                  </div>
                   {computeEstimate && (
                     <div className="rounded-md bg-muted p-3 space-y-2 text-xs">
                       <div>
@@ -464,6 +538,7 @@ export default function FactorLibrary() {
                           ))}
                         </div>
                       </div>
+                      <p>{t('factors.estimateKlinePeriods')}: <span className="font-medium">{computeEstimate.kline_periods?.join(', ') || computeEstimate.kline_period || computeEstimate.period || period}</span></p>
                       <p>{t('factors.estimateFactors')}: <span className="font-medium">{computeEstimate.factor_count}</span></p>
                       <p>{t('factors.estimateWindows')}: <span className="font-medium">{computeEstimate.forward_periods?.join(', ')}</span></p>
                       <p>{t('factors.estimateTime')}: <span className="font-medium">~{Math.max(1, Math.ceil((computeEstimate.estimated_seconds || 0) / 60))} min</span></p>
@@ -488,7 +563,7 @@ export default function FactorLibrary() {
                     <div className="w-full space-y-2">
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>{computeProgress.phase === 'values' ? t('factors.phaseValues') : t('factors.phaseEffectiveness')}</span>
-                        <span>{computeProgress.current_symbol} ({computeProgress.completed}/{computeProgress.total})</span>
+                        <span>{computeProgress.period ? `${computeProgress.period} / ` : ''}{computeProgress.current_symbol} ({computeProgress.completed}/{computeProgress.total})</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div className="bg-primary h-2 rounded-full transition-all duration-500"
@@ -521,6 +596,7 @@ export default function FactorLibrary() {
                       <CheckCircle2 className="h-8 w-8 text-green-500" />
                       <p className="text-sm font-medium">{t('factors.computeSuccess')}</p>
                       <div className="text-xs text-muted-foreground space-y-1">
+                        <p>{t('factors.estimateKlinePeriods')}: {(computeResult?.kline_periods || [computeResult?.period || period]).join(', ')}</p>
                         <p>{t('factors.resultSymbols')}: {computeResult?.values_computed ?? 0}</p>
                         <p>{t('factors.resultEffectiveness')}: {computeResult?.effectiveness_computed ?? 0}</p>
                       </div>
@@ -547,35 +623,23 @@ export default function FactorLibrary() {
             </DialogHeader>
 
             <div className="space-y-4">
-              {/* Target: exchange + symbol */}
+              {/* Target: symbol + period */}
               <div className="flex gap-3 items-end">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-muted-foreground">{t('factors.exchange')}</label>
-                  <Select value={exchange} onValueChange={(v) => setExchange(v as ExchangeId)}>
-                    <SelectTrigger className="w-36">
-                      <div className="flex items-center gap-2">
-                        <ExchangeIcon exchangeId={exchange} size={16} />
-                        <span className="capitalize">{exchange}</span>
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXCHANGES.map(e => (
-                        <SelectItem key={e} value={e}>
-                          <div className="flex items-center gap-2">
-                            <ExchangeIcon exchangeId={e} size={16} />
-                            <span className="capitalize">{e}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-muted-foreground">Symbol</label>
                   <Select value={symbol} onValueChange={setSymbol}>
                     <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {symbols.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">{t('factors.klinePeriodLabel')}</label>
+                  <Select value={period} onValueChange={setPeriod}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {KLINE_PERIODS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -719,7 +783,7 @@ export default function FactorLibrary() {
               <TableRow>
                 <TableHead>{t('factors.name')}</TableHead>
                 <TableHead>{t('factors.category')}</TableHead>
-                <TableHead className="text-right">{t('factors.value')} (1h K-line)</TableHead>
+                <TableHead className="text-right">{t('factors.value')} ({t('factors.baseKline')}: {period})</TableHead>
                 <TableHead className="text-right">
                   <Tooltip>
                     <TooltipTrigger asChild>

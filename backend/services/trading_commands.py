@@ -50,16 +50,8 @@ ORACLE_PRICE_DEVIATION_LIMIT_PERCENT = 1.0
 
 
 def _is_premium_user(db: Session) -> bool:
-    """Check if there is a premium member currently logged in"""
-    try:
-        subscription = db.query(UserSubscription).join(User).filter(
-            User.username != 'default',
-            UserSubscription.subscription_type == 'premium'
-        ).first()
-        return subscription is not None
-    except Exception as e:
-        logger.warning(f"Failed to check premium status: {e}")
-        return False
+    """Membership removed: all features unlocked for self-hosted use."""
+    return True
 
 
 def _check_binance_daily_quota(db: Session, account_id: int) -> Tuple[bool, Dict[str, int]]:

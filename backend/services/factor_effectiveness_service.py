@@ -2,12 +2,13 @@
 Factor Effectiveness Service
 
 Computes IC (Information Coefficient) time series using sliding window approach.
-For each factor, slides a 30-day (720-bar) window over full K-line history,
+For each factor, slides a 720-bar window over full K-line history,
 computing IC at each daily position. This produces a complete historical IC
 time series immediately — no need to wait for daily accumulation.
 
 Architecture:
-  - _compute_factor_windowed(): Core method. Slides 720-bar window with 24-bar step.
+  - _compute_factor_windowed(): Core method. Slides a 720-bar window with 24-bar step
+    (on 1h K-lines this is a 30-day window with a 1-day step).
     Each window produces one IC value via fast numpy rank correlation (_calc_ic_fast).
     ICIR is computed ACROSS windows (trailing 30-day mean(IC)/std(IC)), which is
     the standard quant definition. Supports force mode (full overwrite) for manual
@@ -40,6 +41,7 @@ from database.connection import SessionLocal
 from services.factor_registry import FACTOR_REGISTRY
 from services.technical_indicators import calculate_indicators
 from services.scheduler import task_scheduler
+from services.factor_timeframes import get_forward_period_offsets, period_to_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,7 @@ class FactorEffectivenessService:
         total = len(symbols)
         self._progress = {
             "status": "running", "phase": "effectiveness",
+            "period": period,
             "symbol_completed": 0, "symbol_total": total,
             "current_symbol": "", "current_factor": "",
             "factor_completed": 0, "factor_total": 0,
@@ -111,7 +114,7 @@ class FactorEffectivenessService:
         db.commit()
         self._progress = {"status": "idle"}
         print(f"[FactorEffectiveness] {exchange}: {count} records", flush=True)
-        return {"computed": count, "exchange": exchange}
+        return {"computed": count, "exchange": exchange, "period": period}
 
     def compute_single_factor(self, db: Session, exchange: str, factor_name: str) -> dict:
         """Public API: Compute one factor across all watchlist symbols.
@@ -158,7 +161,7 @@ class FactorEffectivenessService:
                                   if f["compute_type"] == "technical"})
                 indicators = calculate_indicators(klines, tech_keys)
                 fvals = self._extract_full_series(
-                    builtin_def, indicators, klines, n_bars, db, symbol, exchange)
+                    builtin_def, indicators, klines, n_bars, db, symbol, exchange, "1h")
                 if fvals is None:
                     continue
                 category = builtin_def["category"]
@@ -225,7 +228,7 @@ class FactorEffectivenessService:
         factor_series: Dict[str, List[Optional[float]]] = {}
         for fdef in FACTOR_REGISTRY:
             series = self._extract_full_series(
-                fdef, indicators, klines, n_bars, db, symbol, exchange)
+                fdef, indicators, klines, n_bars, db, symbol, exchange, period)
             if series is not None:
                 factor_series[fdef["name"]] = (series, fdef["category"])
 
@@ -255,7 +258,8 @@ class FactorEffectivenessService:
         )
         return count
 
-    def _extract_full_series(self, factor_def, indicators, klines, n_bars, db=None, symbol=None, exchange=None):
+    def _extract_full_series(self, factor_def, indicators, klines, n_bars,
+                             db=None, symbol=None, exchange=None, period="1h"):
         """Extract a complete factor value series (vectorized). Returns list or None."""
         ctype = factor_def["compute_type"]
 
@@ -267,20 +271,20 @@ class FactorEffectivenessService:
 
         if ctype == "microstructure" and db and symbol:
             return self._extract_microstructure_series(
-                factor_def, klines, db, symbol, exchange or "hyperliquid"
+                factor_def, klines, db, symbol, exchange or "hyperliquid", period
             )
 
         return None
 
-    def _extract_microstructure_series(self, factor_def, klines, db, symbol, exchange):
+    def _extract_microstructure_series(self, factor_def, klines, db, symbol, exchange, period):
         """Extract historical series for microstructure factors aligned to kline timestamps."""
         from sqlalchemy import text
 
         indicator_key = factor_def.get("indicator_key", "")
-        # Build hourly timestamp list from klines (ms)
+        # Build timestamp list from klines (ms), aligned to the selected K-line period.
         ts_list = [int(k["timestamp"]) * 1000 if k["timestamp"] < 1e12 else int(k["timestamp"]) for k in klines]
-        hour_ms = 3600 * 1000
-        ts_min, ts_max = ts_list[0], ts_list[-1] + hour_ms
+        interval_ms = period_to_seconds(period) * 1000
+        ts_min, ts_max = ts_list[0], ts_list[-1] + interval_ms
 
         if indicator_key == "OI_DELTA":
             rows = db.execute(text("""
@@ -291,7 +295,7 @@ class FactorEffectivenessService:
             """), {"s": symbol, "e": exchange, "tmin": ts_min, "tmax": ts_max}).fetchall()
             if len(rows) < 10:
                 return None
-            return self._align_flow_to_klines_delta(rows, ts_list, hour_ms, col_idx=1)
+            return self._align_flow_to_klines_delta(rows, ts_list, interval_ms, col_idx=1)
 
         if indicator_key == "FUNDING":
             rows = db.execute(text("""
@@ -302,7 +306,7 @@ class FactorEffectivenessService:
             """), {"s": symbol, "e": exchange, "tmin": ts_min, "tmax": ts_max}).fetchall()
             if len(rows) < 10:
                 return None
-            return self._align_flow_to_klines_avg(rows, ts_list, hour_ms, col_idx=1)
+            return self._align_flow_to_klines_avg(rows, ts_list, interval_ms, col_idx=1)
 
         if indicator_key in ("CVD", "TAKER"):
             rows = db.execute(text("""
@@ -315,9 +319,9 @@ class FactorEffectivenessService:
             if len(rows) < 10:
                 return None
             if indicator_key == "CVD":
-                return self._align_flow_to_klines_cvd(rows, ts_list, hour_ms)
+                return self._align_flow_to_klines_cvd(rows, ts_list, interval_ms)
             else:
-                return self._align_flow_to_klines_taker_ratio(rows, ts_list, hour_ms)
+                return self._align_flow_to_klines_taker_ratio(rows, ts_list, interval_ms)
 
         if indicator_key == "DEPTH":
             rows = db.execute(text("""
@@ -329,12 +333,12 @@ class FactorEffectivenessService:
             """), {"s": symbol, "e": exchange, "tmin": ts_min, "tmax": ts_max}).fetchall()
             if len(rows) < 10:
                 return None
-            return self._align_flow_to_klines_depth(rows, ts_list, hour_ms)
+            return self._align_flow_to_klines_depth(rows, ts_list, interval_ms)
 
         return None
 
-    def _align_flow_to_klines_avg(self, rows, ts_list, hour_ms, col_idx):
-        """Average value per kline hour bucket."""
+    def _align_flow_to_klines_avg(self, rows, ts_list, interval_ms, col_idx):
+        """Average value per selected K-line bucket."""
         result = []
         row_idx = 0
         n_rows = len(rows)
@@ -343,7 +347,7 @@ class FactorEffectivenessService:
             while row_idx < n_rows and rows[row_idx][0] < ts:
                 row_idx += 1
             j = row_idx
-            while j < n_rows and rows[j][0] < ts + hour_ms:
+            while j < n_rows and rows[j][0] < ts + interval_ms:
                 v = rows[j][col_idx]
                 if v is not None:
                     vals.append(float(v))
@@ -351,8 +355,8 @@ class FactorEffectivenessService:
             result.append(sum(vals) / len(vals) if vals else None)
         return result
 
-    def _align_flow_to_klines_delta(self, rows, ts_list, hour_ms, col_idx):
-        """Percentage change of value over each kline hour."""
+    def _align_flow_to_klines_delta(self, rows, ts_list, interval_ms, col_idx):
+        """Percentage change of value over each selected K-line bucket."""
         result = []
         row_idx = 0
         n_rows = len(rows)
@@ -362,7 +366,7 @@ class FactorEffectivenessService:
             start_val = None
             end_val = None
             j = row_idx
-            while j < n_rows and rows[j][0] < ts + hour_ms:
+            while j < n_rows and rows[j][0] < ts + interval_ms:
                 v = rows[j][col_idx]
                 if v is not None:
                     fv = float(v)
@@ -376,8 +380,8 @@ class FactorEffectivenessService:
                 result.append(None)
         return result
 
-    def _align_flow_to_klines_cvd(self, rows, ts_list, hour_ms):
-        """Cumulative volume delta per hour: sum(buy - sell)."""
+    def _align_flow_to_klines_cvd(self, rows, ts_list, interval_ms):
+        """Cumulative volume delta per selected K-line bucket: sum(buy - sell)."""
         result = []
         row_idx = 0
         n_rows = len(rows)
@@ -387,7 +391,7 @@ class FactorEffectivenessService:
             while row_idx < n_rows and rows[row_idx][0] < ts:
                 row_idx += 1
             j = row_idx
-            while j < n_rows and rows[j][0] < ts + hour_ms:
+            while j < n_rows and rows[j][0] < ts + interval_ms:
                 buy = float(rows[j][1] or 0)
                 sell = float(rows[j][2] or 0)
                 cvd += buy - sell
@@ -396,8 +400,8 @@ class FactorEffectivenessService:
             result.append(cvd if count > 0 else None)
         return result
 
-    def _align_flow_to_klines_taker_ratio(self, rows, ts_list, hour_ms):
-        """Taker buy ratio per hour: sum(buy) / sum(buy+sell)."""
+    def _align_flow_to_klines_taker_ratio(self, rows, ts_list, interval_ms):
+        """Taker buy ratio per selected K-line bucket: sum(buy) / sum(buy+sell)."""
         result = []
         row_idx = 0
         n_rows = len(rows)
@@ -408,7 +412,7 @@ class FactorEffectivenessService:
             while row_idx < n_rows and rows[row_idx][0] < ts:
                 row_idx += 1
             j = row_idx
-            while j < n_rows and rows[j][0] < ts + hour_ms:
+            while j < n_rows and rows[j][0] < ts + interval_ms:
                 total_buy += float(rows[j][1] or 0)
                 total_sell += float(rows[j][2] or 0)
                 count += 1
@@ -417,8 +421,8 @@ class FactorEffectivenessService:
             result.append(total_buy / total if total > 0 and count > 0 else None)
         return result
 
-    def _align_flow_to_klines_depth(self, rows, ts_list, hour_ms):
-        """Average depth ratio per hour: bid_depth / ask_depth."""
+    def _align_flow_to_klines_depth(self, rows, ts_list, interval_ms):
+        """Average depth ratio per selected K-line bucket: bid_depth / ask_depth."""
         result = []
         row_idx = 0
         n_rows = len(rows)
@@ -427,7 +431,7 @@ class FactorEffectivenessService:
             while row_idx < n_rows and rows[row_idx][0] < ts:
                 row_idx += 1
             j = row_idx
-            while j < n_rows and rows[j][0] < ts + hour_ms:
+            while j < n_rows and rows[j][0] < ts + interval_ms:
                 bid = float(rows[j][1] or 0)
                 ask = float(rows[j][2] or 0)
                 if ask > 0:
@@ -529,10 +533,13 @@ class FactorEffectivenessService:
         Performance: ~0.05ms per _calc_ic_fast call (pure numpy rank correlation)
         vs ~5ms for old _calc_metrics (scipy + pandas rolling). See module docstring.
         """
-        WINDOW_BARS = 720   # 30 days of 1h bars
-        SLIDE_BARS = 24     # slide by 1 day
-        FORWARD_PERIODS = {"1h": 1, "4h": 4, "12h": 12, "24h": 24}
+        WINDOW_BARS = 720   # bars in each IC window
+        SLIDE_BARS = 24     # slide by 24 bars
+        FORWARD_PERIODS = get_forward_period_offsets(period)
         ICIR_TRAILING = 30  # trailing window count for ICIR computation
+
+        if not FORWARD_PERIODS:
+            return 0
 
         if n_bars < WINDOW_BARS:
             if n_bars < 50:

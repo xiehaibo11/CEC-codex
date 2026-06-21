@@ -76,9 +76,13 @@ MIGRATIONS = [
     "add_agent_wallet_fields.py",
     "create_custom_factors_table.py",
     "insert_builtin_expression_factors.py",
+    "create_event_contract_backtest_tables.py",
+    "add_event_contract_audit_fields.py",
+    "add_event_contract_signal_fields.py",
     "create_news_articles_table.py",
     "add_large_order_fields.py",
     "add_news_image_url.py",
+    "create_coinglass_user_keys.py",
 ]
 
 

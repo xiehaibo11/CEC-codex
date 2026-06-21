@@ -72,16 +72,8 @@ class ProgramExecutionService:
         logger.info("[ProgramExecution] Service initialized")
 
     def _is_premium_user(self, db) -> bool:
-        """Check if current logged-in user is a premium member"""
-        try:
-            subscription = db.query(UserSubscription).join(User).filter(
-                User.username != 'default',
-                UserSubscription.subscription_type == 'premium'
-            ).first()
-            return subscription is not None
-        except Exception as e:
-            logger.warning(f"Failed to check premium status: {e}")
-            return False
+        """Membership removed: all features unlocked for self-hosted use."""
+        return True
 
     def _check_binance_daily_quota(self, db, account_id: int) -> Tuple[bool, Dict[str, int]]:
         """Check if Binance mainnet daily quota is exceeded."""

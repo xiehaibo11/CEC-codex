@@ -10,10 +10,8 @@ import { ChevronDown, ChevronRight, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useTranslation } from 'react-i18next'
-import HyperliquidWalletSection from './HyperliquidWalletSection'
 import BinanceWalletSection from './BinanceWalletSection'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
-import { getAccountWallet } from '@/lib/hyperliquidApi'
 
 interface ExchangeWalletsPanelProps {
   accountId: number
@@ -22,7 +20,6 @@ interface ExchangeWalletsPanelProps {
 }
 
 interface ExchangeStatus {
-  hyperliquid: { testnet: boolean; mainnet: boolean }
   binance: { testnet: boolean; mainnet: boolean }
 }
 
@@ -48,7 +45,6 @@ export default function ExchangeWalletsPanel({
   const { t } = useTranslation()
   const [openSections, setOpenSections] = useState<string[]>([])
   const [status, setStatus] = useState<ExchangeStatus>({
-    hyperliquid: { testnet: false, mainnet: false },
     binance: { testnet: false, mainnet: false }
   })
 
@@ -58,20 +54,6 @@ export default function ExchangeWalletsPanel({
   }, [accountId])
 
   const loadAllStatuses = async () => {
-    // Load Hyperliquid status
-    try {
-      const hlInfo = await getAccountWallet(accountId)
-      setStatus(prev => ({
-        ...prev,
-        hyperliquid: {
-          testnet: !!hlInfo.testnetWallet,
-          mainnet: !!hlInfo.mainnetWallet
-        }
-      }))
-    } catch (error) {
-      console.error('Failed to load Hyperliquid status:', error)
-    }
-
     // Load Binance status
     try {
       const res = await fetch(`/api/binance/accounts/${accountId}/config`)
@@ -193,7 +175,6 @@ export default function ExchangeWalletsPanel({
       </div>
 
       <div className="space-y-2">
-        {renderExchangeSection('hyperliquid', 'Hyperliquid', status.hyperliquid, HyperliquidWalletSection)}
         {renderExchangeSection('binance', 'Binance Futures', status.binance, BinanceWalletSection)}
       </div>
     </div>

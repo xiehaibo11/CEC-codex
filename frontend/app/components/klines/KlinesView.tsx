@@ -23,9 +23,27 @@ interface MarketData {
   funding_rate: number
 }
 
+const KLINE_PERIODS = [
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '2h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '3d',
+  '1w',
+  '1M',
+]
+
 export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
   const { t } = useTranslation()
-  const [selectedExchange, setSelectedExchange] = useState<'hyperliquid' | 'binance'>('hyperliquid')
+  const selectedExchange = 'binance' as const
   const collectionDays = useCollectionDays(selectedExchange)
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTC')
   const [selectedPeriod, setSelectedPeriod] = useState<string>('1m')
@@ -42,37 +60,29 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
 
   const marketDataIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Flow indicator availability based on exchange and period
-  const getFlowIndicatorAvailability = (exchange: string, period: string) => {
+  const getFlowIndicatorAvailability = (period: string) => {
     // Period to minutes mapping
     const periodMinutes: Record<string, number> = {
       '1m': 1, '3m': 3, '5m': 5, '15m': 15, '30m': 30,
-      '1h': 60, '2h': 120, '4h': 240, '8h': 480, '12h': 720,
+      '1h': 60, '2h': 120, '4h': 240, '6h': 360, '8h': 480, '12h': 720,
       '1d': 1440, '3d': 4320, '1w': 10080, '1M': 43200
     }
     const minutes = periodMinutes[period] || 1
 
-    if (exchange === 'binance') {
-      return {
-        cvd: true,
-        taker_volume: true,
-        // OI: Binance historical API only supports 5m+, real-time collection started recently
-        oi: minutes >= 5,
-        oi_delta: minutes >= 5,
-        // Funding: Now collected every minute via premiumIndex API
-        funding: true,
-        depth_ratio: true,
-        order_imbalance: true
-      }
-    }
-    // Hyperliquid: all indicators available at all periods
     return {
-      cvd: true, taker_volume: true, oi: true, oi_delta: true,
-      funding: true, depth_ratio: true, order_imbalance: true
+      cvd: true,
+      taker_volume: true,
+      // OI: Binance historical API only supports 5m+, real-time collection started recently
+      oi: minutes >= 5,
+      oi_delta: minutes >= 5,
+      // Funding: Now collected every minute via premiumIndex API
+      funding: true,
+      depth_ratio: true,
+      order_imbalance: true
     }
   }
 
-  const flowAvailability = getFlowIndicatorAvailability(selectedExchange, selectedPeriod)
+  const flowAvailability = getFlowIndicatorAvailability(selectedPeriod)
 
   // 页面可见性监听
   useEffect(() => {
@@ -140,10 +150,7 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
 
   const fetchWatchlist = async () => {
     try {
-      const endpoint = selectedExchange === 'binance'
-        ? '/api/binance/symbols/watchlist'
-        : '/api/hyperliquid/symbols/watchlist'
-      const response = await fetch(endpoint)
+      const response = await fetch('/api/binance/symbols/watchlist')
       const data = await response.json()
       const symbols = data.symbols || []
       setWatchlistSymbols(symbols)
@@ -174,30 +181,9 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
       <div className="flex flex-col flex-1 md:flex-[7] min-w-0 space-y-4 overflow-hidden">
         {/* Mobile: Simplified selector bar */}
         <div className="md:hidden flex items-center gap-2 px-2 py-2 bg-background border-b">
-          {/* Mobile Exchange Selector */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded border-2 border-amber-500/70 bg-amber-500/5">
-            <button
-              onClick={() => setSelectedExchange('hyperliquid')}
-              className={`p-1.5 rounded transition-all ${
-                selectedExchange === 'hyperliquid'
-                  ? 'bg-primary text-primary-foreground'
-                  : ''
-              }`}
-            >
-              <svg width="14" height="14" viewBox="0 0 144 144" fill="none">
-                <path d="M144 71.6991C144 119.306 114.866 134.582 99.5156 120.98C86.8804 109.889 83.1211 86.4521 64.116 84.0456C39.9942 81.0113 37.9057 113.133 22.0334 113.133C3.5504 113.133 0 86.2428 0 72.4315C0 58.3063 3.96809 39.0542 19.736 39.0542C38.1146 39.0542 39.1588 66.5722 62.132 65.1073C85.0007 63.5379 85.4184 34.8689 100.247 22.6271C113.195 12.0593 144 23.4641 144 71.6991Z" fill={selectedExchange === 'hyperliquid' ? 'currentColor' : '#50E3C2'}/>
-              </svg>
-            </button>
-            <button
-              onClick={() => setSelectedExchange('binance')}
-              className={`p-1.5 rounded transition-all ${
-                selectedExchange === 'binance'
-                  ? 'bg-primary text-primary-foreground'
-                  : ''
-              }`}
-            >
-              <img src="/static/binance_logo.svg" alt="Binance" width={14} height={14} />
-            </button>
+          <div className="flex items-center gap-1 rounded border px-2 py-1 text-xs font-medium">
+            <img src="/static/binance_logo.svg" alt="Binance" width={14} height={14} />
+            Binance
           </div>
           <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
             <SelectTrigger className="flex-1 h-9">
@@ -214,7 +200,7 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['1m','5m','15m','1h','4h','1d'].map(p => (
+              {KLINE_PERIODS.map(p => (
                 <SelectItem key={p} value={p}>{p}</SelectItem>
               ))}
             </SelectContent>
@@ -226,32 +212,9 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
           {/* Symbol and Period Selection */}
           <Card className="lg:col-span-2">
             <CardContent className="pt-4 space-y-3">
-              {/* Exchange Selector - Gold border for visibility */}
-              <div className="flex items-center gap-1 p-1 rounded-md border-2 border-amber-500/70 bg-amber-500/5">
-                <button
-                  onClick={() => setSelectedExchange('hyperliquid')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded transition-all ${
-                    selectedExchange === 'hyperliquid'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
-                >
-                  <svg width="16" height="16" viewBox="0 0 144 144" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M144 71.6991C144 119.306 114.866 134.582 99.5156 120.98C86.8804 109.889 83.1211 86.4521 64.116 84.0456C39.9942 81.0113 37.9057 113.133 22.0334 113.133C3.5504 113.133 0 86.2428 0 72.4315C0 58.3063 3.96809 39.0542 19.736 39.0542C38.1146 39.0542 39.1588 66.5722 62.132 65.1073C85.0007 63.5379 85.4184 34.8689 100.247 22.6271C113.195 12.0593 144 23.4641 144 71.6991Z" fill={selectedExchange === 'hyperliquid' ? 'currentColor' : '#50E3C2'}/>
-                  </svg>
-                  Hyperliquid
-                </button>
-                <button
-                  onClick={() => setSelectedExchange('binance')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded transition-all ${
-                    selectedExchange === 'binance'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
-                >
-                  <img src="/static/binance_logo.svg" alt="Binance" width={16} height={16} />
-                  Binance
-                </button>
+              <div className="flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium">
+                <img src="/static/binance_logo.svg" alt="Binance" width={16} height={16} />
+                Binance
               </div>
 
               {/* Symbol and Period */}
@@ -274,20 +237,9 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1m">1m</SelectItem>
-                    <SelectItem value="3m">3m</SelectItem>
-                    <SelectItem value="5m">5m</SelectItem>
-                    <SelectItem value="15m">15m</SelectItem>
-                    <SelectItem value="30m">30m</SelectItem>
-                    <SelectItem value="1h">1h</SelectItem>
-                    <SelectItem value="2h">2h</SelectItem>
-                    <SelectItem value="4h">4h</SelectItem>
-                    <SelectItem value="8h">8h</SelectItem>
-                    <SelectItem value="12h">12h</SelectItem>
-                    <SelectItem value="1d">1d</SelectItem>
-                    <SelectItem value="3d">3d</SelectItem>
-                    <SelectItem value="1w">1w</SelectItem>
-                    <SelectItem value="1M">1M</SelectItem>
+                    {KLINE_PERIODS.map((period) => (
+                      <SelectItem key={period} value={period}>{period}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -297,18 +249,12 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
                 <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
                   <span>⚠️</span>
                   <span>
-                    {selectedExchange === 'hyperliquid'
-                      ? t('kline.mainnetWarning', 'K-line analysis is only available for Mainnet environment')
-                      : t('kline.binanceWarning', 'K-line analysis is only available for Binance Futures production environment')
-                    }
+                    {t('kline.binanceWarning', 'K-line analysis is only available for Binance Futures production environment')}
                   </span>
                 </p>
                 {collectionDays !== null && collectionDays > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedExchange === 'hyperliquid'
-                      ? t('common.collectionDaysHint', 'Hyperliquid market flow data collected for {{days}} days', { days: collectionDays })
-                      : t('common.binanceCollectionDaysHint', 'Binance market flow data collected for {{days}} days', { days: collectionDays })
-                    }
+                    {t('common.binanceCollectionDaysHint', 'Binance market flow data collected for {{days}} days', { days: collectionDays })}
                   </p>
                 )}
               </div>

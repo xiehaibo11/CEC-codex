@@ -35,6 +35,20 @@ interface BinanceWalletData {
 
 const API_BASE = '/api/binance'
 
+const getErrorMessage = (data: any, fallback: string) => {
+  const detail = data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => item?.msg || item?.message || JSON.stringify(item))
+      .join('; ')
+  }
+  if (detail && typeof detail === 'object') {
+    return detail.message || detail.msg || JSON.stringify(detail)
+  }
+  return data?.message || fallback
+}
+
 export default function BinanceWalletSection({
   accountId,
   accountName,
@@ -241,8 +255,8 @@ export default function BinanceWalletSection({
         await loadWalletInfo()
         onWalletConfigured?.()
       } else {
-        let errorMsg = data.detail || data.message || 'Failed to configure'
-        toast.error(errorMsg)
+        const errorMsg = getErrorMessage(data, 'Failed to configure')
+        toast.error(errorMsg, { duration: 12000 })
       }
     } catch (error) {
       toast.error('Network error. Please check your connection and try again.')
@@ -300,7 +314,7 @@ export default function BinanceWalletSection({
         await loadWalletInfo()
         onWalletConfigured?.()
       } else {
-        toast.error(data.detail || data.message || 'Failed to configure')
+        toast.error(getErrorMessage(data, 'Failed to configure'), { duration: 12000 })
       }
     } catch (error) {
       toast.error('Network error')
@@ -350,6 +364,9 @@ export default function BinanceWalletSection({
   ) => {
     const envName = environment === 'testnet' ? 'Testnet' : 'Mainnet'
     const badgeVariant = environment === 'testnet' ? 'default' : 'destructive'
+    const credentialHint = environment === 'testnet'
+      ? 'Use Binance Futures Demo Trading API keys here. Mainnet, Spot Testnet, and old Mock Trading keys will be rejected.'
+      : 'Use Binance USD-M Futures Mainnet API keys here. Enable Futures read/trading permission; if IP-restricted, whitelist this server IP.'
 
     return (
       <div className="p-4 border rounded-lg space-y-3">
@@ -432,6 +449,9 @@ export default function BinanceWalletSection({
             )}
 
             <div className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
+              <p className="text-blue-800 dark:text-blue-200 mb-1">
+                {credentialHint}
+              </p>
               <p className="text-blue-800 dark:text-blue-200">
                 {t('binance.positionModeHint', 'Requires One-way Position Mode. Go to Binance App → Futures → Settings → Position Mode → One-way Mode')}
               </p>
@@ -463,7 +483,7 @@ export default function BinanceWalletSection({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                CEX uses API credentials for authentication. Enable Futures trading permission in Binance.
+                CEX uses API credentials for authentication. The key must match this environment.
               </p>
             </div>
 

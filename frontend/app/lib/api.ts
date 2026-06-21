@@ -14,27 +14,43 @@ export async function apiRequest(
   options: RequestInit = {}
 ): Promise<Response> {
   const url = `${API_BASE_URL}${endpoint}`
-  
+
+  const headers = new Headers(options.headers || {})
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  const token = Cookies.get('arena_token')
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
   const defaultOptions: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
     ...options,
+    credentials: options.credentials ?? 'same-origin',
+    headers,
   }
   
   const response = await fetch(url, defaultOptions)
   
   if (!response.ok) {
-    // Try to extract error message from response body
+    let errorMessage = `HTTP error! status: ${response.status}`
     try {
       const errorData = await response.json()
-      const errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`
-      throw new Error(errorMessage)
+      const detail = errorData.detail || errorData.message || errorData.error
+      if (Array.isArray(detail)) {
+        errorMessage = detail
+          .map(item => typeof item === 'string' ? item : item?.msg || JSON.stringify(item))
+          .join('; ')
+      } else if (detail && typeof detail === 'object') {
+        errorMessage = detail.message || detail.msg || JSON.stringify(detail)
+      } else if (typeof detail === 'string' && detail.trim()) {
+        errorMessage = detail
+      }
     } catch (e) {
-      // If parsing fails, throw generic error
-      throw new Error(`HTTP error! status: ${response.status}`)
+      // Keep the HTTP status fallback when the response is not JSON.
     }
+    throw new Error(errorMessage)
   }
   
   const contentType = response.headers.get('content-type')
@@ -452,6 +468,362 @@ export async function updateDashboardVisibility(
     method: 'PATCH',
     body: JSON.stringify(updates)
   })
+  return response.json()
+}
+
+// Event Contract 5m prediction/backtest
+export interface EventContractSymbol {
+  exchange: string
+  symbol: string
+  environment: string
+  periods: string[]
+  records: number
+  earliest_ts?: number | null
+  latest_ts?: number | null
+}
+
+export interface EventContractConfig {
+  symbol: string
+  exchange: string
+  environment?: string
+  period: string
+  expiry_minutes: number
+  consensus_mode?: 'ai_confirmed' | 'rule_only'
+  ai_trader_id?: number | null
+  max_ai_evaluations?: number
+  consensus_threshold: number
+  enable_fake_breakout_filter: boolean
+  enable_trap_filter: boolean
+  enable_range_filter: boolean
+  enable_multi_timeframe_filter: boolean
+  enable_volume_filter: boolean
+  enable_cvd_filter: boolean
+  enable_coinglass_features?: boolean
+  min_coinglass_coverage_pct?: number
+  strict_coinglass_quality?: boolean
+  coinglass_metrics?: string[] | null
+  coinglass_no_future_leakage?: boolean
+  max_entry_lag_seconds?: number
+  max_expiry_lag_seconds?: number
+  min_data_coverage_pct?: number
+  strict_data_quality?: boolean
+  enable_l2_features?: boolean
+  min_l2_coverage_pct?: number
+  strict_l2_quality?: boolean
+  max_l2_lag_seconds?: number
+}
+
+export interface EventContractBacktestConfig extends EventContractConfig {
+  start_time: string
+  end_time: string
+  initial_balance: number
+  stake_amount: number
+  win_payout_ratio: number
+  fee_rate: number
+  slippage_bps: number
+  delay_seconds: number
+  draw_result: string
+  max_bars?: number
+}
+
+export interface EventAiDecision {
+  ai_name: string
+  source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  model?: string
+  account_name?: string
+  direction: 'long' | 'short' | 'hold'
+  confidence: number
+  reason: string
+  risk_flags: string[]
+  evidence: string[]
+  timeframes: string[]
+  invalid_conditions: string[]
+}
+
+export interface EventFactorSnapshot {
+  factor_name: string
+  category: string
+  timeframe: string
+  value: number
+  normalized_score: number
+  direction_bias: 'long' | 'short' | 'neutral'
+  confidence: number
+  weight: number
+  explanation: string
+}
+
+export interface EventConsensus {
+  final_direction: 'long' | 'short' | 'hold'
+  consensus_mode?: 'ai_confirmed' | 'rule_only'
+  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  ai_participated?: boolean
+  ai_model?: string | null
+  ai_account_name?: string | null
+  long_votes: number
+  short_votes: number
+  hold_votes: number
+  consensus_rate: number
+  allow_trade: boolean
+  signal_type: string
+  event_signal_type?: string
+  signal_strength: number
+  reason_summary: string
+}
+
+export interface EventSignal {
+  signal_id: string
+  symbol: string
+  signal_type: string
+  direction: 'long' | 'short' | 'hold'
+  entry_time: string
+  entry_price: number
+  expiry_time: string
+  expiry_minutes: number
+  confidence: number
+  signal_strength: number
+  expected_win_rate: number
+  trap_risk: number
+  fake_breakout_risk: number
+  range_risk: number
+  valid_seconds: number
+  entry_condition: string
+  avoid_condition: string
+  reason: string
+  related_factors: string[]
+  ai_consensus: EventConsensus
+}
+
+export interface EventDataQuality {
+  enabled?: boolean
+  source?: string
+  key_source?: string
+  period: string
+  interval_seconds: number
+  records_loaded: number
+  decision_records: number
+  expected_decision_records: number
+  coverage_pct: number
+  duplicate_count: number
+  non_monotonic_count: number
+  gap_count: number
+  max_gap_seconds: number
+  sample_gaps?: Array<any>
+  warnings: string[]
+  strict: boolean
+  unclosed_bars_dropped?: number
+  min_required_coverage_pct?: number
+  metric_coverage?: Array<any>
+  coinglass?: EventDataQuality
+  l2?: EventDataQuality
+  no_future_leakage?: boolean
+  max_lag_seconds?: number | null
+  avg_lag_seconds?: number | null
+}
+
+export interface EventPrediction {
+  symbol: string
+  engine_version?: string
+  exchange: string
+  period: string
+  consensus_mode?: 'ai_confirmed' | 'rule_only'
+  ai_participated?: boolean
+  ai_model?: string | null
+  ai_account_name?: string | null
+  current_time: string
+  current_price: number
+  expiry_time: string
+  market_state: string
+  long_5m_probability: number
+  short_5m_probability: number
+  hold_probability: number
+  best_action: 'long' | 'short' | 'hold'
+  allow_trade: boolean
+  confidence: number
+  signal_strength: number
+  signal_type?: string
+  event_signal_type?: string
+  trap_risk: number
+  fake_breakout_risk: number
+  range_risk: number
+  reason: string
+  entry_warning: string
+  similar_patterns: Array<any>
+  event_signal?: EventSignal
+  data_quality?: EventDataQuality
+  ai_consensus: EventConsensus
+  ai_decisions: EventAiDecision[]
+  factors: EventFactorSnapshot[]
+}
+
+export interface EventTradeLog {
+  trade_id?: string
+  trade_index: number
+  symbol: string
+  direction: 'long' | 'short'
+  signal_time?: string
+  entry_time: string
+  entry_price: number
+  expiry_time: string
+  expiry_price: number
+  entry_delay_lag_seconds?: number
+  expiry_lag_seconds?: number
+  result: 'win' | 'loss' | 'draw'
+  profit_loss: number
+  equity_before?: number
+  equity_after?: number
+  signal_strength: number
+  ai_consensus_rate: number
+  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  ai_participated?: boolean
+  ai_model?: string | null
+  ai_account_name?: string | null
+  signal_type?: string
+  event_signal?: EventSignal
+  long_votes: number
+  short_votes: number
+  hold_votes: number
+  market_state: string
+  trap_risk: number
+  fake_breakout_risk: number
+  reason: string
+  factor_snapshot: EventFactorSnapshot[]
+  ai_decision_snapshot: EventAiDecision[]
+}
+
+export interface EventBacktestSummary {
+  engine_version?: string
+  config_hash?: string
+  data_quality?: EventDataQuality
+  consensus_mode?: 'ai_confirmed' | 'rule_only'
+  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  ai_confirmed?: boolean
+  max_ai_evaluations?: number
+  total_trades: number
+  wins: number
+  losses: number
+  draws: number
+  win_rate: number
+  loss_rate: number
+  profit_factor: number
+  expectancy: number
+  initial_balance: number
+  final_equity: number
+  total_pnl: number
+  total_pnl_percent: number
+  max_drawdown: number
+  max_consecutive_wins: number
+  max_consecutive_losses: number
+  average_signal_strength: number
+  average_trap_risk: number
+  long_win_rate: number
+  short_win_rate: number
+  trend_market_win_rate: number
+  range_market_win_rate: number
+  breakout_win_rate: number
+  pullback_win_rate: number
+  fake_breakout_filtered_count: number
+  trap_filtered_count: number
+  no_trade_filtered_count: number
+  rule_prefiltered_count?: number
+  ai_evaluated_count?: number
+  llm_evaluated_count?: number
+  ai_rejected_count?: number
+  ai_skipped_cap_count?: number
+  missing_expiry_count?: number
+  expiry_lag_skipped_count?: number
+  entry_delay_skipped_count?: number
+  decision_bars_count?: number
+  candidate_signals_count?: number
+  execution_time_ms: number
+}
+
+export interface EventBacktestResponse {
+  run_id: number
+  config: EventContractBacktestConfig
+  summary: EventBacktestSummary
+  data_quality?: EventDataQuality
+  equity_curve: Array<{ timestamp: number; equity: number }>
+  trades: EventTradeLog[]
+  trades_returned: number
+  total_trade_logs: number
+}
+
+export async function getEventContractSymbols(exchange?: string): Promise<{
+  symbols: EventContractSymbol[]
+  default_exchange: string
+  default_symbol: string
+  supported_periods: string[]
+}> {
+  const query = exchange ? `?exchange=${encodeURIComponent(exchange)}` : ''
+  const response = await apiRequest(`/event-contract/symbols${query}`)
+  return response.json()
+}
+
+export async function predictEventContract(config: EventContractConfig): Promise<EventPrediction> {
+  const response = await apiRequest('/event-contract/predict', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+  return response.json()
+}
+
+export async function runEventContractBacktest(config: EventContractBacktestConfig): Promise<EventBacktestResponse> {
+  const response = await apiRequest('/event-contract/backtest', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+  return response.json()
+}
+
+export interface CoinGlassEventContractCapability {
+  available: boolean
+  configured: boolean
+  status: string
+  reason: string
+  period: string
+  symbol?: string
+  exchange?: string
+  key_source?: 'user' | 'server' | 'none'
+  key_masked?: string | null
+  level?: string | null
+  expired?: boolean | null
+  expire_time?: number | null
+  required_plan?: string | null
+  fetched_at?: number
+  metrics: Array<{
+    metric: string
+    label: string
+    path: string
+    ok: boolean
+    status_code?: number
+    code?: string | number
+    message?: string | null
+  }>
+}
+
+export async function getCoinGlassEventContractCapability(params: {
+  symbol: string
+  exchange: string
+  period: string
+}): Promise<CoinGlassEventContractCapability> {
+  const query = new URLSearchParams({
+    symbol: params.symbol,
+    exchange: params.exchange,
+    period: params.period,
+  })
+  const response = await apiRequest(`/coinglass/event-contract-capability?${query.toString()}`)
+  return response.json()
+}
+
+export interface HyperAiProfile {
+  llm_configured: boolean
+  llm_provider?: string | null
+  llm_model?: string | null
+  llm_base_url?: string | null
+}
+
+export async function getHyperAiProfile(): Promise<HyperAiProfile> {
+  const response = await apiRequest('/hyper-ai/profile')
   return response.json()
 }
 
@@ -1193,81 +1565,6 @@ export const updateAIAccount = (id: number, account: any) => {
 export const deleteAIAccount = (id: number) => {
   console.warn("deleteAIAccount is deprecated. Use default mode or new trading account APIs.")
   return Promise.resolve()
-}
-
-// Membership interfaces
-export interface MembershipInfo {
-  status: string
-  planKey: string
-  planId?: string
-  subscriptionId?: string
-  environment: string
-  currentPeriodStart?: string
-  currentPeriodEnd?: string
-  nextBillingTime?: string
-  lastPaymentTime?: string
-  updatedAt?: string
-}
-
-export interface MembershipEvent {
-  id: number
-  eventType: string
-  status: string
-  createdAt: string
-  environment: string
-}
-
-export interface MembershipResponse {
-  membership: MembershipInfo | null
-  events?: MembershipEvent[]
-}
-
-// Get membership information from external membership service
-// IMPORTANT: This function supports both same-domain and cross-domain access
-// - Same-domain: Uses cookies automatically
-// - Cross-domain (localhost/custom domains): Uses Authorization header with arena_token
-// This ensures paid users can access membership features regardless of deployment domain
-export async function getMembershipInfo(): Promise<MembershipResponse> {
-  try {
-    // Get arena_token for cross-domain authentication
-    // This is the same Casdoor access token used for login
-    const token = Cookies.get('arena_token')
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    // Add Authorization header if token exists (critical for localhost/custom domain deployments)
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
-    const response = await fetch('https://www.akooi.com/api/membership/me', {
-      method: 'GET',
-      credentials: 'include',  // Still include credentials for same-domain cookie support
-      headers,
-    })
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // User not authenticated or no membership
-        // This can happen if:
-        // 1. User is not logged in to www.akooi.com
-        // 2. Cross-site cookies are blocked (localhost access with old cookies)
-        // 3. Token has expired
-        console.warn('[Membership] 401 Unauthorized - Please re-login at https://www.akooi.com to refresh your session')
-        return { membership: null }
-      }
-      throw new Error(`Failed to fetch membership info: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('Error fetching membership info:', error)
-    // Return null membership on error to gracefully degrade
-    return { membership: null }
-  }
 }
 
 // Hyperliquid Builder Fee Authorization APIs
