@@ -14,10 +14,8 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
-  LineChart,
   Line,
   Area,
-  AreaChart,
   ComposedChart,
   ReferenceLine,
   XAxis,
@@ -29,42 +27,20 @@ import {
   Brush
 } from 'recharts'
 import { Card } from '@/components/ui/card'
-import { getModelChartLogo, getModelColor } from '../portfolio/logoAssets'
-import FlipNumber from '../portfolio/FlipNumber'
-import type { HyperliquidEnvironment } from '@/lib/types/hyperliquid'
+import { getModelColor } from '../portfolio/logoAssets'
 import { formatDateTime } from '@/lib/dateTime'
+import type {
+  HyperliquidAssetChartProps,
+  HyperliquidAssetData,
+  HoveredTrade,
+} from './hyperliquid-asset-chart/types'
+import { processAssetData, computeTradeMarkers } from './hyperliquid-asset-chart/assetData'
+import {
+  renderTradeMarkers as renderTradeMarkersImpl,
+  renderTerminalDot as renderTerminalDotImpl,
+} from './hyperliquid-asset-chart/renderers'
 
-interface HyperliquidAssetData {
-  timestamp: number
-  datetime_str: string
-  account_id: number
-  total_assets: number
-  username: string
-  wallet_address?: string | null
-  exchange?: string  // 'hyperliquid' | 'binance'
-}
-
-export interface TradeMarker {
-  trade_id: number
-  trade_time: string
-  side: string // 'BUY' | 'SELL' | 'CLOSE'
-  symbol: string
-  account_id: number
-  price?: number
-  exchange?: string // 'hyperliquid' | 'binance'
-}
-
-interface HyperliquidAssetChartProps {
-  accountId: number
-  refreshTrigger?: number
-  environment?: HyperliquidEnvironment
-  selectedAccount?: number | 'all'
-  trades?: TradeMarker[]
-  selectedSymbol?: string | null
-  selectedExchange?: 'all' | 'hyperliquid' | 'binance'
-}
-
-const SMALL_GAP_FILL_THRESHOLD_SECONDS = 15 * 60
+export type { TradeMarker } from './hyperliquid-asset-chart/types'
 
 export default function HyperliquidAssetChart({
   accountId,
@@ -81,6 +57,9 @@ export default function HyperliquidAssetChart({
   const [logoPulseMap, setLogoPulseMap] = useState<Map<number, number>>(new Map())
   const [timeRange, setTimeRange] = useState<'7d' | '15d' | '1m' | '3m' | 'all'>('7d')
   const fetchingRef = useRef(false)
+
+  // Hover tooltip state for trade markers
+  const [hoveredTrade, setHoveredTrade] = useState<HoveredTrade | null>(null)
 
   // Brush state - preserve zoom level across data refreshes
   const [brushRange, setBrushRange] = useState<{ startIndex?: number; endIndex?: number }>({})
@@ -158,428 +137,28 @@ export default function HyperliquidAssetChart({
   }, [fetchData, refreshTrigger])
 
   // Process chart data - group by account+exchange combination
-  const { chartData, accountsData, yAxisDomain, baseline } = useMemo(() => {
-    if (!data.length) return { chartData: [], accountsData: [], yAxisDomain: [0, 1000], baseline: 1000 }
-
-    // Filter data by selected exchange
-    const filteredData = selectedExchange && selectedExchange !== 'all'
-      ? data.filter(item => (item.exchange || 'hyperliquid') === selectedExchange)
-      : data
-
-    if (!filteredData.length) return { chartData: [], accountsData: [], yAxisDomain: [0, 1000], baseline: 1000 }
-
-    // Group by timestamp and create chart points
-    const timeGroups = new Map<number, any>()
-    // Key: "accountId_exchange" to support same account on multiple exchanges
-    const accounts = new Map<string, {
-      account_id: number
-      username: string
-      exchange: string
-      curveKey: string  // unique key for chart dataKey
-      logo: { src: string; alt: string; color?: string }
-    }>()
-
-    filteredData.forEach(item => {
-      if (!timeGroups.has(item.timestamp)) {
-        timeGroups.set(item.timestamp, {
-          timestamp: item.timestamp,
-          datetime_str: item.datetime_str
-        })
-      }
-
-      const exchange = item.exchange || 'hyperliquid'
-      // Create unique curve key: "username (Exchange Name)" for multi-exchange accounts
-      const exchangeName = exchange === 'hyperliquid' ? 'Hyperliquid' : 'Binance'
-      const curveKey = `${item.username} (${exchangeName})`
-      const accountKey = `${item.account_id}_${exchange}`
-
-      const point = timeGroups.get(item.timestamp)!
-      point[curveKey] = item.total_assets
-
-      if (!accounts.has(accountKey)) {
-        const baseLogo = getModelChartLogo(item.username)
-        // Adjust color for Binance to differentiate from Hyperliquid
-        const color = exchange === 'binance'
-          ? '#F0B90B'  // Binance yellow
-          : baseLogo.color || getModelColor(item.username)
-
-        accounts.set(accountKey, {
-          account_id: item.account_id,
-          username: item.username,
-          exchange,
-          curveKey,
-          logo: { ...baseLogo, color }
-        })
-      }
-    })
-
-    const rawChartData = Array.from(timeGroups.values()).sort((a, b) => a.timestamp - b.timestamp)
-    const accountsData = Array.from(accounts.entries()).map(([key, info]) => ({
-      key,  // "accountId_exchange"
-      ...info
-    }))
-
-    // Smooth over short snapshot gaps caused by transient network hiccups.
-    // Long gaps remain disconnected to avoid implying continuous data where none exists.
-    const chartData = rawChartData.map(point => ({ ...point }))
-    for (const account of accountsData) {
-      let previousKnownIndex: number | null = null
-
-      for (let i = 0; i < chartData.length; i++) {
-        const value = chartData[i][account.curveKey]
-        if (typeof value !== 'number') continue
-
-        if (previousKnownIndex !== null) {
-          const previousPoint = chartData[previousKnownIndex]
-          const gapSeconds = chartData[i].timestamp - previousPoint.timestamp
-          if (gapSeconds > 0 && gapSeconds <= SMALL_GAP_FILL_THRESHOLD_SECONDS) {
-            for (let j = previousKnownIndex + 1; j < i; j++) {
-              if (chartData[j][account.curveKey] == null) {
-                chartData[j][account.curveKey] = previousPoint[account.curveKey]
-              }
-            }
-          }
-        }
-
-        previousKnownIndex = i
-      }
-    }
-
-    // Calculate baseline (initial capital) - only meaningful for single account view
-    let baseline: number | null = null
-    if (chartData.length > 0 && accountsData.length === 1) {
-      // Single account: use first non-null data point as starting capital
-      for (const point of chartData) {
-        const val = point[accountsData[0].curveKey]
-        if (typeof val === 'number') {
-          baseline = val
-          break
-        }
-      }
-    }
-
-    // Calculate Y-axis domain with smart padding
-    const allValues = filteredData.map(item => item.total_assets).filter(val => typeof val === 'number')
-
-    if (allValues.length === 0) return { chartData, accountsData, yAxisDomain: [0, 1000], baseline }
-
-    const minValue = Math.min(...allValues)
-    const maxValue = Math.max(...allValues)
-    const range = maxValue - minValue
-
-    const hasMultipleAccounts = accountsData.length > 1
-    const paddingPercent = hasMultipleAccounts ? 0.05 : 0.15
-
-    // When all values are the same (range = 0), use fixed padding based on baseline
-    const padding = range > 0 ? range * paddingPercent : baseline * 0.1
-
-    return {
-      chartData,
-      accountsData,
-      yAxisDomain: [Math.max(0, minValue - padding), maxValue + padding],
-      baseline
-    }
-  }, [data, selectedExchange])
+  const { chartData, accountsData, yAxisDomain, baseline } = useMemo(
+    () => processAssetData(data, selectedExchange),
+    [data, selectedExchange]
+  )
 
   // Process trade markers - snap to nearest 5-minute bucket
-  const tradeMarkers = useMemo(() => {
-    if (!trades?.length || !chartData.length) return []
-
-    const timestamps = chartData.map(d => d.timestamp)
-    const markers: Array<{
-      trade_id: number
-      timestamp: number
-      datetime_str: string
-      side: string
-      symbol: string
-      price?: number
-      chartIndex: number
-      account_id: number
-      exchange?: string
-    }> = []
-
-    trades.forEach(trade => {
-      if (!trade.trade_time) return
-      // Filter by selected account
-      if (selectedAccount && selectedAccount !== 'all' && trade.account_id !== selectedAccount) return
-      // Filter by selected symbol
-      if (selectedSymbol && trade.symbol !== selectedSymbol) return
-      // Filter by selected exchange
-      const tradeExchange = trade.exchange || 'hyperliquid'
-      if (selectedExchange && selectedExchange !== 'all' && tradeExchange !== selectedExchange) return
-
-      // Convert trade_time ISO string to Unix timestamp
-      const tradeTs = Math.floor(new Date(trade.trade_time + (trade.trade_time.includes('Z') ? '' : 'Z')).getTime() / 1000)
-
-      // Find nearest 5-minute bucket
-      let nearestIdx = 0
-      let minDiff = Math.abs(timestamps[0] - tradeTs)
-      for (let i = 1; i < timestamps.length; i++) {
-        const diff = Math.abs(timestamps[i] - tradeTs)
-        if (diff < minDiff) {
-          minDiff = diff
-          nearestIdx = i
-        }
-      }
-
-      // Only include if within 5 minutes (300 seconds) of a data point
-      if (minDiff <= 300) {
-        markers.push({
-          trade_id: trade.trade_id,
-          timestamp: timestamps[nearestIdx],
-          datetime_str: chartData[nearestIdx].datetime_str,
-          side: trade.side,
-          symbol: trade.symbol,
-          price: trade.price,
-          chartIndex: nearestIdx,
-          account_id: trade.account_id,
-          exchange: trade.exchange
-        })
-      }
-    })
-
-    return markers
-  }, [trades, chartData, selectedAccount, selectedSymbol, selectedExchange])
-
-  // Trade marker colors matching Modelchat
-  const getTradeMarkerStyle = (side: string) => {
-    switch (side.toUpperCase()) {
-      case 'BUY':
-        return { bg: '#10B981', letter: 'B' } // emerald-500 (green)
-      case 'SELL':
-        return { bg: '#EF4444', letter: 'S' } // red-500 (red)
-      case 'CLOSE':
-        return { bg: '#3B82F6', letter: 'C' } // blue-500 (blue)
-      case 'HOLD':
-        return { bg: '#6B7280', letter: 'H' } // gray-500 (gray)
-      default:
-        return { bg: '#F97316', letter: '?' } // orange-500
-    }
-  }
-
-  // Hover tooltip state for trade markers
-  const [hoveredTrade, setHoveredTrade] = useState<{
-    x: number
-    y: number
-    side: string
-    symbol: string
-    price?: number
-  } | null>(null)
+  const tradeMarkers = useMemo(
+    () => computeTradeMarkers(trades, chartData, selectedAccount, selectedSymbol, selectedExchange),
+    [trades, chartData, selectedAccount, selectedSymbol, selectedExchange]
+  )
 
   // Render trade markers on chart
-  const renderTradeMarkers = useCallback((props: any) => {
-    const { xAxisMap, yAxisMap } = props
-    if (!xAxisMap || !yAxisMap || !tradeMarkers.length) return null
-
-    const xAxis = Object.values(xAxisMap)[0] as any
-    const yAxis = Object.values(yAxisMap)[0] as any
-    if (!xAxis?.scale || !yAxis?.scale) return null
-
-    return (
-      <g className="trade-markers">
-        {tradeMarkers.map((marker, idx) => {
-          const dataPoint = chartData[marker.chartIndex]
-          if (!dataPoint) return null
-
-          const x = xAxis.scale(dataPoint.datetime_str)
-          // Find the account this trade belongs to and get y value from that account's curve
-          // Match by account_id and exchange (supports both Hyperliquid and Binance)
-          const markerExchange = marker.exchange || 'hyperliquid'
-          const account = accountsData.find(a => a.account_id === marker.account_id && a.exchange === markerExchange)
-          if (!account) return null  // Skip if account not found (filtered out)
-          const yValue = dataPoint[account.curveKey]
-          if (yValue == null || x == null) return null
-
-          const y = yAxis.scale(yValue)
-          const { bg, letter } = getTradeMarkerStyle(marker.side)
-          const size = 18
-
-          return (
-            <g
-              key={`trade-${marker.trade_id}-${idx}`}
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setHoveredTrade({
-                x,
-                y,
-                side: marker.side,
-                symbol: marker.symbol,
-                price: marker.price
-              })}
-              onMouseLeave={() => setHoveredTrade(null)}
-            >
-              <circle
-                cx={x}
-                cy={y}
-                r={size / 2}
-                fill={bg}
-                stroke="#fff"
-                strokeWidth={2}
-                style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' }}
-              />
-              <text
-                x={x}
-                y={y}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="#fff"
-                fontSize={10}
-                fontWeight="bold"
-                style={{ pointerEvents: 'none' }}
-              >
-                {letter}
-              </text>
-            </g>
-          )
-        })}
-      </g>
-    )
-  }, [tradeMarkers, chartData, accountsData])
+  const renderTradeMarkers = useCallback(
+    (props: any) => renderTradeMarkersImpl(props, { tradeMarkers, chartData, accountsData, setHoveredTrade }),
+    [tradeMarkers, chartData, accountsData]
+  )
 
   // Terminal dot renderer with logo and value
   const renderTerminalDot = useCallback(
-    (account: {
-      key: string
-      account_id: number
-      username: string
-      exchange: string
-      curveKey: string
-      logo: { src: string; alt: string; color?: string }
-    }) =>
-      (props: { cx?: number; cy?: number; index?: number; value?: number; payload?: any }) => {
-        const { cx, cy, index, payload } = props
-        if (cx == null || cy == null || index == null || !payload) return null
-        if (chartData.length === 0) return null
-
-        // Determine visible range from brush, or use full data range
-        const visibleStart = brushRange.startIndex ?? 0
-        const visibleEnd = brushRange.endIndex ?? chartData.length - 1
-
-        // Find the last data point within visible range where this account has a value
-        let lastVisibleIndex = -1
-        for (let i = visibleEnd; i >= visibleStart; i--) {
-          if (typeof chartData[i]?.[account.curveKey] === 'number') {
-            lastVisibleIndex = i
-            break
-          }
-        }
-
-        if (lastVisibleIndex === -1 || index !== lastVisibleIndex) return null
-
-        const value = payload[account.curveKey]
-        if (typeof value !== 'number') return null
-
-        const color = account.logo?.color || getModelColor(account.username)
-        const pulseIteration = logoPulseMap.get(account.account_id) ?? 0
-        const size = 32
-        const logoX = cx - size / 2
-        const logoY = cy - size / 2
-        const labelX = cx + size / 2 + 2
-        const labelY = cy - 18
-
-        // Exchange badge position
-        const badgeSize = 14
-        const badgeX = cx + size / 2 - badgeSize / 2
-        const badgeY = cy + size / 2 - badgeSize / 2
-
-        return (
-          <g key={`terminal-dot-${account.key}-${index}`}>
-            {pulseIteration > 0 && (
-              <circle
-                cx={cx}
-                cy={cy}
-                r={size / 2}
-                fill={color}
-                className="pointer-events-none animate-ping-logo"
-              />
-            )}
-            <foreignObject
-              x={logoX}
-              y={logoY}
-              width={size}
-              height={size}
-              style={{ overflow: 'visible', pointerEvents: 'none' }}
-            >
-              <div
-                style={{
-                  width: size,
-                  height: size,
-                  borderRadius: '50%',
-                  backgroundColor: color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.16)',
-                }}
-              >
-                <img
-                  src={account.logo?.src}
-                  alt={account.logo?.alt}
-                  style={{
-                    width: size - 6,
-                    height: size - 6,
-                    borderRadius: '50%',
-                    objectFit: 'contain',
-                  }}
-                />
-              </div>
-            </foreignObject>
-
-            {/* Exchange badge (small icon at bottom-right of logo) */}
-            <foreignObject
-              x={badgeX}
-              y={badgeY}
-              width={badgeSize}
-              height={badgeSize}
-              style={{ overflow: 'visible', pointerEvents: 'none' }}
-            >
-              <div
-                style={{
-                  width: badgeSize,
-                  height: badgeSize,
-                  borderRadius: '50%',
-                  backgroundColor: 'white',
-                  border: `2px solid ${account.exchange === 'binance' ? '#F0B90B' : '#00D395'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 2,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }}
-              >
-                <img
-                  src={`/static/${account.exchange}_logo.svg`}
-                  alt={account.exchange}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                  }}
-                />
-              </div>
-            </foreignObject>
-
-            <foreignObject
-              x={labelX}
-              y={labelY}
-              width={120}
-              height={24}
-              style={{ overflow: 'visible', pointerEvents: 'none' }}
-            >
-              <div
-                className="px-3 py-1 text-xs font-semibold text-white"
-                style={{
-                  borderRadius: '12px',
-                  backgroundColor: color,
-                  display: 'inline-block',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.18)',
-                }}
-              >
-                <FlipNumber value={value} prefix="$" decimals={2} className="text-white" />
-              </div>
-            </foreignObject>
-          </g>
-        )
-      },
+    (account: typeof accountsData[number]) =>
+      (props: { cx?: number; cy?: number; index?: number; value?: number; payload?: any }) =>
+        renderTerminalDotImpl(props, account, { chartData, logoPulseMap, brushRange }),
     [chartData, logoPulseMap, brushRange]
   )
 
