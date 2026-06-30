@@ -4,6 +4,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _module_source(path_without_ext: Path) -> str:
+    """Read a module's source whether it is a single ``.py`` file or a package
+    directory (the module may have been split into a package). Concatenates all
+    ``.py`` files in the package so content-invariant checks still hold."""
+    py_file = path_without_ext.with_suffix(".py")
+    if py_file.is_file():
+        return py_file.read_text()
+    if path_without_ext.is_dir():
+        return "\n".join(
+            f.read_text() for f in sorted(path_without_ext.rglob("*.py"))
+        )
+    raise FileNotFoundError(f"Neither {py_file} nor package dir {path_without_ext} exists")
+
+
 def test_signal_wallet_tracking_frontend_no_longer_points_to_hyper_insight():
     signal_manager = (REPO_ROOT / "frontend/app/components/signal/SignalManager.tsx").read_text()
     zh_locale = (REPO_ROOT / "frontend/app/locales/zh.json").read_text()
@@ -18,7 +32,7 @@ def test_signal_wallet_tracking_frontend_no_longer_points_to_hyper_insight():
 
 
 def test_signal_wallet_tracking_backend_uses_coinglass_status_not_hyper_insight_runtime():
-    signal_routes = (REPO_ROOT / "backend/api/signal_routes.py").read_text()
+    signal_routes = _module_source(REPO_ROOT / "backend/api/signal_routes")
     main_source = (REPO_ROOT / "backend/main.py").read_text()
 
     assert "hyper_insight_wallet_service" not in signal_routes
