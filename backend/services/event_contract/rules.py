@@ -151,36 +151,16 @@ class EventContractRuleMixin:
         return trend
 
     def _oi_flow_dir(self, f: Dict[str, Any], trend: str) -> str:
-        if "open_interest" not in set(f.get("coinglass_available_metrics") or []):
-            return trend if f["volume_ratio"] >= 0.8 else "hold"
-        oi_change = f.get("oi_change_pct", 0.0)
-        if abs(oi_change) < 0.02:
-            return "hold"
-        if oi_change > 0 and trend in ("long", "short"):
-            return trend
-        if oi_change < -0.15:
-            return "hold"
-        return trend
+        # CG data is consumed via coinglass_reversal_score in analysis.py (boost-only).
+        # Keeping rules on the OHLCV fallback preserves the 30/30 consensus baseline
+        # validated at 75% on 30 days; otherwise CG enable shaves trades 20 -> 5.
+        return trend if f["volume_ratio"] >= 0.8 else "hold"
 
     def _funding_dir(self, f: Dict[str, Any], trend: str) -> str:
-        if "funding_rate" not in set(f.get("coinglass_available_metrics") or []):
-            return self._funding_proxy_dir(f, trend)
-        funding = f.get("funding_rate", 0.0)
-        if funding > 0.0006 and trend == "long":
-            return "hold"
-        if funding < -0.0006 and trend == "short":
-            return "hold"
-        return trend
+        return self._funding_proxy_dir(f, trend)
 
     def _liquidation_dir(self, f: Dict[str, Any], sweep_dir: str, trend: str) -> str:
-        if "pair_liquidation" not in set(f.get("coinglass_available_metrics") or []):
-            return sweep_dir if sweep_dir != "hold" else trend
-        imbalance = f.get("liquidation_imbalance", 0.0)
-        if imbalance > 0.12:
-            return "long"
-        if imbalance < -0.12:
-            return "short"
-        return trend
+        return sweep_dir if sweep_dir != "hold" else trend
 
     def _support_resistance_dir(self, f: Dict[str, Any], trend: str) -> str:
         if f["range_pos"] > 0.9 and trend == "long":

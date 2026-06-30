@@ -993,10 +993,12 @@ class ProgramExecutionService:
         order_value = margin * leverage
         quantity = round(order_value / market_price, 6)
 
-        # Use max_price from decision directly (no bounds adjustment)
+        # Clamp buy price to ±1% of market price to prevent runaway slippage
         max_price = getattr(decision, 'max_price', None)
         if max_price:
-            price_to_use = max_price
+            price_to_use = min(max_price, market_price * 1.01)
+            if price_to_use != max_price:
+                logger.warning(f"[ProgramExecution] BUY {symbol}: max_price {max_price:.2f} clamped to {price_to_use:.2f} (market*1.01)")
         else:
             price_to_use = market_price * 1.005  # Default: slightly above market
             logger.warning(f"[ProgramExecution] BUY {symbol}: No max_price, using {price_to_use:.2f}")
@@ -1046,10 +1048,12 @@ class ProgramExecutionService:
         order_value = margin * leverage
         quantity = round(order_value / market_price, 6)
 
-        # Use min_price from decision directly (no bounds adjustment)
+        # Clamp sell price to ±1% of market price to prevent runaway slippage
         min_price = getattr(decision, 'min_price', None)
         if min_price:
-            price_to_use = min_price
+            price_to_use = max(min_price, market_price * 0.99)
+            if price_to_use != min_price:
+                logger.warning(f"[ProgramExecution] SELL {symbol}: min_price {min_price:.2f} clamped to {price_to_use:.2f} (market*0.99)")
         else:
             price_to_use = market_price * 0.995  # Default: slightly below market
             logger.warning(f"[ProgramExecution] SELL {symbol}: No min_price, using {price_to_use:.2f}")

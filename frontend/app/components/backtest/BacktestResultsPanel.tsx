@@ -25,6 +25,7 @@ import {
 import type {
   EventAiDecision,
   EventBacktestResponse,
+  EventBacktestTaskStatus,
   EventFactorSnapshot,
   EventTradeLog,
 } from '@/lib/api'
@@ -42,6 +43,7 @@ import {
 type Props = {
   backtest: EventBacktestResponse | null
   runningBacktest: boolean
+  taskStatus: EventBacktestTaskStatus | null
   chartData: Array<{ timestamp: number; equity: number; label: string }>
   displayAi: EventAiDecision[]
   displayFactors: EventFactorSnapshot[]
@@ -52,6 +54,7 @@ type Props = {
 export function BacktestResultsPanel({
   backtest,
   runningBacktest,
+  taskStatus,
   chartData,
   displayAi,
   displayFactors,
@@ -66,6 +69,7 @@ export function BacktestResultsPanel({
         <CardTitle className="text-base">{t('backtestTool.results', 'Backtest Results')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {taskStatus && <TaskProgressPanel taskStatus={taskStatus} />}
         {backtest ? (
           <>
             <SummaryGrid backtest={backtest} />
@@ -99,9 +103,81 @@ export function BacktestResultsPanel({
   )
 }
 
+function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus }) {
+  const { t } = useTranslation()
+  const ai_reviewer_statuses = taskStatus.ai_reviewer_statuses || []
+  const completedAi = ai_reviewer_statuses.filter(item => item.status === 'completed').length
+  const runningAi = ai_reviewer_statuses.filter(item => item.status === 'running').length
+  const failedAi = ai_reviewer_statuses.filter(item => item.status === 'failed').length
+  const skippedAi = ai_reviewer_statuses.filter(item => item.status === 'skipped').length
+  // rule_only mode never calls the LLM reviewers - hide the per-reviewer cards
+  // and the AI counters to avoid the "30 stuck on pending" impression.
+  const reviewersActive = ai_reviewer_statuses.length > 0 && skippedAi !== ai_reviewer_statuses.length
+  const isActive = ['pending', 'running', 'pause_requested'].includes(taskStatus.status)
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={isActive ? 'default' : 'secondary'}>{taskStatus.status}</Badge>
+            <span className="text-sm font-medium">
+              {taskStatus.phase || t('backtestTool.taskPhase', 'Backtest task')}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {taskStatus.latest_message || taskStatus.error_message || t('backtestTool.taskWaiting', 'Waiting for task updates')}
+          </div>
+        </div>
+        <div className="text-right text-xs text-muted-foreground">
+          <div>{formatPct(taskStatus.progress_pct || 0)}</div>
+          <div>
+            {taskStatus.processed_decision_bars}/{taskStatus.total_decision_bars || '-'} {t('backtestTool.decisionBars', 'Decision Bars')}
+          </div>
+        </div>
+      </div>
+      <Progress value={taskStatus.progress_pct || 0} className="mt-3" />
+      {reviewersActive ? (
+        <>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MetricCard label={t('backtestTool.aiCompleted', 'AI Completed')} value={`${completedAi}/30`} tone={completedAi === 30 ? 'green' : undefined} />
+            <MetricCard label={t('backtestTool.aiRunning', 'AI Running')} value={String(runningAi)} tone={runningAi ? 'amber' : undefined} />
+            <MetricCard label={t('backtestTool.aiFailed', 'AI Failed')} value={String(failedAi)} tone={failedAi ? 'red' : undefined} />
+          </div>
+          <div className="mt-3 grid max-h-[210px] gap-2 overflow-auto sm:grid-cols-2 xl:grid-cols-3">
+            {ai_reviewer_statuses.map(item => (
+              <div key={item.ai_name} className="rounded-md border bg-background px-2 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-medium">{item.ai_name}</span>
+                  <Badge variant="outline" className="text-[10px]">{item.status}</Badge>
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className={directionClass(item.direction || 'hold')}>{item.direction || '-'}</span>
+                  <span>{item.confidence == null ? '-' : formatPct(item.confidence)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : skippedAi > 0 && (
+        <div className="mt-3 rounded-md border border-dashed bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+          {t('backtestTool.aiReviewersSkipped', 'Rule-only mode: LLM reviewers skipped (rule consensus is deterministic).')}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SummaryGrid({ backtest }: { backtest: EventBacktestResponse }) {
   const { t } = useTranslation()
   const summary = backtest.summary
+  const breakEvenWinRate = summary.break_even_win_rate ?? 50
+  const targetWinRate = summary.target_win_rate ?? 75
+  const winRateTone = summary.target_win_rate_met
+    ? 'green'
+    : summary.win_rate >= breakEvenWinRate
+      ? 'amber'
+      : 'red'
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -112,7 +188,22 @@ function SummaryGrid({ backtest }: { backtest: EventBacktestResponse }) {
         tone={summary.ai_confirmed ? 'green' : 'amber'}
       />
       <MetricCard label={t('backtestTool.llmEvaluated', 'LLM Evaluated')} value={String(summary.llm_evaluated_count || 0)} />
-      <MetricCard label={t('backtestTool.winRate', 'Win Rate')} value={formatPct(summary.win_rate)} tone={summary.win_rate >= 50 ? 'green' : 'red'} />
+      <MetricCard label={t('backtestTool.winRate', 'Win Rate')} value={formatPct(summary.win_rate)} tone={winRateTone} />
+      <MetricCard
+        label={t('backtestTool.targetWinRate', 'Target Win Rate')}
+        value={formatPct(targetWinRate)}
+        tone={summary.target_win_rate_met ? 'green' : 'amber'}
+      />
+      <MetricCard
+        label={t('backtestTool.breakEvenWinRate', 'Break-even Win Rate')}
+        value={formatPct(breakEvenWinRate)}
+        tone={summary.win_rate >= breakEvenWinRate ? 'green' : 'red'}
+      />
+      <MetricCard
+        label={t('backtestTool.auditStatus', 'Audit Status')}
+        value={summary.audit_status || (summary.partial ? 'partial' : 'complete')}
+        tone={summary.partial ? 'amber' : 'green'}
+      />
       <MetricCard label={t('backtestTool.totalPnl', 'Total PnL')} value={formatMoney(summary.total_pnl)} tone={summary.total_pnl >= 0 ? 'green' : 'red'} />
       <MetricCard label={t('backtestTool.maxDrawdown', 'Max Drawdown')} value={formatPct(summary.max_drawdown)} tone={summary.max_drawdown > 10 ? 'red' : 'amber'} />
       <MetricCard label={t('backtestTool.profitFactor', 'Profit Factor')} value={summary.profit_factor.toFixed(2)} />
@@ -298,6 +389,7 @@ function FiltersTab({ backtest }: { backtest: EventBacktestResponse }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label={t('backtestTool.fakeFiltered', 'Fake Breakout Filtered')} value={String(summary.fake_breakout_filtered_count)} />
         <MetricCard label={t('backtestTool.trapFiltered', 'Trap Filtered')} value={String(summary.trap_filtered_count)} />
+        <MetricCard label={t('backtestTool.edgeFiltered', 'Edge Gate Filtered')} value={String(summary.edge_quality_filtered_count || 0)} />
         <MetricCard label={t('backtestTool.noTradeFiltered', 'No Trade Filtered')} value={String(summary.no_trade_filtered_count)} />
         <MetricCard label={t('backtestTool.rulePrefiltered', 'Rule Prefiltered')} value={String(summary.rule_prefiltered_count || 0)} />
         <MetricCard label={t('backtestTool.aiRejected', 'AI Rejected')} value={String(summary.ai_rejected_count || 0)} />

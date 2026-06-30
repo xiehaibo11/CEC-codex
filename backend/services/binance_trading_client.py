@@ -8,6 +8,7 @@ Supports both testnet and mainnet environments.
 import hashlib
 import hmac
 import logging
+import os
 import time
 import requests
 from datetime import datetime
@@ -68,6 +69,8 @@ class BinanceTradingClient:
             secret_key: Binance secret key
             environment: 'testnet' or 'mainnet'
         """
+        if environment not in ("testnet", "mainnet"):
+            raise ValueError(f"Invalid Binance environment: {environment!r}. Must be 'testnet' or 'mainnet'.")
         self.api_key = api_key
         self.secret_key = secret_key
         self.environment = environment
@@ -80,6 +83,10 @@ class BinanceTradingClient:
             "X-MBX-APIKEY": self.api_key,
             "Content-Type": "application/x-www-form-urlencoded"
         })
+        proxy = os.environ.get("BINANCE_HTTPS_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            self.session.proxies.update({"http": proxy, "https": proxy})
+            logger.info(f"[BinanceTradingClient] Using proxy: {proxy}")
 
         # Cache for exchange info (precision data)
         self._exchange_info_cache: Optional[Dict] = None

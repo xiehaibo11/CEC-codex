@@ -468,9 +468,9 @@ export default function PromptBacktest({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t('common.all', 'All')}</SelectItem>
-                    <SelectItem value="buy">Buy</SelectItem>
-                    <SelectItem value="sell">Sell</SelectItem>
-                    <SelectItem value="hold">Hold</SelectItem>
+                    <SelectItem value="buy">做多</SelectItem>
+                    <SelectItem value="sell">做空</SelectItem>
+                    <SelectItem value="hold">持有</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={filterSymbol} onValueChange={setFilterSymbol}>

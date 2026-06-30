@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,6 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from services.event_contract.constants import PERIOD_SECONDS
+
+logger = logging.getLogger(__name__)
 
 
 class EventContractDataMixin:
@@ -75,6 +78,36 @@ class EventContractDataMixin:
         start_ts: int,
         end_ts: int,
         environment: str = "mainnet",
+        min_bars: int = 0,
+    ) -> List[Dict[str, Any]]:
+        klines = self._query_klines(db, exchange, symbol, period, start_ts, end_ts, environment)
+
+        # On-demand backfill: if the local DB has fewer bars than the caller needs
+        # (e.g. a fresh DB right after startup), pull the recent window from Binance
+        # and re-read. Default min_bars=0 preserves existing callers untouched.
+        latest_ts = max((item["timestamp"] for item in klines), default=0)
+        interval = PERIOD_SECONDS.get(period, 60)
+        stale_recent_window = end_ts >= int(datetime.now(timezone.utc).timestamp()) - interval * 3 and latest_ts < end_ts - interval * 2
+        if (
+            (min_bars > 0 and len(klines) < min_bars or stale_recent_window)
+            and str(exchange or "").lower() == "binance"
+            and environment == "mainnet"
+        ):
+            requested_bars = max(min_bars, int((end_ts - start_ts) // interval) + 1)
+            self._backfill_recent_binance_klines(db, symbol, period, requested_bars, environment)
+            klines = self._query_klines(db, exchange, symbol, period, start_ts, end_ts, environment)
+
+        return klines
+
+    def _query_klines(
+        self,
+        db: Session,
+        exchange: str,
+        symbol: str,
+        period: str,
+        start_ts: int,
+        end_ts: int,
+        environment: str,
     ) -> List[Dict[str, Any]]:
         rows = db.execute(
             text(
@@ -118,6 +151,39 @@ class EventContractDataMixin:
                 continue
         return klines
 
+    def _backfill_recent_binance_klines(
+        self,
+        db: Session,
+        symbol: str,
+        period: str,
+        min_bars: int,
+        environment: str,
+    ) -> None:
+        """Fetch the most recent ``min_bars`` (+buffer) bars from Binance in a single
+        REST request and persist them. Kept intentionally fast for the synchronous
+        predict path: one request, no pagination, no long history loop. Failures are
+        non-fatal so a backfill error never turns into a 500 -- the caller's existing
+        warmup validation still surfaces if data is truly insufficient.
+        """
+        try:
+            from services.exchanges.binance_adapter import BinanceAdapter
+            from services.exchanges.data_persistence import ExchangeDataPersistence
+
+            limit = min(max(int(min_bars) + 10, 200), 1500)
+            fetched = BinanceAdapter(environment=environment).fetch_klines(symbol, period, limit=limit)
+            if fetched:
+                # save_klines() commits internally.
+                ExchangeDataPersistence(db).save_klines(fetched, environment=environment)
+            logger.info(
+                "[EventContract] Binance kline backfill %s/%s: fetched %s bars (needed %s)",
+                symbol, period, len(fetched), min_bars,
+            )
+        except Exception as exc:  # noqa: BLE001 - backfill must never be fatal
+            logger.warning(
+                "[EventContract] Binance kline backfill failed for %s/%s: %s",
+                symbol, period, exc,
+            )
+
     def get_backtest_result(self, db: Session, run_id: int) -> Dict[str, Any]:
         row = db.execute(
             text(
@@ -145,6 +211,23 @@ class EventContractDataMixin:
             "equity_curve": json.loads(row["equity_curve"] or "[]"),
             "status": row["status"],
             "created_at": self._dt_to_iso(row["created_at"]),
+        }
+
+    def get_backtest_response(self, db: Session, run_id: int, trade_limit: int = 300) -> Dict[str, Any]:
+        result = self.get_backtest_result(db, run_id)
+        summary = result.get("summary") or {}
+        trades_payload = self.get_trade_logs(db, run_id, limit=trade_limit, offset=0)
+        trades = trades_payload.get("trades") or []
+        return {
+            "run_id": result["run_id"],
+            "config": result.get("config") or {},
+            "summary": summary,
+            "data_quality": summary.get("data_quality"),
+            "equity_curve": result.get("equity_curve") or [],
+            "trades": trades,
+            "trades_returned": len(trades),
+            "total_trade_logs": trades_payload.get("total") or len(trades),
+            "status": result.get("status"),
         }
 
     def get_trade_logs(self, db: Session, run_id: int, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
@@ -212,6 +295,7 @@ class EventContractDataMixin:
         trades: List[Dict[str, Any]],
         equity_curve: List[Dict[str, Any]],
     ) -> int:
+        run_status = "partial" if summary.get("partial") else "completed"
         result = db.execute(
             text(
                 """
@@ -221,7 +305,7 @@ class EventContractDataMixin:
                     final_equity, created_at
                 ) VALUES (
                     :symbol, :exchange, :environment, :period, :start_time, :end_time,
-                    :config, :summary, :equity_curve, 'completed', :total_trades,
+                    :config, :summary, :equity_curve, :status, :total_trades,
                     :win_rate, :final_equity, CURRENT_TIMESTAMP
                 )
                 RETURNING id
@@ -237,6 +321,7 @@ class EventContractDataMixin:
                 "config": json.dumps(self._public_config(cfg)),
                 "summary": json.dumps(summary),
                 "equity_curve": json.dumps(equity_curve),
+                "status": run_status,
                 "total_trades": summary["total_trades"],
                 "win_rate": summary["win_rate"],
                 "final_equity": summary["final_equity"],

@@ -15,6 +15,10 @@ export type FormState = {
   slippage_bps: number
   delay_seconds: number
   consensus_threshold: number
+  target_win_rate: number
+  enable_edge_quality_gate: boolean
+  max_trade_range_risk: number
+  allow_pullback_trades: boolean
   draw_result: string
   enable_fake_breakout_filter: boolean
   enable_trap_filter: boolean

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'react-hot-toast'
-import Cookies from 'js-cookie'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -25,217 +24,19 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Plus, Trash2, Edit, Activity, Eye, Sparkles, FlaskConical, Wifi, WifiOff, RefreshCw, CircleHelp } from 'lucide-react'
+import { Plus, Trash2, Edit, Activity, Eye, Sparkles, FlaskConical, CircleHelp } from 'lucide-react'
 import SignalPreviewChart from './SignalPreviewChart'
 import AiSignalChatModal from './AiSignalChatModal'
 import MarketRegimeConfig from './MarketRegimeConfig'
 import PacmanLoader from '../ui/pacman-loader'
 import { useCollectionDays } from '@/lib/useCollectionDays'
-
-// Exchange SVG logos
-const HyperliquidLogo = ({ className = '' }: { className?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 144 144" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <path d="M144 71.6991C144 119.306 114.866 134.582 99.5156 120.98C86.8804 109.889 83.1211 86.4521 64.116 84.0456C39.9942 81.0113 37.9057 113.133 22.0334 113.133C3.5504 113.133 0 86.2428 0 72.4315C0 58.3063 3.96809 39.0542 19.736 39.0542C38.1146 39.0542 39.1588 66.5722 62.132 65.1073C85.0007 63.5379 85.4184 34.8689 100.247 22.6271C113.195 12.0593 144 23.4641 144 71.6991Z" fill="#50e3c2"/>
-  </svg>
-)
-
-const BinanceLogo = ({ className = '' }: { className?: string }) => (
-  <img src="/static/binance_logo.svg" alt="Binance" width="16" height="16" className={className} />
-)
-
-// Exchange badge component
-const ExchangeBadge = ({ exchange, size = 'sm' }: { exchange: string; size?: 'sm' | 'xs' }) => {
-  const isHyperliquid = exchange === 'hyperliquid'
-  const textSize = size === 'xs' ? 'text-[10px]' : 'text-xs'
-  return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${isHyperliquid ? 'bg-emerald-500/10 text-emerald-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-      {isHyperliquid ? <HyperliquidLogo /> : <BinanceLogo />}
-      <span className={textSize}>{isHyperliquid ? 'Hyperliquid' : 'Binance'}</span>
-    </span>
-  )
-}
-
-// Types
-interface SignalDefinition {
-  id: number
-  signal_name: string
-  description: string | null
-  trigger_condition: TriggerCondition
-  enabled: boolean
-  exchange: string
-  created_at: string
-  updated_at: string
-}
-
-interface TriggerCondition {
-  metric?: string
-  operator?: string
-  threshold?: number
-  time_window?: string
-  logic?: string
-  conditions?: TriggerCondition[]
-}
-
-interface SignalPool {
-  id: number
-  pool_name: string
-  signal_ids: number[]
-  symbols: string[]
-  enabled: boolean
-  logic: 'OR' | 'AND'
-  exchange: string
-  source_type?: 'market_signals' | 'wallet_tracking'
-  source_config?: {
-    addresses?: string[]
-    event_types?: string[]
-    sync_mode?: string
-  }
-  created_at: string
-}
-
-interface MarketRegimeData {
-  regime: string
-  direction: string
-  confidence: number
-  details?: Record<string, unknown>
-}
-
-interface SignalTriggerLog {
-  id: number
-  signal_id: number | null
-  pool_id: number | null
-  symbol: string
-  trigger_value: Record<string, unknown> | null
-  triggered_at: string
-  market_regime: MarketRegimeData | null
-}
-
-interface WalletTrackingRuntimeStatus {
-  enabled: boolean
-  status: string
-  tier: string | null
-  synced_addresses: string[]
-  last_connected_at: string | null
-  last_message_at: string | null
-  last_event_at: string | null
-  last_error: string | null
-  active_wallet_pool_count: number
-  token_synced_at: string | null
-}
-
-function parseUtcNaiveString(value?: string | null): Date | null {
-  if (!value) return null
-  const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`
-  const parsed = new Date(normalized)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-function formatWalletRuntimeTime(value?: string | null): string {
-  const parsed = parseUtcNaiveString(value)
-  return parsed ? parsed.toLocaleString() : '-'
-}
-
-function formatWalletTier(t: (key: string, fallback?: string) => string, tier?: string | null): string {
-  if (tier === 'paid') {
-    return t('signals.walletTracking.tierPremium', 'Premium (second-level detection)')
-  }
-  if (tier === 'free') {
-    return t('signals.walletTracking.tierFree', 'Free (minute-level detection)')
-  }
-  return '-'
-}
-
-interface FactorItem {
-  name: string
-  category: string
-  description: string
-  expression: string
-  source: string
-}
-
-type PoolSourceType = 'market_signals' | 'wallet_tracking'
-
-const WALLET_EVENT_TYPES = [
-  'position_change',
-  'equity_change',
-  'fill',
-  'funding',
-  'transfer',
-  'liquidation',
-]
-
-function formatWalletEventType(t: (key: string, fallback?: string) => string, eventType: string): string {
-  switch (eventType) {
-    case 'position_change':
-      return t('signals.walletTracking.eventTypePositionChange', 'Position Change')
-    case 'equity_change':
-      return t('signals.walletTracking.eventTypeEquityChange', 'Equity Change')
-    case 'fill':
-      return t('signals.walletTracking.eventTypeFill', 'Trade Fill')
-    case 'funding':
-      return t('signals.walletTracking.eventTypeFunding', 'Funding')
-    case 'transfer':
-      return t('signals.walletTracking.eventTypeTransfer', 'Transfer')
-    case 'liquidation':
-      return t('signals.walletTracking.eventTypeLiquidation', 'Liquidation')
-    default:
-      return eventType
-  }
-}
-
-function formatWalletActionLabel(t: (key: string, fallback?: string) => string, action?: string | null): string {
-  switch (action) {
-    case 'open':
-      return t('signals.walletTracking.actionOpen', 'Opened')
-    case 'add':
-      return t('signals.walletTracking.actionAdd', 'Increased')
-    case 'reduce':
-      return t('signals.walletTracking.actionReduce', 'Reduced')
-    case 'close':
-      return t('signals.walletTracking.actionClose', 'Closed')
-    case 'flip':
-      return t('signals.walletTracking.actionFlip', 'Flipped')
-    case 'update':
-      return t('signals.walletTracking.actionUpdate', 'Updated')
-    default:
-      return action || '-'
-  }
-}
-
-function formatWalletDirectionLabel(t: (key: string, fallback?: string) => string, direction?: string | null): string {
-  switch (direction) {
-    case 'long':
-      return t('signals.walletTracking.directionLong', 'Long')
-    case 'short':
-      return t('signals.walletTracking.directionShort', 'Short')
-    case 'flat':
-      return t('signals.walletTracking.directionFlat', 'Flat')
-    default:
-      return direction || '-'
-  }
-}
-
-function formatWalletMetricValue(value: unknown, digits = 2): string | null {
-  if (typeof value !== 'number' || Number.isNaN(value)) return null
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits,
-  })
-}
-
-function formatShortAddress(address?: string | null): string {
-  if (!address) return '-'
-  if (address.length <= 14) return address
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
-
-function sortByCreatedAtDesc<T extends { created_at?: string | null }>(items: T[]): T[] {
-  return [...items].sort((a, b) => {
-    const aTime = parseUtcNaiveString(a.created_at)?.getTime() || 0
-    const bTime = parseUtcNaiveString(b.created_at)?.getTime() || 0
-    return bTime - aTime
-  })
-}
+import { FACTOR_CATEGORY_LABELS, MACD_EVENT_TYPES, METRICS, OPERATORS, TAKER_DIRECTIONS, TIME_WINDOWS, WALLET_EVENT_TYPES } from './signal-manager/constants'
+import { formatCondition } from './signal-manager/condition-formatters'
+import { formatDeps } from './signal-manager/dependency-formatters'
+import { BinanceLogo, ExchangeBadge, HyperliquidLogo } from './signal-manager/exchange'
+import { WalletRuntimePanel } from './signal-manager/WalletRuntimePanel'
+import type { FactorItem, MarketRegimeResult, MetricAnalysis, PoolSourceType, SignalDefinition, SignalPool, SignalTriggerLog, WalletTrackingRuntimeStatus } from './signal-manager/types'
+import { formatShortAddress, formatWalletActionLabel, formatWalletDirectionLabel, formatWalletEventType, formatWalletMetricValue, sortByCreatedAtDesc } from './signal-manager/wallet-formatters'
 
 // API functions
 const API_BASE = '/api/signals'
@@ -338,30 +139,11 @@ async function fetchWalletTrackingStatus(): Promise<WalletTrackingRuntimeStatus>
   return res.json()
 }
 
-async function updateWalletTrackingRuntime(data: { enabled: boolean; access_token?: string }): Promise<WalletTrackingRuntimeStatus> {
-  const res = await fetch(`${API_BASE}/wallet-tracking/runtime`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to update wallet tracking runtime')
-  return res.json()
-}
-
 async function fetchPoolBacktest(poolId: number, symbol: string): Promise<any> {
   const params = new URLSearchParams({ symbol })
   const res = await fetch(`${API_BASE}/pool-backtest/${poolId}?${params}`)
   if (!res.ok) throw new Error('Failed to fetch pool backtest')
   return res.json()
-}
-
-// Market Regime batch query
-interface MarketRegimeResult {
-  symbol: string
-  regime: string
-  direction: string
-  confidence: number
-  reason: string
 }
 
 async function fetchBatchMarketRegime(
@@ -396,29 +178,6 @@ async function fetchBatchMarketRegime(
   return results
 }
 
-interface MetricAnalysis {
-  status: string
-  symbol: string
-  metric: string
-  period: string
-  sample_count: number
-  time_range_hours: number
-  warning?: string
-  statistics?: {
-    mean: number
-    std: number
-    min: number
-    max: number
-    abs_percentiles: { p75: number; p90: number; p95: number; p99: number }
-  }
-  suggestions?: {
-    aggressive: { threshold: number; description: string }
-    moderate: { threshold: number; description: string; recommended?: boolean }
-    conservative: { threshold: number; description: string }
-  }
-  message?: string
-}
-
 async function fetchMetricAnalysis(symbol: string, metric: string, period: string, exchange: string = 'hyperliquid'): Promise<MetricAnalysis> {
   const params = new URLSearchParams({ symbol, metric, period, exchange })
   const res = await fetch(`${API_BASE}/analyze?${params}`)
@@ -434,84 +193,7 @@ async function fetchFactorLibrary(): Promise<FactorItem[]> {
     f.source !== 'builtin'
   )
 }
-
-// Factor category labels for display
-const FACTOR_CATEGORY_LABELS: Record<string, string> = {
-  trend: 'Trend',
-  momentum: 'Momentum',
-  volatility: 'Volatility',
-  volume: 'Volume',
-  statistical: 'Statistical',
-  composite: 'Composite',
-  custom: 'Custom',
-}
-
-// Constants aligned with K-line indicators (MarketFlowIndicators.tsx)
-const METRICS = [
-  { value: 'oi_delta', label: 'OI Delta', desc: 'Open Interest change %. Positive=inflow, Negative=outflow' },
-  { value: 'cvd', label: 'CVD', desc: 'Cumulative Volume Delta. Positive=buyers dominate, Negative=sellers dominate' },
-  { value: 'funding', label: 'Funding Rate Change', desc: 'Funding rate change (aligned with K-line chart). Positive=rate increasing, Negative=rate decreasing' },
-  { value: 'depth_ratio', label: 'Depth Ratio', desc: 'Bid/Ask depth ratio. >1=more bids, <1=more asks' },
-  { value: 'taker_ratio', label: 'Taker Ratio', desc: 'Log taker ratio ln(buy/sell). >0=buyers, <0=sellers. Symmetric around 0' },
-  { value: 'order_imbalance', label: 'Order Imbalance', desc: 'Order book imbalance (-1 to 1). Positive=buy pressure' },
-  { value: 'oi', label: 'OI (Absolute)', desc: 'Absolute Open Interest value in USD' },
-  { value: 'taker_volume', label: 'Taker Volume', desc: 'Composite signal: direction + ratio + volume threshold', isComposite: true },
-  { value: 'macd', label: 'MACD', desc: 'MACD technical indicator events: golden cross, death cross, etc.', isEvent: true },
-  { value: 'price_change', label: 'Price Change', desc: 'Price change % over time window. Formula: (current-prev)/prev*100. Positive=up, Negative=down' },
-  { value: 'volatility', label: 'Volatility', desc: 'Price volatility % over time window. Formula: (high-low)/low*100. Always positive, detects swings' },
-]
-
-// Direction options for taker_volume composite signal
-const TAKER_DIRECTIONS = [
-  { value: 'any', label: 'Any Direction', desc: 'Trigger on either buy or sell dominance' },
-  { value: 'buy', label: 'Buy Dominant', desc: 'Only trigger when buyers dominate' },
-  { value: 'sell', label: 'Sell Dominant', desc: 'Only trigger when sellers dominate' },
-]
-
-// MACD event types
-const MACD_EVENT_TYPES = [
-  { value: 'golden_cross', label: 'Golden Cross', desc: 'MACD crosses above Signal line (bullish)' },
-  { value: 'death_cross', label: 'Death Cross', desc: 'MACD crosses below Signal line (bearish)' },
-  { value: 'histogram_positive', label: 'Histogram Positive', desc: 'Histogram turns positive (same as golden cross)' },
-  { value: 'histogram_negative', label: 'Histogram Negative', desc: 'Histogram turns negative (same as death cross)' },
-  { value: 'macd_above_zero', label: 'MACD Above Zero', desc: 'MACD line crosses above zero (bullish confirmation)' },
-  { value: 'macd_below_zero', label: 'MACD Below Zero', desc: 'MACD line crosses below zero (bearish confirmation)' },
-]
-
-const OPERATORS = [
-  { value: 'abs_greater_than', label: '|x| > (Absolute)', desc: 'Triggers when absolute value exceeds threshold (ignores direction)' },
-  { value: 'greater_than', label: '> (Greater)', desc: 'Triggers when value is greater than threshold' },
-  { value: 'less_than', label: '< (Less)', desc: 'Triggers when value is less than threshold' },
-  { value: 'equals', label: '= (Equals)', desc: 'Triggers when value equals threshold' },
-]
-
-const TIME_WINDOWS = [
-  { value: '1m', label: '1 min', desc: 'Very short-term, high noise' },
-  { value: '3m', label: '3 min', desc: 'Short-term signals' },
-  { value: '5m', label: '5 min', desc: 'Recommended for most signals' },
-  { value: '15m', label: '15 min', desc: 'Medium-term, more reliable' },
-  { value: '30m', label: '30 min', desc: 'Longer-term trends' },
-  { value: '1h', label: '1 hour', desc: 'Major trend changes only' },
-  { value: '2h', label: '2 hours', desc: 'Long-term trend confirmation' },
-  { value: '4h', label: '4 hours', desc: 'Very long-term, major moves only' },
-]
 // Symbols are now loaded dynamically from Hyperliquid watchlist (see watchlistSymbols state)
-
-function formatDeps(deps: string[], t: (key: string) => string): string {
-  const keyMap: [RegExp, string][] = [
-    [/Signal Pool/i, 'common.dependencySignalPool'],
-    [/Bound to.*Trader/i, 'common.dependencyActiveBinding'],
-    [/Program Binding/i, 'common.dependencyProgramBinding'],
-    [/AI Strategy/i, 'common.dependencyActiveBinding'],
-    [/TriggerConfig/i, 'common.dependencyActiveBinding'],
-  ]
-  const messages = new Set<string>()
-  for (const dep of deps) {
-    const match = keyMap.find(([re]) => re.test(dep))
-    messages.add(match ? t(match[1]) : dep)
-  }
-  return Array.from(messages).join(' ')
-}
 
 export default function SignalManager() {
   const { t } = useTranslation()
@@ -1464,60 +1146,6 @@ export default function SignalManager() {
     })
   }
 
-  const handleEnableWalletTracking = async () => {
-    try {
-      setWalletRuntimeLoading(true)
-      const accessToken = Cookies.get('arena_token')
-      const data = await updateWalletTrackingRuntime({
-        enabled: true,
-        access_token: accessToken,
-      })
-      setWalletRuntime(data)
-      toast.success(t('signals.walletTracking.enabledSuccess', 'Wallet tracking integration enabled'))
-    } catch (err) {
-      toast.error(t('signals.walletTracking.enableFailed', 'Failed to enable wallet tracking integration'))
-    } finally {
-      setWalletRuntimeLoading(false)
-    }
-  }
-
-  const handleDisableWalletTracking = async () => {
-    try {
-      setWalletRuntimeLoading(true)
-      const data = await updateWalletTrackingRuntime({ enabled: false })
-      setWalletRuntime(data)
-      toast.success(t('signals.walletTracking.disabledSuccess', 'Wallet tracking integration disabled'))
-    } catch (err) {
-      toast.error(t('signals.walletTracking.disableFailed', 'Failed to disable wallet tracking integration'))
-    } finally {
-      setWalletRuntimeLoading(false)
-    }
-  }
-
-  const formatCondition = (cond: TriggerCondition) => {
-    const metric = cond.metric?.startsWith('factor:')
-      ? `⚗ ${cond.metric.split(':')[1]}`
-      : METRICS.find(m => m.value === cond.metric)?.label || cond.metric
-    // Handle taker_volume composite signal
-    if (cond.metric === 'taker_volume') {
-      const dir = (cond as any).direction || 'any'
-      const ratio = (cond as any).ratio_threshold || 1.5
-      const vol = ((cond as any).volume_threshold || 0).toLocaleString()
-      return `${metric} | ${dir.toUpperCase()} ≥${ratio} Vol≥$${vol} (${cond.time_window})`
-    }
-    // Handle MACD event-based signal
-    if (cond.metric === 'macd') {
-      const events = (cond as any).event_types || []
-      const eventLabels = events.map((e: string) => {
-        const found = MACD_EVENT_TYPES.find(m => m.value === e)
-        return found ? found.label : e
-      }).join(', ')
-      return `${metric} | ${eventLabels || 'No events'} (${cond.time_window})`
-    }
-    const op = OPERATORS.find(o => o.value === cond.operator)?.label || cond.operator
-    return `${metric} ${op} ${cond.threshold} (${cond.time_window})`
-  }
-
   if (loading) {
     return <div className="flex items-center justify-center h-64">{t('signals.loading', 'Loading...')}</div>
   }
@@ -1720,94 +1348,13 @@ export default function SignalManager() {
                 <CardTitle>{t('signals.walletTracking.title', 'Wallet Tracking')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-medium">{t('signals.walletTracking.connectionStatus', 'Connection Status')}</div>
-                        <div className="text-xs text-muted-foreground">{t('signals.walletTracking.connectionHint', 'Enable Hyper Insight sync here. HAA will keep synced wallets available for pool selection and runtime matching.')}</div>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
-                        walletRuntime?.status === 'connected'
-                          ? 'bg-emerald-500/10 text-emerald-600'
-                          : walletRuntime?.enabled
-                            ? 'bg-amber-500/10 text-amber-600'
-                            : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {walletRuntime?.status === 'connected'
-                          ? <Wifi className="w-3 h-3" />
-                          : walletRuntime?.enabled
-                            ? <RefreshCw className="w-3 h-3 animate-spin" />
-                            : <WifiOff className="w-3 h-3" />}
-                        {walletRuntime?.status === 'connected'
-                          ? ((walletRuntime?.synced_addresses?.length || 0) > 0
-                            ? t('signals.walletTracking.connected', 'Connected')
-                            : t('signals.walletTracking.connectedNoWallets', 'Connected · No tracked wallets'))
-                          : walletRuntime?.status === 'waiting_for_token'
-                            ? t('signals.walletTracking.waitingForToken', 'Waiting for token')
-                            : walletRuntime?.enabled
-                                ? t('signals.walletTracking.connecting', 'Connecting')
-                                : t('signals.walletTracking.notConnected', 'Not Connected')}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
-                      <div>{t('signals.walletTracking.tier', 'Tier')}: <span className="text-foreground">{formatWalletTier(t, walletRuntime?.tier)}</span></div>
-                      <div>{t('signals.walletTracking.syncedWalletCount', 'Synced wallets')}: <span className="text-foreground">{walletRuntime?.synced_addresses?.length || 0}</span></div>
-                      <div>{t('signals.walletTracking.lastEventAt', 'Last event')}: <span className="text-foreground">{formatWalletRuntimeTime(walletRuntime?.last_event_at)}</span></div>
-                    </div>
-                    {walletRuntime?.last_error && (
-                      <div className="mt-3 text-xs text-red-500">
-                        {t('signals.walletTracking.lastError', 'Last error')}: {walletRuntime.last_error}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border p-4 space-y-3">
-                    <div className="text-sm font-medium">{t('signals.walletTracking.syncedWallets', 'Synced Wallets')}</div>
-                    {walletRuntimeLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        {t('signals.walletTracking.loading', 'Loading...')}
-                      </div>
-                    ) : walletRuntime?.synced_addresses?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {walletRuntime.synced_addresses.map(address => (
-                          <span key={address} className="rounded-md border px-2 py-1 text-xs">
-                            {address}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {t('signals.walletTracking.noSyncedWallets', 'No synced wallets yet. Track wallets on Hyper Insight first.')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a href="https://hyper.akooi.com/" target="_blank" rel="noopener noreferrer">
-                      {t('signals.walletTracking.manageOnInsight', 'Manage on Hyper Insight')}
-                    </a>
-                  </Button>
-                  {walletRuntime?.enabled ? (
-                    <Button onClick={handleDisableWalletTracking} size="sm" variant="outline" disabled={walletRuntimeLoading}>
-                      {t('signals.walletTracking.disable', 'Disable Sync')}
-                    </Button>
-                  ) : (
-                    <Button onClick={handleEnableWalletTracking} size="sm" disabled={walletRuntimeLoading}>
-                      {t('signals.walletTracking.enable', 'Enable Sync')}
-                    </Button>
-                  )}
-                  <Button onClick={() => openPoolDialog(undefined, 'wallet_tracking')} size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('signals.walletTracking.createWalletPool', 'Create Wallet Pool')}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t('signals.walletTracking.inlineHint', 'Connect here first. Once tracked wallets appear, choose which ones should enter HAA signal pools.')}
-                </p>
+                <WalletRuntimePanel
+                  walletRuntime={walletRuntime}
+                  walletRuntimeLoading={walletRuntimeLoading}
+                  t={t}
+                  onRefresh={() => loadWalletRuntime()}
+                  onCreateWalletPool={() => openPoolDialog(undefined, 'wallet_tracking')}
+                />
               </CardContent>
             </Card>
           </div>
@@ -2568,7 +2115,7 @@ export default function SignalManager() {
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
                   {poolForm.source_type === 'wallet_tracking'
-                    ? t('signals.walletTracking.poolConfigHint', 'Wallet pools use synced Hyper Insight wallets and real-time event types instead of market indicators.')
+                    ? t('signals.walletTracking.poolConfigHint', 'Wallet pools use CoinGlass wallet addresses and wallet event types instead of market indicators.')
                     : t('signals.dialog.marketSignalsTypeHint', 'Market pools continue to use symbols, signal definitions, and exchange-specific trigger logic.')}
                 </p>
               </div>
@@ -2697,7 +2244,7 @@ export default function SignalManager() {
                         ))
                       ) : (
                         <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground w-full">
-                          {t('signals.walletTracking.addressSyncPlaceholder', 'Tracked wallet sync will appear here after the Hyper Insight websocket client is enabled. New synced wallets stay opt-in and are never added to an existing pool automatically.')}
+                          {t('signals.walletTracking.addressSyncPlaceholder', 'CoinGlass wallet addresses will appear here after the CoinGlass API key is configured and the status refresh succeeds. New addresses stay opt-in and are never added to an existing pool automatically.')}
                         </div>
                       )}
                     </div>

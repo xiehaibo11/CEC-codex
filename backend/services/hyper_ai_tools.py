@@ -238,7 +238,7 @@ HYPER_AI_TOOLS = [
         "type": "function",
         "function": {
             "name": "analyze_tracked_address",
-            "description": "Get private Hyper Insight address detail for a tracked wallet. Returns factual data for recent activity analysis; recent fills are limited and do not represent the wallet's complete all-time trade history.",
+            "description": "Get CoinGlass Hyperliquid wallet position detail for a tracked wallet address. Returns factual position, margin, and PnL data available from CoinGlass.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -255,7 +255,7 @@ HYPER_AI_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_tracked_wallets",
-            "description": "Get the current Hyper Insight wallet sync status and the tracked wallet addresses currently synced into CEC-codex. Use this to see whether Hyper Insight is connected and which wallets are currently available to wallet-tracking signal pools.",
+            "description": "Get the current CoinGlass wallet tracking status and wallet addresses currently available to CEC-codex wallet-tracking signal pools.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -2298,95 +2298,108 @@ def execute_list_signal_pools(db: Session, pool_id: int = None) -> str:
         return json.dumps({"error": str(e)})
 
 
+COINGLASS_WALLET_TRACKING_ENDPOINTS = (
+    ("whale_position", "/api/hyperliquid/whale-position", {}),
+    ("whale_alert", "/api/hyperliquid/whale-alert", {}),
+)
+
+
+def _coinglass_wallet_rows(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        rows = data.get("list")
+        if isinstance(rows, list):
+            return [item for item in rows if isinstance(item, dict)]
+    return []
+
+
+def _coinglass_wallet_addresses(rows: list[dict[str, Any]]) -> list[str]:
+    addresses: set[str] = set()
+    for row in rows:
+        address = row.get("user") or row.get("address") or row.get("user_address")
+        if isinstance(address, str) and address.strip():
+            addresses.add(address.strip().lower())
+    return sorted(addresses)
+
+
+def _latest_coinglass_wallet_event_time(rows: list[dict[str, Any]]) -> int | None:
+    latest_ms = 0
+    for row in rows:
+        for key in ("create_time", "update_time"):
+            try:
+                latest_ms = max(latest_ms, int(row.get(key) or 0))
+            except (TypeError, ValueError):
+                continue
+    return latest_ms or None
+
+
+def _coinglass_server_key_payload() -> tuple[str, str | None]:
+    from api.coinglass_routes import _mask_key, _server_coinglass_key
+
+    api_key = _server_coinglass_key()
+    return api_key, _mask_key(api_key) if api_key else None
+
+
 def execute_analyze_tracked_address(db: Session, address: str) -> str:
-    """Fetch protected Hyper Insight address detail for Hyper AI analysis."""
-    from services.hyper_insight_wallet_service import hyper_insight_wallet_service
+    """Fetch CoinGlass Hyperliquid wallet position detail for Hyper AI analysis."""
+    from fastapi import HTTPException
+    from api.coinglass_routes import _coinglass_request
 
     normalized = (address or "").strip().lower()
     if not normalized:
         return json.dumps({"error": "address is required"})
 
-    snapshot = hyper_insight_wallet_service.get_status_snapshot()
-    synced_addresses = [str(item).strip().lower() for item in (snapshot.get("synced_addresses") or []) if str(item).strip()]
-    synced_set = set(synced_addresses)
-
-    access_token = _get_hyper_insight_access_token(db)
-    if not access_token:
+    api_key, key_masked = _coinglass_server_key_payload()
+    if not api_key:
         return json.dumps({
-            "error": "Please log in to CEC-codex before using Hyper Insight analysis.",
+            "error": "CoinGlass API key is not configured for Hyper AI wallet analysis.",
             "next_steps": [
-                "Log in to CEC-codex with your linked account first.",
-                "After login, open Signals > Wallet Tracking and make sure your tracked wallets have synced before asking for wallet analysis."
+                "Save a CoinGlass key on the CoinGlass page or set COINGLASS_API_KEY on the server.",
+                "After the key is configured, refresh Signals > Wallet Tracking and retry the wallet analysis."
             ]
         }, ensure_ascii=False)
-
-    if snapshot.get("status") != "connected":
-        return json.dumps({
-            "error": "Wallet Tracking is not connected yet in CEC-codex.",
-            "next_steps": [
-                "Open CEC-codex and use the left sidebar to enter Signals > Wallet Tracking.",
-                "Enable sync and wait until the connection status becomes connected before requesting wallet analysis."
-            ]
-        }, ensure_ascii=False)
-
-    if normalized not in synced_set:
-        return json.dumps({
-            "error": "This wallet is not currently in your synced wallet list.",
-            "next_steps": [
-                "Track the wallet on https://hyper.akooi.com/ if it is not already tracked there.",
-                "Then return to CEC-codex > Signals > Wallet Tracking and wait until the wallet appears in the synced wallet list."
-            ]
-        }, ensure_ascii=False)
-
-    base_url = os.getenv("HYPER_INSIGHT_API_BASE_URL", "https://hyper.akooi.com").rstrip("/")
-    url = f"{base_url}/api/s2s/addresses/{normalized}"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-    }
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code == 404:
-            return json.dumps({
-                "error": "This wallet is temporarily unavailable for detailed analysis right now.",
-                "next_steps": [
-                    "Wallet Tracking is already connected and the wallet is already in your synced list.",
-                    "This means the current failure is system-side rather than a wallet tracking problem. Please retry later."
-                ]
-            }, ensure_ascii=False)
-        if response.status_code == 401:
-            return json.dumps({
-                "error": "Your Hyper Insight session in CEC-codex is no longer valid.",
-                "next_steps": [
-                    "Refresh CEC-codex, open Signals > Wallet Tracking, and enable sync again.",
-                    "After the tracked wallet list is visible again, retry the wallet analysis request."
-                ]
-            }, ensure_ascii=False)
-        if response.status_code == 403:
-            return json.dumps({
-                "error": "Tracked wallet analysis is temporarily unavailable right now.",
-                "next_steps": [
-                    "Wallet Tracking is connected and the wallet is already in your synced list.",
-                    "This means the current failure is system-side rather than a wallet tracking problem. Please retry later."
-                ]
-            }, ensure_ascii=False)
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload, dict):
-            payload.setdefault(
-                "analysis_limit_note",
-                "Recent fills are limited to the latest window and do not represent the address's complete all-time trade history.",
-            )
-        return json.dumps(payload, indent=2, ensure_ascii=False)
-    except requests.RequestException as exc:
-        logger.error("[analyze_tracked_address] Error fetching %s: %s", normalized, exc)
+        result = _coinglass_request(
+            "/api/hyperliquid/user-position",
+            {"user_address": normalized},
+            api_key=api_key,
+            key_source="server",
+            key_masked=key_masked,
+        )
+    except HTTPException as exc:
         return json.dumps({
-            "error": "Failed to fetch Hyper Insight address detail right now.",
+            "error": "Failed to fetch CoinGlass wallet position detail right now.",
+            "detail": str(exc.detail),
             "next_steps": [
-                "If Wallet Tracking is connected and the wallet is already in your synced list, then the current failure is system-side.",
-                "Please retry later."
+                "Confirm the CoinGlass key is valid and has access to Hyperliquid wallet endpoints.",
+                "Retry after the CoinGlass request succeeds."
             ]
         }, ensure_ascii=False)
+
+    if not result.get("ok"):
+        return json.dumps({
+            "error": "CoinGlass wallet position detail is unavailable right now.",
+            "detail": result.get("msg") or (result.get("payload") or {}).get("message"),
+            "next_steps": [
+                "Confirm the address is a Hyperliquid wallet address.",
+                "Confirm the CoinGlass plan supports the Hyperliquid wallet position endpoint."
+            ]
+        }, ensure_ascii=False)
+
+    return json.dumps({
+        "source": "coinglass",
+        "address": normalized,
+        "key_source": result.get("key_source"),
+        "key_masked": result.get("key_masked"),
+        "fetched_at": result.get("fetched_at"),
+        "data": result.get("data"),
+        "analysis_limit_note": (
+            "CoinGlass returns current Hyperliquid wallet position and margin data for this address; "
+            "it is not a complete all-time trading-history export."
+        ),
+    }, indent=2, ensure_ascii=False)
 
 
 def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type: str = None) -> str:
@@ -3377,21 +3390,85 @@ def execute_fetch_url(url: str, max_length: int = 8000) -> str:
 
 
 def execute_get_tracked_wallets(db: Session) -> str:
-    """Return the current Hyper Insight sync state and synced tracked wallets."""
-    from services.hyper_insight_wallet_service import hyper_insight_wallet_service
+    """Return the current CoinGlass wallet tracking state and available wallet addresses."""
+    from fastapi import HTTPException
+    from api.coinglass_routes import _coinglass_request
 
-    snapshot = hyper_insight_wallet_service.get_status_snapshot()
-    synced_addresses = snapshot.get("synced_addresses") or []
+    api_key, key_masked = _coinglass_server_key_payload()
+    if not api_key:
+        return json.dumps({
+            "connected": False,
+            "status": "not_configured",
+            "source": "coinglass",
+            "tracked_wallet_count": 0,
+            "tracked_wallets": [],
+            "last_event_at": None,
+            "last_error": "CoinGlass API key is not configured for Hyper AI wallet tracking tools.",
+            "usage_note": (
+                "Signal System uses CoinGlass wallet tracking. Hyper AI can summarize it when a server "
+                "CoinGlass key is available, or the user can inspect the Signal System wallet page with "
+                "their own configured CoinGlass key."
+            ),
+        }, indent=2, ensure_ascii=False)
+
+    addresses: set[str] = set()
+    source_statuses: list[dict[str, Any]] = []
+    errors: list[str] = []
+    latest_event_ms: int | None = None
+
+    for source_id, path, params in COINGLASS_WALLET_TRACKING_ENDPOINTS:
+        try:
+            result = _coinglass_request(
+                path,
+                params,
+                api_key=api_key,
+                key_source="server",
+                key_masked=key_masked,
+            )
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            errors.append(f"{source_id}: {detail}")
+            source_statuses.append({"id": source_id, "path": path, "ok": False, "message": detail})
+            continue
+
+        rows = _coinglass_wallet_rows(result.get("data"))
+        addresses.update(_coinglass_wallet_addresses(rows))
+        event_ms = _latest_coinglass_wallet_event_time(rows)
+        if event_ms is not None:
+            latest_event_ms = max(latest_event_ms or 0, event_ms)
+        source_statuses.append({
+            "id": source_id,
+            "path": path,
+            "ok": bool(result.get("ok")),
+            "message": result.get("msg"),
+            "row_count": len(rows),
+        })
+        if not result.get("ok"):
+            errors.append(f"{source_id}: {result.get('msg') or 'CoinGlass request failed'}")
+
+    synced_addresses = sorted(addresses)
+    connected = any(item.get("ok") for item in source_statuses)
+    last_event_at = (
+        datetime.fromtimestamp(latest_event_ms / 1000, tz=timezone.utc).replace(tzinfo=None).isoformat()
+        if latest_event_ms else None
+    )
     result = {
-        "connected": snapshot.get("status") == "connected",
-        "status": snapshot.get("status"),
-        "tier": snapshot.get("tier"),
+        "connected": connected,
+        "status": "connected" if connected else "error",
+        "source": "coinglass",
+        "key_source": "server",
+        "key_masked": key_masked,
         "tracked_wallet_count": len(synced_addresses),
         "tracked_wallets": synced_addresses,
-        "last_connected_at": snapshot.get("last_connected_at"),
-        "last_event_at": snapshot.get("last_event_at"),
-        "last_error": snapshot.get("last_error"),
-        "usage_note": "This list reflects the wallets currently synced from Hyper Insight into CEC-codex. It is the correct source for what Hyper AI can currently inspect in this Arena session.",
+        "last_connected_at": datetime.utcnow().isoformat() if connected else None,
+        "last_event_at": last_event_at,
+        "last_error": "; ".join(errors) if errors and not connected else None,
+        "data_sources": source_statuses,
+        "usage_note": (
+            "This list reflects wallet addresses currently available from CoinGlass Hyperliquid "
+            "whale position and whale alert endpoints. It is the CoinGlass-backed source for "
+            "CEC-codex wallet-tracking signal pools."
+        ),
     }
     return json.dumps(result, indent=2, ensure_ascii=False)
 

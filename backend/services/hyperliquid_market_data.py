@@ -32,7 +32,6 @@ class HyperliquidClient:
     def __init__(self, environment: str = "mainnet"):
         self.environment = environment
         self.exchange = None
-        self._initialize_exchange()
 
     def _initialize_exchange(self):
         """Initialize CCXT Hyperliquid exchange"""
@@ -89,55 +88,28 @@ class HyperliquidClient:
     def get_last_price(self, symbol: str) -> Optional[float]:
         """Get the last price for a symbol"""
         try:
-            if SymbolMapper.is_hip3_symbol(symbol):
-                ticker = self.get_ticker_data(symbol)
-                if ticker and ticker.get('price'):
-                    return float(ticker['price'])
-                return None
-
-            if not self.exchange:
-                self._initialize_exchange()
-
-            # Ensure symbol is in CCXT format (e.g., 'BTC/USD')
-            formatted_symbol = self._format_symbol(symbol)
-
-            try:
-                ticker = self.exchange.fetch_ticker(formatted_symbol)
-                price = ticker['last']
-                logger.info(f"Got price for {formatted_symbol}: {price}")
-                return float(price) if price else None
-            except Exception as perp_error:
-                # If perpetual format fails, try spot format as fallback
-                error_msg = str(perp_error).lower()
-                if 'does not have market symbol' in error_msg or 'bad symbol' in error_msg:
-                    # Try spot format (remove :USDC suffix)
-                    if ':USDC' in formatted_symbol:
-                        spot_symbol = formatted_symbol.replace(':USDC', '')
-                        logger.debug(f"Perpetual format failed for {symbol}, retrying with spot format: {spot_symbol}")
-                        ticker = self.exchange.fetch_ticker(spot_symbol)
-                        price = ticker['last']
-                        logger.info(f"Got price for {spot_symbol}: {price}")
-                        return float(price) if price else None
-                # Re-raise if not a symbol format issue
-                raise
+            ticker = self.get_ticker_data(symbol)
+            if ticker and ticker.get('price'):
+                return float(ticker['price'])
+            return None
 
         except Exception as e:
             logger.error(f"Error fetching price for {symbol}: {e}")
             return None
 
+    def _info_api_url(self, symbol: str) -> str:
+        if SymbolMapper.is_hip3_symbol(symbol):
+            return "https://api.hyperliquid.xyz/info"
+        if self.environment == "testnet":
+            return "https://api.hyperliquid-testnet.xyz/info"
+        return "https://api.hyperliquid.xyz/info"
+
     def get_ticker_data(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get complete ticker data using Hyperliquid native API"""
         try:
             import requests
+            api_url = self._info_api_url(symbol)
             is_hip3 = SymbolMapper.is_hip3_symbol(symbol)
-
-            # Use environment-specific API endpoint
-            if is_hip3:
-                api_url = "https://api.hyperliquid.xyz/info"
-            elif self.environment == "testnet":
-                api_url = "https://api.hyperliquid-testnet.xyz/info"
-            else:
-                api_url = "https://api.hyperliquid.xyz/info"
 
             payload = {"type": "metaAndAssetCtxs"}
             if is_hip3:
@@ -263,26 +235,8 @@ class HyperliquidClient:
             True if symbol can fetch valid price data, False otherwise
         """
         try:
-            if not self.exchange:
-                self._initialize_exchange()
-
-            formatted_symbol = self._format_symbol(symbol)
-
-            try:
-                ticker = self.exchange.fetch_ticker(formatted_symbol)
-                price = ticker['last']
-            except Exception as perp_error:
-                error_msg = str(perp_error).lower()
-                if 'does not have market symbol' in error_msg or 'bad symbol' in error_msg:
-                    if ':USDC' in formatted_symbol:
-                        spot_symbol = formatted_symbol.replace(':USDC', '')
-                        ticker = self.exchange.fetch_ticker(spot_symbol)
-                        price = ticker['last']
-                    else:
-                        return False
-                else:
-                    return False
-
+            ticker = self.get_ticker_data(symbol)
+            price = ticker.get('price') if ticker else None
             is_valid = price is not None and price > 0
             if is_valid:
                 logger.debug(f"Symbol {symbol} is tradable (price: {price})")
@@ -295,85 +249,7 @@ class HyperliquidClient:
     def get_kline_data(self, symbol: str, period: str = '1d', count: int = 100, persist: bool = True) -> List[Dict[str, Any]]:
         """Get kline/candlestick data for a symbol"""
         try:
-            if SymbolMapper.is_hip3_symbol(symbol):
-                return self._fetch_kline_native(symbol, period, count, persist)
-
-            if not self.exchange:
-                self._initialize_exchange()
-
-            formatted_symbol = self._format_symbol(symbol)
-
-            # Map period to CCXT timeframe (Hyperliquid supported)
-            timeframe_map = {
-                '1m': '1m',
-                '3m': '3m',
-                '5m': '5m',
-                '15m': '15m',
-                '30m': '30m',
-                '1h': '1h',
-                '2h': '2h',
-                '4h': '4h',
-                '8h': '8h',
-                '12h': '12h',
-                '1d': '1d',
-                '3d': '3d',
-                '1w': '1w',
-                '1M': '1M',
-            }
-            timeframe = timeframe_map.get(period, '1d')
-
-            # Fetch OHLCV data with fallback to spot format
-            try:
-                ohlcv = self.exchange.fetch_ohlcv(formatted_symbol, timeframe, limit=count)
-            except Exception as perp_error:
-                error_msg = str(perp_error).lower()
-                if 'does not have market symbol' in error_msg or 'bad symbol' in error_msg:
-                    if ':USDC' in formatted_symbol:
-                        spot_symbol = formatted_symbol.replace(':USDC', '')
-                        logger.debug(f"Perpetual format failed for {symbol}, retrying with spot format: {spot_symbol}")
-                        ohlcv = self.exchange.fetch_ohlcv(spot_symbol, timeframe, limit=count)
-                        formatted_symbol = spot_symbol  # Update for logging
-                    else:
-                        raise
-                else:
-                    raise
-
-            # Convert to our format
-            klines = []
-            for candle in ohlcv:
-                timestamp_ms = candle[0]
-                open_price = candle[1]
-                high_price = candle[2]
-                low_price = candle[3]
-                close_price = candle[4]
-                volume = candle[5]
-
-                # Calculate change
-                change = close_price - open_price if open_price else 0
-                percent = (change / open_price * 100) if open_price else 0
-
-                klines.append({
-                    'timestamp': int(timestamp_ms / 1000),  # Convert to seconds
-                    'datetime': datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat(),
-                    'open': float(open_price) if open_price else None,
-                    'high': float(high_price) if high_price else None,
-                    'low': float(low_price) if low_price else None,
-                    'close': float(close_price) if close_price else None,
-                    'volume': float(volume) if volume else None,
-                    'amount': float(volume * close_price) if volume and close_price else None,
-                    'chg': float(change),
-                    'percent': float(percent),
-                })
-
-            # Auto-persist data to database (边用边存)
-            if persist and klines:
-                try:
-                    self._persist_kline_data(symbol, period, klines)
-                except Exception as persist_error:
-                    logger.warning(f"Failed to persist kline data for {symbol}: {persist_error}")
-
-            logger.info(f"Got {len(klines)} klines for {formatted_symbol}")
-            return klines
+            return self._fetch_kline_native(symbol, period, count, persist)
 
         except Exception as e:
             logger.error(f"Error fetching klines for {symbol}: {e}")
@@ -392,82 +268,7 @@ class HyperliquidClient:
             List of kline data dictionaries
         """
         try:
-            if SymbolMapper.is_hip3_symbol(symbol):
-                return self._fetch_kline_native_range(symbol, period, since_ms, until_ms)
-
-            if not self.exchange:
-                self._initialize_exchange()
-
-            formatted_symbol = self._format_symbol(symbol)
-
-            timeframe_map = {
-                '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
-                '1h': '1h', '2h': '2h', '4h': '4h', '8h': '8h', '12h': '12h',
-                '1d': '1d', '3d': '3d', '1w': '1w', '1M': '1M',
-            }
-            timeframe = timeframe_map.get(period, '5m')
-
-            # Calculate limit based on time range
-            period_ms_map = {
-                '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000, '30m': 1800000,
-                '1h': 3600000, '2h': 7200000, '4h': 14400000, '8h': 28800000, '12h': 43200000,
-                '1d': 86400000, '3d': 259200000, '1w': 604800000, '1M': 2592000000,
-            }
-            period_ms = period_ms_map.get(period, 300000)
-
-            if until_ms:
-                time_range = until_ms - since_ms
-                limit = min(int(time_range / period_ms) + 10, 500)  # Add buffer, max 500
-            else:
-                limit = 500
-
-            # Fetch OHLCV data with since parameter and fallback to spot format
-            try:
-                ohlcv = self.exchange.fetch_ohlcv(formatted_symbol, timeframe, since=since_ms, limit=limit)
-            except Exception as perp_error:
-                error_msg = str(perp_error).lower()
-                if 'does not have market symbol' in error_msg or 'bad symbol' in error_msg:
-                    if ':USDC' in formatted_symbol:
-                        spot_symbol = formatted_symbol.replace(':USDC', '')
-                        logger.debug(f"Perpetual format failed for {symbol}, retrying with spot format: {spot_symbol}")
-                        ohlcv = self.exchange.fetch_ohlcv(spot_symbol, timeframe, since=since_ms, limit=limit)
-                        formatted_symbol = spot_symbol
-                    else:
-                        raise
-                else:
-                    raise
-
-            # Convert to our format and filter by until_ms if provided
-            klines = []
-            for candle in ohlcv:
-                timestamp_ms = candle[0]
-                if until_ms and timestamp_ms > until_ms:
-                    break
-
-                open_price = candle[1]
-                high_price = candle[2]
-                low_price = candle[3]
-                close_price = candle[4]
-                volume = candle[5]
-
-                change = close_price - open_price if open_price else 0
-                percent = (change / open_price * 100) if open_price else 0
-
-                klines.append({
-                    'timestamp': int(timestamp_ms / 1000),
-                    'datetime': datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat(),
-                    'open': float(open_price) if open_price else None,
-                    'high': float(high_price) if high_price else None,
-                    'low': float(low_price) if low_price else None,
-                    'close': float(close_price) if close_price else None,
-                    'volume': float(volume) if volume else None,
-                    'amount': float(volume * close_price) if volume and close_price else None,
-                    'chg': float(change),
-                    'percent': float(percent),
-                })
-
-            logger.info(f"Got {len(klines)} historical klines for {formatted_symbol} from {since_ms}")
-            return klines
+            return self._fetch_kline_native_range(symbol, period, since_ms, until_ms)
 
         except Exception as e:
             logger.error(f"Error fetching historical klines for {symbol}: {e}")
@@ -599,7 +400,7 @@ class HyperliquidClient:
         return f"{symbol_upper}/USDC:USDC"
 
     def _fetch_kline_native(self, symbol: str, period: str = '1d', count: int = 100, persist: bool = True) -> List[Dict[str, Any]]:
-        """Fetch HIP-3 klines through Hyperliquid native candleSnapshot API."""
+        """Fetch klines through Hyperliquid native candleSnapshot API."""
         secs = INTERVAL_SECONDS.get(period, 86400)
         end_time = int(time.time() * 1000)
         start_time = end_time - (secs * count * 1000)
@@ -613,7 +414,7 @@ class HyperliquidClient:
         until_ms: Optional[int] = None,
         persist: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Fetch HIP-3 klines for an explicit time range."""
+        """Fetch Hyperliquid klines for an explicit time range."""
         import requests
 
         exchange_symbol = SymbolMapper.to_exchange(symbol, "hyperliquid")
@@ -629,11 +430,11 @@ class HyperliquidClient:
         }
 
         try:
-            resp = requests.post("https://api.hyperliquid.xyz/info", json=payload, timeout=15)
+            resp = requests.post(self._info_api_url(symbol), json=payload, timeout=15)
             resp.raise_for_status()
             candles = resp.json()
         except Exception as err:
-            logger.warning("Failed to fetch HIP-3 klines for %s: %s", symbol, err)
+            logger.warning("Failed to fetch Hyperliquid klines for %s: %s", symbol, err)
             return []
 
         klines: List[Dict[str, Any]] = []
@@ -647,7 +448,7 @@ class HyperliquidClient:
                 close_price = float(candle['c'])
                 volume = float(candle['v'])
             except (KeyError, TypeError, ValueError) as parse_err:
-                logger.debug("Skipping malformed HIP-3 candle for %s: %s", symbol, parse_err)
+                logger.debug("Skipping malformed Hyperliquid candle for %s: %s", symbol, parse_err)
                 continue
 
             change = close_price - open_price if open_price else 0
@@ -669,9 +470,9 @@ class HyperliquidClient:
             try:
                 self._persist_kline_data(SymbolMapper.to_internal(symbol, "hyperliquid"), period, klines)
             except Exception as persist_error:
-                logger.warning(f"Failed to persist HIP-3 kline data for {symbol}: {persist_error}")
+                logger.warning(f"Failed to persist Hyperliquid kline data for {symbol}: {persist_error}")
 
-        logger.info("Got %d HIP-3 klines for %s", len(klines), exchange_symbol)
+        logger.info("Got %d Hyperliquid klines for %s", len(klines), exchange_symbol)
         return klines
 
 

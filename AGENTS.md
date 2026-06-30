@@ -72,6 +72,18 @@ Document breaking changes in the PR description.
 
 ## Split Management Rules
 Do not let one management document exceed 500 lines.
+Keep ordinary source files near 300 to 500 lines when practical.
+Treat files over 500 lines as split candidates during touched-file work.
+Do not split a file only by line count if it would weaken ownership boundaries.
+Split by responsibility, route group, service concern, component subview, or helper type.
+Prefer extracting pure helpers, schemas, constants, and UI subcomponents first.
+Keep public imports stable by adding compatibility re-exports when needed.
+Avoid large mechanical moves inside live trading, auth, encryption, or migration code without tests.
+When a large file is touched, either split it or document why it must remain grouped.
+Run `python3 scripts/code_split_audit.py` before large split work on macOS.
+Use parallel agents for audit-only module mapping when more than five domains are involved.
+Give each agent a disjoint module scope and prevent overlapping writes.
+The controller must integrate and verify all agent output before claiming completion.
 When splitting, keep names short and typed by domain.
 Recommended split names are `backend.md`, `frontend.md`, `data.md`, `ai.md`, and `ops.md`.
 Use `backend.md` for API, services, repositories, and migrations.
@@ -161,6 +173,17 @@ Clamp or validate AI-provided prices before exchange submission.
 Do not bypass wallet ownership or account ownership checks.
 Preserve builder fee, broker, and rate-limit safeguards.
 Manual verification is required for live-trading changes.
+
+## Paper vs Live Execution Routing
+AI Trader decisions route by `Account.hyperliquid_environment`.
+A `testnet` or `mainnet` value is LIVE and goes to `place_ai_driven_hyperliquid_order`.
+A `NULL` value is PAPER and goes to `services/paper_trading.py::place_ai_driven_paper_order`.
+Paper execution reuses the local matcher `order_matching.py` and writes `orders`, `positions`, `trades`.
+Paper decisions are logged to `ai_decision_logs` with `exchange="paper"` and a NULL environment.
+The dispatcher `place_ai_driven_crypto_order` branches per account; the live path stays untouched.
+The manual Dashboard trigger (`POST /accounts/{id}/trigger-ai-trade`) uses the same routing.
+Do not disable or remove the live path; it is required once paper data is validated.
+Keep paper and live position state separate from real exchange state.
 
 ## AI System Rules
 Hyper AI orchestration lives in `backend/services/hyper_ai_service.py`.

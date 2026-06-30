@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import requests
 
 from config.settings import COINGLASS_API_BASE_URL, COINGLASS_API_KEY
+from services.api_rate_limiter import acquire_api_slot, record_api_response
 from services.event_contract.constants import PERIOD_SECONDS
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,8 @@ class EventContractCoinGlassMixin:
                 "Save a CoinGlass key in the CoinGlass page or set COINGLASS_API_KEY on the server."
             )
 
-        interval = PERIOD_SECONDS[cfg["period"]]
+        cg_interval = self._coinglass_interval(cfg)
+        interval = PERIOD_SECONDS[cg_interval]
         fetch_start_ms = int(fetch_start_ts) * 1000
         fetch_end_ms = int(fetch_end_ts) * 1000
         audit_start_ts = int(audit_start_ts if audit_start_ts is not None else fetch_start_ts)
@@ -112,6 +114,7 @@ class EventContractCoinGlassMixin:
             "source": "coinglass",
             "key_source": cfg.get("_coinglass_key_source") or "server",
             "period": cfg["period"],
+            "coinglass_interval": cg_interval,
             "interval_seconds": interval,
             "records_loaded": sum(len(items) for items in series.values()),
             "decision_records": min((item["decision_records"] for item in metric_audits), default=0),
@@ -141,9 +144,12 @@ class EventContractCoinGlassMixin:
             return klines
         timestamps = bundle["timestamps"]
         features_by_ts = bundle["features_by_ts"]
-        interval = PERIOD_SECONDS[cfg["period"]]
-        max_lag = int(cfg.get("max_coinglass_lag_seconds") or interval * 2)
-        future_offset = 0 if cfg.get("coinglass_no_future_leakage", True) else interval
+        # CoinGlass sampling interval (can be coarser than K-line period).
+        cg_interval_secs = PERIOD_SECONDS[self._coinglass_interval(cfg)]
+        # Default max lag = one full CoinGlass bar; forward-fill within that window so a
+        # 30m CG sample maps to every 1m K-line until the next 30m sample.
+        max_lag = int(cfg.get("max_coinglass_lag_seconds") or cg_interval_secs)
+        future_offset = 0 if cfg.get("coinglass_no_future_leakage", True) else cg_interval_secs
 
         for item in klines:
             usable_ts = int(item["timestamp"]) + future_offset
@@ -164,6 +170,15 @@ class EventContractCoinGlassMixin:
         metrics = [item for item in raw if item in COINGLASS_METRIC_SPECS]
         return metrics or list(DEFAULT_COINGLASS_METRICS)
 
+    def _coinglass_interval(self, cfg: Dict[str, Any]) -> str:
+        """CoinGlass sampling interval. Lets us decouple K-line period (e.g. 1m)
+        from CoinGlass's plan-allowed intervals (Standard plan = 30m+).
+        """
+        override = cfg.get("coinglass_interval")
+        if override and override in PERIOD_SECONDS:
+            return override
+        return cfg["period"]
+
     def _fetch_coinglass_metric(
         self,
         cfg: Dict[str, Any],
@@ -172,7 +187,7 @@ class EventContractCoinGlassMixin:
         start_ms: int,
         end_ms: int,
     ) -> List[Dict[str, Any]]:
-        interval_ms = PERIOD_SECONDS[cfg["period"]] * 1000
+        interval_ms = PERIOD_SECONDS[self._coinglass_interval(cfg)] * 1000
         limit = int(spec["limit"])
         page_span_ms = interval_ms * max(1, limit - 1)
         cursor = start_ms
@@ -205,7 +220,7 @@ class EventContractCoinGlassMixin:
         coin = cfg["symbol"].upper()
         exchange = self._coinglass_exchange_name(cfg["exchange"])
         params: Dict[str, Any] = {
-            "interval": cfg["period"],
+            "interval": self._coinglass_interval(cfg),
             "limit": limit,
             "start_time": start_ms,
             "end_time": end_ms,
@@ -223,12 +238,14 @@ class EventContractCoinGlassMixin:
 
     def _coinglass_http_get(self, path: str, params: Dict[str, Any], api_key: str) -> List[Dict[str, Any]]:
         url = f"{COINGLASS_API_BASE_URL.rstrip('/')}{path}"
+        acquire_api_slot("coinglass", cost=float(os.getenv("COINGLASS_RATE_WEIGHT_DEFAULT", "1")))
         response = requests.get(
             url,
             headers={"CG-API-KEY": api_key, "accept": "application/json"},
             params={key: value for key, value in params.items() if value not in (None, "")},
             timeout=20,
         )
+        record_api_response("coinglass", response.headers)
         try:
             payload = response.json()
         except ValueError as exc:
@@ -326,7 +343,7 @@ class EventContractCoinGlassMixin:
         start_ts: int,
         end_ts: int,
     ) -> Dict[str, Any]:
-        interval = PERIOD_SECONDS[cfg["period"]]
+        interval = PERIOD_SECONDS[self._coinglass_interval(cfg)]
         expected = max(0, int((end_ts - start_ts) // interval) + 1)
         decision_records = len([ts for ts in rows if start_ts <= ts + interval <= end_ts])
         coverage = round(decision_records / expected * 100, 4) if expected else 0.0

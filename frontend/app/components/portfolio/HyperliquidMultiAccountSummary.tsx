@@ -2,11 +2,15 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { CoinIcon } from '@/components/ui/coin-icon'
-import { TrendingUp, AlertTriangle, Eye, Zap } from 'lucide-react'
-import { getHyperliquidBalance, getWalletRateLimit, getTradingStats, getBinanceTradingStats, TradingStats, getBinanceSummary, getBinanceDailyQuota } from '@/lib/hyperliquidApi'
-import { getModelLogo } from './logoAssets'
+import {
+  getHyperliquidBalance,
+  getWalletRateLimit,
+  getTradingStats,
+  getBinanceTradingStats,
+  getBinanceSummary,
+  getBinanceDailyQuota,
+} from '@/lib/hyperliquidApi'
+import type { TradingStats } from '@/lib/hyperliquidApi'
 import type { HyperliquidEnvironment } from '@/lib/types/hyperliquid'
 import type { HyperliquidBalance } from '@/lib/types/hyperliquid'
 import { useTradingMode } from '@/contexts/TradingModeContext'
@@ -19,83 +23,15 @@ import {
   getCacheTimestamp,
 } from '@/lib/cacheUtils'
 import TraderDetailModal from './TraderDetailModal'
+import AccountSummaryRow from './hyperliquid-summary/AccountSummaryRow'
+import type {
+  AccountBalance,
+  HyperliquidMultiAccountSummaryProps,
+  Position,
+  RateLimitData,
+} from './hyperliquid-summary/types'
 
-// Position type from parent component
-export interface Position {
-  symbol: string
-  side: string
-  size: number
-  entry_price: number
-  mark_price: number
-  unrealized_pnl: number
-  leverage: number
-  account_id: number
-  exchange?: string  // 'hyperliquid' | 'binance'
-}
-
-interface RateLimitData {
-  cumVlm: number
-  nRequestsUsed: number
-  nRequestsCap: number
-  remaining: number
-  usagePercent: number
-  isOverLimit: boolean
-}
-
-interface AccountBalance {
-  accountId: number
-  accountName: string
-  exchange: string
-  balance: HyperliquidBalance | null
-  error: string | null
-  loading: boolean
-  rateLimit: RateLimitData | null
-  rateLimitUpdated: number | null
-  tradingStats: TradingStats | null
-  tradingStatsUpdated: number | null
-  quota?: {
-    limited: boolean
-    used: number
-    limit: number
-    remaining: number
-    reset_at?: number
-  } | null
-}
-
-interface HyperliquidMultiAccountSummaryProps {
-  accounts: Array<{ account_id: number; account_name: string; exchange?: string }>
-  refreshKey?: number
-  selectedAccount?: number | 'all'
-  positions?: Position[]
-}
-
-const getMarginStatus = (percent: number, t: (key: string, fallback?: string) => string) => {
-  if (percent < 50) {
-    return {
-      color: 'bg-green-500',
-      text: t('account.marginHealthy', 'Healthy'),
-      icon: TrendingUp,
-      textColor: 'text-green-600',
-      dotColor: 'bg-green-500',
-    } as const
-  }
-  if (percent < 75) {
-    return {
-      color: 'bg-yellow-500',
-      text: t('account.marginModerate', 'Moderate'),
-      icon: AlertTriangle,
-      textColor: 'text-yellow-600',
-      dotColor: 'bg-yellow-500',
-    } as const
-  }
-  return {
-    color: 'bg-red-500',
-    text: t('account.marginHighRisk', 'High Risk'),
-    icon: AlertTriangle,
-    textColor: 'text-red-600',
-    dotColor: 'bg-red-500',
-  } as const
-}
+export type { Position } from './hyperliquid-summary/types'
 
 export default function HyperliquidMultiAccountSummary({
   accounts,
@@ -337,13 +273,6 @@ export default function HyperliquidMultiAccountSummary({
 
   const isLoading = accountBalances.some((acc) => acc.loading)
 
-  // Helper to get API usage color
-  const getApiUsageColor = (usagePercent: number) => {
-    if (usagePercent >= 90) return 'text-red-600'
-    if (usagePercent >= 70) return 'text-yellow-600'
-    return 'text-green-600'
-  }
-
   // Use horizontal scroll layout when 4+ accounts to prevent card cramping
   const accountCount = accountBalances.length
   const useScrollLayout = accountCount >= 4
@@ -377,174 +306,16 @@ export default function HyperliquidMultiAccountSummary({
         ? 'flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory'
         : `grid gap-4 ${accountCount === 1 ? 'grid-cols-1' : accountCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`
       }>
-        {accountBalances.map((account) => {
-          const logo = getModelLogo(account.accountName)
-          const marginStatus = account.balance
-            ? getMarginStatus(account.balance.marginUsagePercent, t)
-            : null
-          const accountPositions = getAccountPositions(account.accountId, account.exchange)
-          const isBinance = account.exchange === 'binance'
-          const exchangeLogo = isBinance ? '/static/binance_logo.svg' : '/static/hyperliquid_logo.svg'
-
-          return (
-            <Card
-              key={`${account.accountId}_${account.exchange}`}
-              className={`p-4 space-y-3 hover:shadow-md transition-shadow ${useScrollLayout ? 'min-w-[400px] flex-shrink-0 snap-start' : ''}`}
-            >
-              {/* Account header with logo and View Details button */}
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <div className="flex items-center gap-2">
-                  {logo && (
-                    <img
-                      src={logo.src}
-                      alt={logo.alt}
-                      className="h-6 w-6 rounded-full object-contain"
-                    />
-                  )}
-                  <span className="font-semibold text-sm truncate">
-                    {account.accountName}
-                  </span>
-                  <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-800/80">
-                    <img
-                      src={exchangeLogo}
-                      alt={isBinance ? 'Binance' : 'Hyperliquid'}
-                      className="h-3.5 w-3.5"
-                    />
-                    <span className="text-[10px] font-medium text-slate-200">
-                      {isBinance ? 'Binance' : 'Hyperliquid'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {account.balance && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-[10px] h-6 px-2"
-                      onClick={() => handleViewDetails(account)}
-                    >
-                      <Eye className="w-3 h-3 mr-1" />
-                      {t('common.details', 'Details')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Error state */}
-              {account.error && (
-                <div className="text-xs text-red-600">{account.error}</div>
-              )}
-
-              {/* Main metrics grid */}
-              {account.balance && (
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Equity */}
-                  <div>
-                    <div className="text-[10px] text-muted-foreground">{t('account.equity', 'Equity')}</div>
-                    <div className="text-sm font-bold">
-                      ${account.balance.totalEquity.toLocaleString('en-US', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Margin */}
-                  <div>
-                    <div className="text-[10px] text-muted-foreground">{t('account.margin', 'Margin')}</div>
-                    <div className={`text-sm font-medium ${marginStatus?.textColor || ''}`}>
-                      {account.balance.marginUsagePercent.toFixed(1)}%
-                    </div>
-                  </div>
-
-                  {/* API Usage */}
-                  <div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {isBinance ? t('account.apiWeight', 'Weight/min') : 'API'}
-                    </div>
-                    {account.rateLimit ? (
-                      isBinance ? (
-                        <div className={`text-sm font-medium ${getApiUsageColor(account.rateLimit.usagePercent)}`}>
-                          {account.rateLimit.nRequestsUsed}/{account.rateLimit.nRequestsCap}
-                        </div>
-                      ) : (
-                        <div className={`text-sm font-medium ${getApiUsageColor(account.rateLimit.usagePercent)}`}>
-                          {(100 - account.rateLimit.usagePercent).toFixed(0)}%
-                          <span className="text-[10px] text-muted-foreground ml-1">{t('account.left', 'left')}</span>
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-sm text-muted-foreground">--</div>
-                    )}
-                  </div>
-
-                  {/* Win Rate */}
-                  <div>
-                    <div className="text-[10px] text-muted-foreground">{t('account.winRate', 'Win Rate')}</div>
-                    {isBinance ? (
-                      <div className="text-sm text-muted-foreground">N/A</div>
-                    ) : account.tradingStats && account.tradingStats.total_trades > 0 ? (
-                      <div className="text-sm font-medium">
-                        {account.tradingStats.win_rate.toFixed(0)}%
-                        <span className="text-[10px] text-muted-foreground ml-1">
-                          ({account.tradingStats.wins}W/{account.tradingStats.losses}L)
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">--</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Positions section - always show */}
-              <div className="pt-2 border-t border-border">
-                <div className="text-[10px] text-muted-foreground mb-1">
-                  {t('account.positions', 'Positions')} {accountPositions.length > 0 && `(${accountPositions.length})`}
-                </div>
-                {accountPositions.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {accountPositions.slice(0, 4).map((pos, idx) => {
-                      const isLong = pos.side.toLowerCase() === 'long'
-                      const pnlColor = pos.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'
-                      return (
-                        <div
-                          key={idx}
-                          className={`text-[10px] px-1.5 py-1 rounded border ${
-                            isLong
-                              ? 'bg-green-500/10 border-green-500/20'
-                              : 'bg-red-500/10 border-red-500/20'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1">
-                            <CoinIcon symbol={pos.symbol} size={14} />
-                            <span className={`font-medium ${isLong ? 'text-green-600' : 'text-red-600'}`}>
-                              {pos.symbol} {isLong ? 'L' : 'S'}
-                            </span>
-                            <span className="text-muted-foreground">{pos.leverage}x</span>
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="text-muted-foreground">{pos.size.toFixed(4)}</span>
-                            <span className={`font-medium ${pnlColor}`}>
-                              {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {accountPositions.length > 4 && (
-                      <div className="text-[10px] text-muted-foreground self-center">
-                        +{accountPositions.length - 4} {t('common.more', 'more')}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-muted-foreground">{t('account.noOpenPositions', 'No open positions')}</div>
-                )}
-              </div>
-            </Card>
-          )
-        })}
+        {accountBalances.map((account) => (
+          <AccountSummaryRow
+            key={`${account.accountId}_${account.exchange}`}
+            account={account}
+            positions={getAccountPositions(account.accountId, account.exchange)}
+            t={t}
+            useScrollLayout={useScrollLayout}
+            onViewDetails={handleViewDetails}
+          />
+        ))}
       </div>
 
       {/* Trader Detail Modal */}

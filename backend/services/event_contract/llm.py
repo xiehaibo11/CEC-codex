@@ -39,12 +39,18 @@ class EventContractLlmMixin:
         llm = self._resolve_llm_config(db, cfg)
         api_format = llm.get("api_format") or detect_api_format(llm["base_url"])[1] or "openai"
         headers = build_llm_headers(api_format, llm["api_key"], llm["base_url"])
+        from services.event_contract.reviewer_expertise import expertise_summary_for_prompt
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are an event-contract trading review panel. Evaluate only the data supplied in the prompt. "
-                    "Do not use future prices, external live data, or unstated assumptions. Return valid JSON only."
+                    "You are a 30-person quant trading panel. Each reviewer is a domain specialist "
+                    "with a distinct discipline (see Reviewer playbook). Stay in role: each reviewer "
+                    "must reason from its own focus area and emit risk_flags consistent with its discipline. "
+                    "Evaluate ONLY the data supplied in the prompt. Do not use future prices, external live data, "
+                    "or unstated assumptions. Critical risk gates (Fake Breakout, Trap Detection, Market Regime, "
+                    "Final Risk) MUST hold when their signature risk thresholds are breached. Return valid JSON only.\n\n"
+                    + expertise_summary_for_prompt()
                 ),
             },
             {"role": "user", "content": self._build_llm_consensus_prompt(history, cfg, rule_analysis)},

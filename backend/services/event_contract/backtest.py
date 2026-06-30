@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from services.event_contract.constants import ENGINE_VERSION, PERIOD_SECONDS
+from services.event_contract.tasks import EventBacktestPaused, build_ai_reviewer_statuses
+
+logger = logging.getLogger(__name__)
 
 
 class EventContractBacktestMixin:
@@ -24,6 +28,7 @@ class EventContractBacktestMixin:
             lookback_start,
             now_ts,
             cfg["environment"],
+            min_bars=cfg["warmup_bars"] + 5,
         )
         original_count = len(klines)
         klines = self._closed_klines(klines, cfg["period"], now_ts)
@@ -117,7 +122,14 @@ class EventContractBacktestMixin:
             "factors": analysis["factors"],
         }
 
-    def run_backtest(self, db: Session, config: Dict[str, Any]) -> Dict[str, Any]:
+    def run_backtest(
+        self,
+        db: Session,
+        config: Dict[str, Any],
+        *,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        pause_checker: Optional[Callable[[], bool]] = None,
+    ) -> Dict[str, Any]:
         started = time.perf_counter()
         cfg = self._normalize_config(config, prediction=False)
         start_ts = int(cfg["start_time"].timestamp())
@@ -125,6 +137,14 @@ class EventContractBacktestMixin:
         interval = PERIOD_SECONDS[cfg["period"]]
         load_start = start_ts - cfg["warmup_bars"] * interval
         load_end = end_ts + cfg["expiry_minutes"] * 60 + interval
+
+        def report(event: Dict[str, Any]) -> None:
+            if progress_callback:
+                progress_callback(event)
+            if pause_checker and pause_checker():
+                raise EventBacktestPaused("Event backtest paused by user")
+
+        report({"phase": "loading_data", "message": "Loading market data"})
 
         klines = self._load_klines(
             db,
@@ -134,6 +154,7 @@ class EventContractBacktestMixin:
             load_start,
             load_end,
             cfg["environment"],
+            min_bars=cfg["warmup_bars"] + cfg["expiry_bars"] + 1,
         )
         data_quality = self._audit_kline_series(klines, cfg, start_ts, end_ts)
         self._validate_data_quality(data_quality, cfg)
@@ -162,8 +183,22 @@ class EventContractBacktestMixin:
             klines = self._attach_l2_features(klines, l2_bundle, cfg)
             data_quality["l2"] = self._audit_l2_features(klines, l2_bundle, cfg, start_ts, end_ts)
 
-        if len([k for k in klines if start_ts <= self._decision_timestamp(k, cfg) <= end_ts]) > cfg["max_bars"]:
+        decision_candles = [k for k in klines if start_ts <= self._decision_timestamp(k, cfg) <= end_ts]
+        total_decision_bars = len(decision_candles)
+        if total_decision_bars > cfg["max_bars"]:
             raise ValueError(f"Backtest range is too large. Limit is {cfg['max_bars']} decision bars.")
+        expected_ai_reviews = cfg["max_ai_evaluations"] * 30 if cfg["consensus_mode"] == "ai_confirmed" else 0
+        report(
+            {
+                "phase": "scanning",
+                "data_ready": True,
+                "processed_decision_bars": 0,
+                "total_decision_bars": total_decision_bars,
+                "completed_ai_reviews": 0,
+                "expected_ai_reviews": expected_ai_reviews,
+                "message": "Scanning decision bars",
+            }
+        )
 
         ts_to_index = {item["timestamp"]: idx for idx, item in enumerate(klines)}
         equity = cfg["initial_balance"]
@@ -174,6 +209,7 @@ class EventContractBacktestMixin:
         skipped = {
             "fake_breakout_filtered_count": 0,
             "trap_filtered_count": 0,
+            "edge_quality_filtered_count": 0,
             "no_trade_filtered_count": 0,
             "rule_prefiltered_count": 0,
             "ai_evaluated_count": 0,
@@ -187,6 +223,7 @@ class EventContractBacktestMixin:
             "candidate_signals_count": 0,
         }
         ai_evaluations = 0
+        completed_ai_reviews = 0
 
         for idx, candle in enumerate(klines):
             decision_ts = self._decision_timestamp(candle, cfg)
@@ -196,6 +233,18 @@ class EventContractBacktestMixin:
                 continue
 
             skipped["decision_bars_count"] += 1
+            if skipped["decision_bars_count"] == 1 or skipped["decision_bars_count"] % 25 == 0:
+                report(
+                    {
+                        "phase": "scanning",
+                        "data_ready": True,
+                        "processed_decision_bars": skipped["decision_bars_count"],
+                        "total_decision_bars": total_decision_bars,
+                        "completed_ai_reviews": completed_ai_reviews,
+                        "expected_ai_reviews": expected_ai_reviews,
+                        "message": f"Scanned {skipped['decision_bars_count']}/{total_decision_bars} decision bars",
+                    }
+                )
             entry_idx = idx
             entry_delay_lag = 0
             if cfg["delay_seconds"] > 0:
@@ -228,6 +277,8 @@ class EventContractBacktestMixin:
                     skipped["fake_breakout_filtered_count"] += 1
                 elif analysis["trap_risk"] > 60:
                     skipped["trap_filtered_count"] += 1
+                elif any("edge gate" in reason for reason in analysis["blocked_reasons"]):
+                    skipped["edge_quality_filtered_count"] += 1
                 else:
                     skipped["no_trade_filtered_count"] += 1
                 skipped["rule_prefiltered_count"] += 1
@@ -239,9 +290,34 @@ class EventContractBacktestMixin:
                     skipped["ai_skipped_cap_count"] += 1
                     continue
 
+                report(
+                    {
+                        "phase": "ai_review",
+                        "data_ready": True,
+                        "processed_decision_bars": skipped["decision_bars_count"],
+                        "total_decision_bars": total_decision_bars,
+                        "completed_ai_reviews": completed_ai_reviews,
+                        "expected_ai_reviews": expected_ai_reviews,
+                        "ai_reviewer_statuses": build_ai_reviewer_statuses(status="running"),
+                        "message": f"Running 30 AI reviewers for candidate {ai_evaluations + 1}",
+                    }
+                )
                 ai_decisions, ai_meta = self._call_llm_consensus(db, cfg, history, analysis)
                 ai_evaluations += 1
+                completed_ai_reviews = min(expected_ai_reviews, completed_ai_reviews + len(ai_decisions))
                 skipped["llm_evaluated_count"] = ai_evaluations
+                report(
+                    {
+                        "phase": "ai_review",
+                        "data_ready": True,
+                        "processed_decision_bars": skipped["decision_bars_count"],
+                        "total_decision_bars": total_decision_bars,
+                        "completed_ai_reviews": completed_ai_reviews,
+                        "expected_ai_reviews": expected_ai_reviews,
+                        "ai_reviewer_statuses": build_ai_reviewer_statuses(ai_decisions),
+                        "message": f"Completed 30 AI reviewers for candidate {ai_evaluations}",
+                    }
+                )
                 analysis = self._analyze_snapshot(
                     history,
                     cfg,
@@ -321,7 +397,25 @@ class EventContractBacktestMixin:
 
         summary = self._build_summary(cfg, trades, equity, max_drawdown, skipped, data_quality)
         summary["execution_time_ms"] = int((time.perf_counter() - started) * 1000)
+        report(
+            {
+                "phase": "saving",
+                "data_ready": True,
+                "processed_decision_bars": skipped["decision_bars_count"],
+                "total_decision_bars": total_decision_bars,
+                "completed_ai_reviews": completed_ai_reviews,
+                "expected_ai_reviews": expected_ai_reviews,
+                "message": "Saving backtest result",
+            }
+        )
         run_id = self._persist_backtest(db, cfg, summary, trades, equity_curve)
+        # New trades just landed - drop the learning cache so the next predict/backtest
+        # call refits reviewer posteriors against the freshest outcomes.
+        try:
+            from services.event_contract.reviewer_learning import clear_reviewer_cache
+            clear_reviewer_cache()
+        except Exception as exc:  # noqa: BLE001 - cache reset is best-effort
+            logger.warning("reviewer_learning cache reset failed: %s", exc)
 
         return {
             "run_id": run_id,
@@ -354,6 +448,29 @@ class EventContractBacktestMixin:
 
         def rate(items: List[Dict[str, Any]]) -> float:
             return round(sum(1 for item in items if item["result"] == "win") / len(items) * 100, 2) if items else 0
+        fee = cfg["stake_amount"] * cfg["fee_rate"]
+        break_even_win_rate = (
+            (cfg["stake_amount"] + fee) / (cfg["stake_amount"] * (cfg["win_payout_ratio"] + 1)) * 100
+            if cfg["win_payout_ratio"] > -1
+            else 100
+        )
+        target_win_rate = cfg.get("target_win_rate", 75)
+        nested_quality_warnings = any(
+            bool((data_quality.get(key) or {}).get("warnings"))
+            for key in ("coinglass", "l2")
+        )
+        partial = (
+            skipped.get("ai_skipped_cap_count", 0) > 0
+            or skipped.get("missing_expiry_count", 0) > 0
+            or skipped.get("expiry_lag_skipped_count", 0) > 0
+            or skipped.get("entry_delay_skipped_count", 0) > 0
+            or bool(data_quality.get("warnings"))
+            or nested_quality_warnings
+        )
+        win_rate = round(wins / total * 100, 2) if total else 0
+        target_min_trades = int(cfg.get("target_min_trades", 10))
+        target_sample_met = total >= target_min_trades
+        target_win_rate_met = not partial and target_sample_met and win_rate >= target_win_rate
 
         streak_w = streak_l = max_w = max_l = 0
         for trade in trades:
@@ -374,11 +491,18 @@ class EventContractBacktestMixin:
             "consensus_source": "llm_ai" if cfg["consensus_mode"] == "ai_confirmed" else "system_30_ai",
             "ai_confirmed": cfg["consensus_mode"] == "ai_confirmed",
             "max_ai_evaluations": cfg["max_ai_evaluations"],
+            "target_win_rate": round(target_win_rate, 2),
+            "target_min_trades": target_min_trades,
+            "target_sample_met": target_sample_met,
+            "target_win_rate_met": target_win_rate_met,
+            "break_even_win_rate": round(break_even_win_rate, 2),
+            "partial": partial,
+            "audit_status": "partial" if partial else "complete",
             "total_trades": total,
             "wins": wins,
             "losses": losses,
             "draws": draws,
-            "win_rate": round(wins / total * 100, 2) if total else 0,
+            "win_rate": win_rate,
             "loss_rate": round(losses / total * 100, 2) if total else 0,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (round(gross_profit, 4) if gross_profit else 0),
             "expectancy": round(sum(t["profit_loss"] for t in trades) / total, 4) if total else 0,

@@ -184,15 +184,15 @@ export default function OrderForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="LIMIT">Limit Order</SelectItem>
-            <SelectItem value="MARKET">Market Order</SelectItem>
+            <SelectItem value="LIMIT">限价单</SelectItem>
+            <SelectItem value="MARKET">市价单</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* 价格 */}
       <div className="space-y-2">
-        <label className="text-xs">Price</label>
+        <label className="text-xs">价格</label>
         <div className="flex items-center gap-2">
          <Button 
             onClick={() => onAdjustPrice(-0.01)}

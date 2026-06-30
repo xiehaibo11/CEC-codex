@@ -1515,6 +1515,35 @@ class EventContractTradeLog(Base):
     run = relationship("EventContractBacktestRun", back_populates="trade_logs")
 
 
+class EventContractBacktestTask(Base):
+    """Persistent task state for long-running event contract backtests."""
+    __tablename__ = "event_contract_backtest_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    run_id = Column(Integer, ForeignKey("event_contract_backtest_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    name = Column(String(200), nullable=True)
+    status = Column(String(30), nullable=False, default="pending", index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    exchange = Column(String(20), nullable=False, default="binance", index=True)
+    environment = Column(String(20), nullable=False, default="mainnet", index=True)
+    period = Column(String(10), nullable=False, default="1m")
+    config = Column(Text, nullable=True)
+    progress_pct = Column(Float, nullable=False, default=0)
+    phase = Column(String(60), nullable=True)
+    processed_decision_bars = Column(Integer, nullable=False, default=0)
+    total_decision_bars = Column(Integer, nullable=False, default=0)
+    completed_ai_reviews = Column(Integer, nullable=False, default=0)
+    expected_ai_reviews = Column(Integer, nullable=False, default=0)
+    ai_reviewer_statuses = Column(Text, nullable=True)
+    latest_message = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(TIMESTAMP, nullable=True)
+    finished_at = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
 # ============================================================================
 # Hyper AI - Main Agent for Full-Site AI Intelligence
 # ============================================================================

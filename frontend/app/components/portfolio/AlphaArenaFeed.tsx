@@ -79,6 +79,19 @@ function renderSymbolBadge(symbol?: string, size: 'sm' | 'md' = 'md') {
   return <CoinIcon symbol={symbol} size={pixelSize} />
 }
 
+function handleFeedCardKeyDown(onToggle: () => void) {
+  return (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || event.target !== event.currentTarget) {
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onToggle()
+    }
+  }
+}
+
 
 export default function AlphaArenaFeed({
   refreshKey,
@@ -1149,10 +1162,10 @@ export default function AlphaArenaFeed({
           className="h-6 rounded border border-border bg-background px-1.5 text-[10px] font-medium text-foreground uppercase"
         >
           <option value="">{t('feed.filterAllActions', 'All Actions')}</option>
-          <option value="buy">BUY</option>
-          <option value="sell">SELL</option>
-          <option value="hold">HOLD</option>
-          <option value="close">CLOSE</option>
+          <option value="buy">买入</option>
+          <option value="sell">卖出</option>
+          <option value="hold">持有</option>
+          <option value="close">平仓</option>
         </select>
 
         {/* Clear button */}
@@ -1553,32 +1566,35 @@ export default function AlphaArenaFeed({
                     if (!seenDecisionIds.current.has(entry.id)) {
                       seenDecisionIds.current.add(entry.id)
                     }
+                    const toggleEntry = () =>
+                      setExpandedChat((current) => {
+                        const next = current === entry.id ? null : entry.id
+                        if (current === entry.id) {
+                          setExpandedSections((prev) => {
+                            const nextState = { ...prev }
+                            Object.keys(nextState).forEach((key) => {
+                              if (key.startsWith(`${entry.id}-`)) {
+                                delete nextState[key]
+                              }
+                            })
+                            return nextState
+                          })
+                        } else {
+                          // Load snapshots when expanding
+                          loadSnapshots(entry.id)
+                        }
+                        return next
+                      })
 
                     return (
                       <HighlightWrapper key={entry.id} isNew={isNew}>
-                        <button
-                          type="button"
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isExpanded}
                           className="w-full text-left border border-border rounded bg-muted/30 p-4 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          onClick={() =>
-                            setExpandedChat((current) => {
-                              const next = current === entry.id ? null : entry.id
-                              if (current === entry.id) {
-                                setExpandedSections((prev) => {
-                                  const nextState = { ...prev }
-                                  Object.keys(nextState).forEach((key) => {
-                                    if (key.startsWith(`${entry.id}-`)) {
-                                      delete nextState[key]
-                                    }
-                                  })
-                                  return nextState
-                                })
-                              } else {
-                                // Load snapshots when expanding
-                                loadSnapshots(entry.id)
-                              }
-                              return next
-                            })
-                          }
+                          onClick={toggleEntry}
+                          onKeyDown={handleFeedCardKeyDown(toggleEntry)}
                         >
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-muted-foreground">
                           <div className="flex items-center gap-2">
@@ -1740,7 +1756,7 @@ export default function AlphaArenaFeed({
                         <div className="mt-2 text-[11px] text-primary underline">
                           {isExpanded ? t('feed.clickCollapse', 'Click to collapse') : t('feed.clickExpand', 'Click to expand')}
                         </div>
-                        </button>
+                        </div>
                       </HighlightWrapper>
                     )
                   })}
@@ -1953,12 +1969,16 @@ export default function AlphaArenaFeed({
                   filteredProgramLogs.map((log) => {
                     const isExpanded = expandedProgramLog === log.id
                     const iconColors = getProgramIconColors(log.program_id)
+                    const toggleLog = () => setExpandedProgramLog(current => current === log.id ? null : log.id)
                     return (
-                      <button
+                      <div
                         key={log.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
                         className="w-full text-left border border-border rounded bg-muted/30 p-4 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() => setExpandedProgramLog(current => current === log.id ? null : log.id)}
+                        onClick={toggleLog}
+                        onKeyDown={handleFeedCardKeyDown(toggleLog)}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-muted-foreground">
                           <div className="flex items-center gap-2">
@@ -2257,7 +2277,7 @@ export default function AlphaArenaFeed({
                             {t('feed.clickCollapse', 'Click to collapse')}
                           </div>
                         )}
-                      </button>
+                      </div>
                     )
                   })
                 )}

@@ -27,7 +27,7 @@ triggered_signals:
     current_value: 3.5
 ```
 
-当由**钱包信号**触发时（Hyper Insight 钱包追踪）：
+当由**钱包信号**触发时（CoinGlass 钱包追踪）：
 ```
 === TRIGGER CONTEXT ===
 trigger_type: wallet_signal

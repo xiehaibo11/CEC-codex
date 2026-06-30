@@ -1,45 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Button } from '../ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import TradingViewChart from './TradingViewChart'
 import AIAnalysisPanel from './AIAnalysisPanel'
 import PacmanLoader from '../ui/pacman-loader'
 import { useCollectionDays } from '@/lib/useCollectionDays'
+import { ChartControls } from './klines-view/ChartControls'
+import { IndicatorPanel } from './klines-view/IndicatorPanel'
+import { MarketDataList } from './klines-view/MarketDataList'
+import { PeriodSelector } from './klines-view/PeriodSelector'
+import { SymbolSelector } from './klines-view/SymbolSelector'
+import { getFlowIndicatorAvailability } from './klines-view/constants'
+import type { ChartType, FlowIndicatorKey, MarketData } from './klines-view/types'
 
 interface KlinesViewProps {
   onAccountUpdated?: () => void
 }
-
-interface MarketData {
-  symbol: string
-  price: number
-  oracle_price: number
-  change24h: number
-  volume24h: number
-  percentage24h: number
-  open_interest: number
-  funding_rate: number
-}
-
-const KLINE_PERIODS = [
-  '1m',
-  '3m',
-  '5m',
-  '15m',
-  '30m',
-  '1h',
-  '2h',
-  '4h',
-  '6h',
-  '8h',
-  '12h',
-  '1d',
-  '3d',
-  '1w',
-  '1M',
-]
 
 export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
   const { t } = useTranslation()
@@ -50,7 +26,7 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([])
   const [marketData, setMarketData] = useState<MarketData[]>([])
   const [isPageVisible, setIsPageVisible] = useState(true)
-  const [chartType, setChartType] = useState<'candlestick' | 'line' | 'area'>('candlestick')
+  const [chartType, setChartType] = useState<ChartType>('candlestick')
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>([])
   const [chartLoading, setChartLoading] = useState(false)
   const [klinesData, setKlinesData] = useState<any[]>([])
@@ -59,28 +35,6 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
   const [selectedFlowIndicators, setSelectedFlowIndicators] = useState<string[]>([])
 
   const marketDataIntervalRef = useRef<NodeJS.Timeout | null>(null)
-
-  const getFlowIndicatorAvailability = (period: string) => {
-    // Period to minutes mapping
-    const periodMinutes: Record<string, number> = {
-      '1m': 1, '3m': 3, '5m': 5, '15m': 15, '30m': 30,
-      '1h': 60, '2h': 120, '4h': 240, '6h': 360, '8h': 480, '12h': 720,
-      '1d': 1440, '3d': 4320, '1w': 10080, '1M': 43200
-    }
-    const minutes = periodMinutes[period] || 1
-
-    return {
-      cvd: true,
-      taker_volume: true,
-      // OI: Binance historical API only supports 5m+, real-time collection started recently
-      oi: minutes >= 5,
-      oi_delta: minutes >= 5,
-      // Funding: Now collected every minute via premiumIndex API
-      funding: true,
-      depth_ratio: true,
-      order_imbalance: true
-    }
-  }
 
   const flowAvailability = getFlowIndicatorAvailability(selectedPeriod)
 
@@ -166,13 +120,20 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
     return marketData.find(data => data.symbol === symbol)
   }
 
-  const formatCompactNumber = (value: number) => {
-    if (!value && value !== 0) return '-'
-    const abs = Math.abs(value)
-    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`
-    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-    if (abs >= 1_000) return `${(value / 1_000).toFixed(2)}K`
-    return value.toLocaleString()
+  const toggleIndicator = (indicator: string) => {
+    setSelectedIndicators(prev =>
+      prev.includes(indicator)
+        ? prev.filter(item => item !== indicator)
+        : [...prev, indicator]
+    )
+  }
+
+  const toggleFlowIndicator = (indicator: FlowIndicatorKey) => {
+    setSelectedFlowIndicators(prev =>
+      prev.includes(indicator)
+        ? prev.filter(item => item !== indicator)
+        : [...prev, indicator]
+    )
   }
 
   return (
@@ -185,26 +146,17 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
             <img src="/static/binance_logo.svg" alt="Binance" width={14} height={14} />
             Binance
           </div>
-          <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
-            <SelectTrigger className="flex-1 h-9">
-              <SelectValue placeholder={t('kline.selectSymbol', 'Select Symbol')} />
-            </SelectTrigger>
-            <SelectContent>
-              {watchlistSymbols.map(symbol => (
-                <SelectItem key={symbol} value={symbol}>{symbol}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-20 h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {KLINE_PERIODS.map(p => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SymbolSelector
+            value={selectedSymbol}
+            symbols={watchlistSymbols}
+            onChange={setSelectedSymbol}
+            triggerClassName="flex-1 h-9"
+          />
+          <PeriodSelector
+            value={selectedPeriod}
+            onChange={setSelectedPeriod}
+            triggerClassName="w-20 h-9"
+          />
         </div>
 
         {/* Desktop: Full control panel */}
@@ -219,29 +171,17 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
 
               {/* Symbol and Period */}
               <div className="flex items-center gap-2">
-                <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder={t('kline.selectSymbol', 'Select Symbol')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {watchlistSymbols.map(symbol => (
-                      <SelectItem key={symbol} value={symbol}>
-                        {symbol}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                  <SelectTrigger className="w-24 sm:w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {KLINE_PERIODS.map((period) => (
-                      <SelectItem key={period} value={period}>{period}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SymbolSelector
+                  value={selectedSymbol}
+                  symbols={watchlistSymbols}
+                  onChange={setSelectedSymbol}
+                  triggerClassName="flex-1"
+                />
+                <PeriodSelector
+                  value={selectedPeriod}
+                  onChange={setSelectedPeriod}
+                  triggerClassName="w-24 sm:w-28"
+                />
               </div>
 
               {/* K-line environment warning - exchange specific */}
@@ -262,205 +202,21 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
           </Card>
 
           {/* Market Data */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="py-2">
-              <CardTitle className="text-sm">{t('kline.marketData', 'Market Data')}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-2">
-              {selectedSymbol && (
-                <div className="grid grid-cols-3 gap-2">
-                  {(() => {
-                    const data = getSymbolMarketData(selectedSymbol)
-                    return data ? (
-                      <>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.markPrice', 'Mark Price')}</p>
-                          <p className="text-sm font-semibold">{data.price.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.oraclePrice', 'Oracle Price')}</p>
-                          <p className="text-sm font-semibold">{data.oracle_price.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.change24h', '24h Change')}</p>
-                          <p className={`text-sm font-semibold ${data.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {data.percentage24h >= 0 ? "+" : ""}{data.percentage24h.toFixed(2)}%
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.volume24h', '24h Volume')}</p>
-                          <p className="text-sm font-semibold">${formatCompactNumber(data.volume24h)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.openInterest', 'Open Interest')}</p>
-                          <p className="text-sm font-semibold">${formatCompactNumber(data.open_interest)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">{t('kline.fundingRate', 'Funding Rate')}</p>
-                          <p className="text-sm font-semibold">{(data.funding_rate * 100).toFixed(4)}%</p>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="col-span-full text-center text-muted-foreground">
-                        <div className="flex items-center justify-center gap-2">
-                          <PacmanLoader className="w-12 h-6" />
-                          <span className="text-xs">{t('common.loading', 'Loading...')}</span>
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-              )}
-              {/* Market Flow Indicators */}
-              <div className="flex items-center gap-2 pt-2 border-t">
-                <span className="text-xs text-muted-foreground font-medium">{t('kline.flow', 'Flow')}</span>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[
-                    { key: 'cvd', label: 'CVD' },
-                    { key: 'taker_volume', label: 'Taker Vol' },
-                    { key: 'oi', label: 'OI' },
-                    { key: 'oi_delta', label: 'OI Delta' },
-                    { key: 'funding', label: 'Funding' },
-                    { key: 'depth_ratio', label: 'Depth(log)' },
-                    { key: 'order_imbalance', label: 'Imbalance' }
-                  ].map(({ key, label }) => {
-                    const isAvailable = flowAvailability[key as keyof typeof flowAvailability]
-                    return (
-                      <button
-                        key={key}
-                        disabled={!isAvailable}
-                        title={!isAvailable ? t('kline.indicatorUnavailable', 'Not available for {{exchange}} at {{period}}', { exchange: selectedExchange, period: selectedPeriod }) : undefined}
-                        onClick={() => isAvailable && setSelectedFlowIndicators(prev =>
-                          prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-                        )}
-                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                          !isAvailable
-                            ? 'opacity-40 cursor-not-allowed border border-muted'
-                            : selectedFlowIndicators.includes(key)
-                              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                              : 'hover:bg-muted border'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <MarketDataList
+            selectedSymbol={selectedSymbol}
+            marketData={getSymbolMarketData(selectedSymbol)}
+            selectedExchange={selectedExchange}
+            selectedPeriod={selectedPeriod}
+            flowAvailability={flowAvailability}
+            selectedFlowIndicators={selectedFlowIndicators}
+            onToggleFlowIndicator={toggleFlowIndicator}
+          />
 
           {/* Technical Indicators */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">{t('kline.technicalIndicators', 'Technical Indicators')}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-1.5">
-              {/* Row 1: Trend */}
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-muted-foreground font-medium min-w-[52px]">{t('kline.trend', 'Trend')}</span>
-                <div className="flex gap-1 flex-wrap">
-                  {['MA5', 'MA10', 'MA20', 'EMA20', 'EMA50', 'EMA100'].map(indicator => (
-                    <button
-                      key={indicator}
-                      onClick={() => {
-                        setSelectedIndicators(prev =>
-                          prev.includes(indicator)
-                            ? prev.filter(i => i !== indicator)
-                            : [...prev, indicator]
-                        )
-                      }}
-                      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors min-w-[38px] ${
-                        selectedIndicators.includes(indicator)
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'hover:bg-muted border'
-                      }`}
-                    >
-                      {indicator}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Row 2: Volume */}
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-muted-foreground font-medium min-w-[52px]">{t('kline.volume', 'Volume')}</span>
-                <div className="flex gap-1 flex-wrap">
-                  {['VWAP', 'OBV'].map(indicator => (
-                    <button
-                      key={indicator}
-                      onClick={() => {
-                        setSelectedIndicators(prev =>
-                          prev.includes(indicator)
-                            ? prev.filter(i => i !== indicator)
-                            : [...prev, indicator]
-                        )
-                      }}
-                      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors min-w-[38px] ${
-                        selectedIndicators.includes(indicator)
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'hover:bg-muted border'
-                      }`}
-                    >
-                      {indicator}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Row 3: Momentum */}
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-muted-foreground font-medium min-w-[52px]">{t('kline.momentum', 'Momentum')}</span>
-                <div className="flex gap-1 flex-wrap">
-                  {['RSI14', 'RSI7', 'STOCH', 'MACD'].map(indicator => (
-                    <button
-                      key={indicator}
-                      onClick={() => {
-                        setSelectedIndicators(prev =>
-                          prev.includes(indicator)
-                            ? prev.filter(i => i !== indicator)
-                            : [...prev, indicator]
-                        )
-                      }}
-                      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors min-w-[38px] ${
-                        selectedIndicators.includes(indicator)
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'hover:bg-muted border'
-                      }`}
-                    >
-                      {indicator}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Row 4: Volatility */}
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-muted-foreground font-medium min-w-[52px]">{t('kline.volatility', 'Volatility')}</span>
-                <div className="flex gap-1 flex-wrap">
-                  {['BOLL', 'ATR14'].map(indicator => (
-                    <button
-                      key={indicator}
-                      onClick={() => {
-                        setSelectedIndicators(prev =>
-                          prev.includes(indicator)
-                            ? prev.filter(i => i !== indicator)
-                            : [...prev, indicator]
-                        )
-                      }}
-                      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors min-w-[38px] ${
-                        selectedIndicators.includes(indicator)
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'hover:bg-muted border'
-                      }`}
-                    >
-                      {indicator}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <IndicatorPanel
+            selectedIndicators={selectedIndicators}
+            onToggleIndicator={toggleIndicator}
+          />
         </div>
 
         {/* K-Line Chart Area */}
@@ -479,38 +235,7 @@ export default function KlinesView({ onAccountUpdated }: KlinesViewProps) {
                 )}
               </div>
               {/* Chart type selector - hidden on mobile */}
-              <div className="hidden md:flex gap-1 bg-background/80 backdrop-blur-sm rounded-md p-1 border">
-                <button
-                  onClick={() => setChartType('candlestick')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    chartType === 'candlestick'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
-                >
-                  {t('kline.candlestick', 'Candlestick')}
-                </button>
-                <button
-                  onClick={() => setChartType('line')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    chartType === 'line'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
-                >
-                  {t('kline.line', 'Line')}
-                </button>
-                <button
-                  onClick={() => setChartType('area')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    chartType === 'area'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
-                >
-                  {t('kline.area', 'Area')}
-                </button>
-              </div>
+              <ChartControls chartType={chartType} onChartTypeChange={setChartType} />
             </div>
           </CardHeader>
             <CardContent className="h-[calc(100%-3rem)] pb-4">

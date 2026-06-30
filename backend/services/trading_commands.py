@@ -259,9 +259,22 @@ def place_ai_driven_crypto_order(max_ratio: float = 0.2, account_ids: Optional[I
             try:
                 logger.info(f"Processing AI trading for account: {account.name}")
 
-                # All accounts now use Hyperliquid trading pipeline
-                logger.info(f"Processing Hyperliquid trading for account {account.name}")
-                place_ai_driven_hyperliquid_order(account_id=account.id)
+                # Route by account environment:
+                #   - testnet/mainnet -> LIVE Hyperliquid path (real trading, untouched)
+                #   - NULL            -> PAPER path (local matcher, writes to DB)
+                env = getattr(account, "hyperliquid_environment", None)
+                if env in ("testnet", "mainnet"):
+                    logger.info(f"Processing LIVE Hyperliquid trading for account {account.name} ({env})")
+                    place_ai_driven_hyperliquid_order(account_id=account.id)
+                else:
+                    logger.info(f"Processing PAPER (simulated) trading for account {account.name}")
+                    from services.paper_trading import place_ai_driven_paper_order
+                    place_ai_driven_paper_order(
+                        account_id=account.id,
+                        symbol=symbol,
+                        samples=samples,
+                        bypass_auto_trading=True,
+                    )
 
             except Exception as account_err:
                 logger.error(f"AI-driven order placement failed for account {account.name}: {account_err}", exc_info=True)
@@ -1259,6 +1272,7 @@ def place_ai_driven_binance_order(
     account_id: Optional[int] = None,
     bypass_auto_trading: bool = False,
     trigger_context: Optional[Dict[str, Any]] = None,
+    samples: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Place Binance perpetual contract order based on AI decision.
 
@@ -1447,17 +1461,22 @@ def place_ai_driven_binance_order(
                 'positions': positions
             }
 
-            # Call AI for decision
-            decisions = call_ai_for_decision(
-                db,
-                account,
-                portfolio,
-                prices,
-                symbols=selected_symbols,
-                hyperliquid_state=binance_state,
-                trigger_context=trigger_context,
-                exchange="binance",
-            )
+            # Forced decisions (from signal-driven daemons or manual triggers) bypass the
+            # AI model so the same code path serves both AI-driven and rule-driven trading.
+            if samples:
+                decisions = samples
+                logger.info(f"[BINANCE] Using {len(samples)} forced decision(s) for {account.name}")
+            else:
+                decisions = call_ai_for_decision(
+                    db,
+                    account,
+                    portfolio,
+                    prices,
+                    symbols=selected_symbols,
+                    hyperliquid_state=binance_state,
+                    trigger_context=trigger_context,
+                    exchange="binance",
+                )
 
             if not decisions:
                 logger.info(f"No AI decisions for Binance account {account.name}")

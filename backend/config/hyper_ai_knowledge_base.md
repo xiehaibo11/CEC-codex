@@ -134,48 +134,48 @@ Yes. Common setups:
 - Different traders for different strategies
 - Same signal pool, different strategies (conservative vs aggressive)
 
-### Q: How do I connect Hyper Insight wallet signals?
-Hyper Insight wallet signals are configured in two places:
+### Q: How do I connect CoinGlass wallet signals?
+CoinGlass wallet signals are configured in two places:
 
-1. Track wallets on `https://hyper.akooi.com/`
+1. Configure a CoinGlass API key from the left sidebar `CoinGlass` page
 2. Open CEC-codex → `Signals` → `Wallet Tracking`
-3. Enable the Hyper Insight connection
-4. Create a wallet-tracking signal pool from the synced wallet list
+3. Refresh the CoinGlass wallet tracking status
+4. Create a wallet-tracking signal pool from the CoinGlass wallet list
 
 Suggested user-facing guidance:
-- Explain Hyper Insight as the wallet intelligence site where users track wallets and review wallet behavior
-- Explain CEC-codex as the place where those tracked wallet signals are connected and used
+- Explain CoinGlass as the wallet data source for Hyperliquid wallet tracking
+- Explain CEC-codex as the place where those CoinGlass wallet signals are selected and used
 - Prefer product paths and links over internal implementation details
 - Do not mention internal tool names, API names, or tokens in user replies
 - Do not quote raw status enums or raw field names in normal replies; translate them into product language
 
 Important rules:
-- Hyper Insight is the source of truth for tracked wallets
-- CEC-codex consumes synced wallets but does not edit them locally
-- New synced wallets do not automatically enter an existing pool
+- CoinGlass is the source of truth for available wallet tracking data
+- CEC-codex consumes CoinGlass wallet addresses but does not edit CoinGlass data locally
+- New CoinGlass wallet addresses do not automatically enter an existing pool
 - Wallet-tracking pools do not support backtest in Phase 5
-- Wallet Tracking and Strategy Radar are different Hyper Insight capabilities and should not be described as the same flow
+- Wallet Tracking and Strategy Radar are different capabilities and should not be described as the same flow
 
 ### Q: Can Hyper AI tell me which wallets are currently tracked?
 Yes.
 
 Recommended usage:
-- First confirm `CEC-codex -> Signals -> Wallet Tracking` is connected
-- Then read the exact wallet list currently synced into this CEC-codex session
+- First confirm `CEC-codex -> Signals -> Wallet Tracking` has loaded CoinGlass data
+- Then read the exact CoinGlass wallet list currently available to this CEC-codex session
 - Then choose one of those wallets for deeper analysis if needed
 
 Status wording:
 - If login is required, say the user needs to log in to CEC-codex
-- If sync is not enabled yet, say Wallet Tracking is not connected yet
-- If sync is enabled but there are no wallets, say there are no synced wallets yet
-- Avoid raw backend wording such as `waiting_for_token`
+- If CoinGlass is not configured, say the CoinGlass key needs to be configured
+- If CoinGlass is configured but there are no wallets, say there are no CoinGlass wallets available yet
+- Avoid raw backend wording unless the user asks for diagnostics
 
 ### Q: Can Hyper AI analyze a tracked wallet for me?
-Yes, if the wallet is already tracked in Hyper Insight and Wallet Tracking sync is connected in CEC-codex.
+Yes, if CoinGlass can return Hyperliquid wallet position data for that address.
 
 Important limitation:
-- Hyper AI can read detailed address data and recent fills
-- Recent fills are only a recent activity window, not the wallet's complete all-time trade history
+- Hyper AI can read CoinGlass wallet position, margin, and PnL data
+- CoinGlass wallet position data is not a complete all-time trade-history export
 - Hyper AI should treat style conclusions as analysis based on available data, not as guaranteed full-history facts
 
 If analysis is unavailable:

@@ -55,54 +55,13 @@ class ExchangeDataPersistence:
         Returns:
             Dict with inserted and updated counts
         """
-        inserted = 0
-        updated = 0
+        if not klines:
+            return {"inserted": 0, "updated": 0, "upserted": 0}
 
-        for kline in klines:
-            # Generate datetime string
-            dt = datetime.fromtimestamp(kline.timestamp, tz=timezone.utc)
-            datetime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-
-            # Check existing record
-            existing = self.db.query(CryptoKline).filter(
-                CryptoKline.exchange == kline.exchange,
-                CryptoKline.symbol == kline.symbol,
-                CryptoKline.market == "CRYPTO",
-                CryptoKline.period == kline.interval,
-                CryptoKline.timestamp == kline.timestamp,
-                CryptoKline.environment == environment,
-            ).first()
-
-            if existing:
-                existing.open_price = kline.open_price
-                existing.high_price = kline.high_price
-                existing.low_price = kline.low_price
-                existing.close_price = kline.close_price
-                existing.volume = kline.volume
-                existing.amount = kline.quote_volume
-                updated += 1
-            else:
-                record = CryptoKline(
-                    exchange=kline.exchange,
-                    symbol=kline.symbol,
-                    market="CRYPTO",
-                    period=kline.interval,
-                    timestamp=kline.timestamp,
-                    datetime_str=datetime_str,
-                    environment=environment,
-                    open_price=kline.open_price,
-                    high_price=kline.high_price,
-                    low_price=kline.low_price,
-                    close_price=kline.close_price,
-                    volume=kline.volume,
-                    amount=kline.quote_volume,
-                )
-                self.db.add(record)
-                inserted += 1
-
-        self.db.commit()
-        logger.info(f"Saved klines: {inserted} inserted, {updated} updated")
-        return {"inserted": inserted, "updated": updated}
+        result = self.upsert_klines_bulk(klines, environment=environment)
+        upserted = int(result.get("upserted") or 0)
+        logger.info("Saved klines: %s upserted", upserted)
+        return {"inserted": 0, "updated": upserted, "upserted": upserted}
 
     def upsert_klines_bulk(
         self,

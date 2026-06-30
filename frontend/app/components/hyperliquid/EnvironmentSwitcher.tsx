@@ -139,11 +139,11 @@ export default function EnvironmentSwitcher({
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            <span>Switch Trading Environment</span>
+            <span>切换交易环境</span>
           </DialogTitle>
           <DialogDescription>
-            You are about to switch from{' '}
-            <span className="font-semibold uppercase">{currentEnvironment}</span> to{' '}
+            即将从{' '}
+            <span className="font-semibold uppercase">{currentEnvironment}</span> 切换到{' '}
             <span className="font-semibold uppercase">{targetEnvironment}</span>
           </DialogDescription>
         </DialogHeader>
@@ -156,7 +156,7 @@ export default function EnvironmentSwitcher({
                 <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-red-900">
-                    WARNING: Mainnet uses REAL MONEY
+                    警告：主网使用真实资金
                   </p>
                   <p className="text-xs text-red-700">
                     All trades on mainnet will use real funds. Losses are permanent.
@@ -254,7 +254,7 @@ export default function EnvironmentSwitcher({
               onClick={() => onOpenChange(false)}
               disabled={loading}
             >
-              Cancel
+              取消
             </Button>
             <Button
               variant={isMainnetSwitch ? 'destructive' : 'default'}
@@ -268,7 +268,7 @@ export default function EnvironmentSwitcher({
                   Switching...
                 </>
               ) : (
-                `Switch to ${targetEnvironment.charAt(0).toUpperCase() + targetEnvironment.slice(1)}`
+                `切换到 ${targetEnvironment.charAt(0).toUpperCase() + targetEnvironment.slice(1)}`
               )}
             </Button>
           </div>
@@ -277,10 +277,10 @@ export default function EnvironmentSwitcher({
           {!allChecksPassed && (
             <div className="text-xs text-gray-500 text-center pt-2">
               {!checks.noOpenPositions && (
-                <p>Close all open positions before switching</p>
+                <p>切换前请先平仓</p>
               )}
               {!checks.credentialsConfigured && (
-                <p>Configure {targetEnvironment} credentials in settings</p>
+                <p>在设置中配置 {targetEnvironment} 凭据</p>
               )}
             </div>
           )}

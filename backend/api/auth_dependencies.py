@@ -1,38 +1,128 @@
 """
 Authentication and authorization dependencies for business API routes.
 
-Casdoor issues standard OIDC/JWT tokens. We verify tokens against the
-provider JWKS and map each external subject to an isolated local user.
+Local-first auth: users register/login with a username + password stored in the
+local database (PBKDF2-hashed). On login the backend issues a locally-signed JWT
+(HS256) that is presented back as a Bearer header or `arena_token` cookie. No
+external identity provider is required.
+
+Set AUTH_ENABLED=false to disable auth entirely and serve everything as a single
+shared local user (handy for pure single-user/local runs).
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
-from functools import lru_cache
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from jwt import InvalidTokenError, PyJWKClient
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from database.models import Account, User
+from database.models import User
 
 logger = logging.getLogger(__name__)
 
-AUTH_PROVIDER = os.getenv("AUTH_PROVIDER") or os.getenv("AUTH_PROXY_UPSTREAM", "https://auth.bocail.com")
-AUTH_ISSUER = os.getenv("AUTH_ISSUER", AUTH_PROVIDER.rstrip("/"))
-AUTH_CLIENT_ID = os.getenv("AUTH_CLIENT_ID", "").strip()
-AUTH_JWKS_URL = os.getenv("AUTH_JWKS_URL", f"{AUTH_ISSUER}/.well-known/jwks")
-AUTH_ALGORITHMS = ["RS256", "RS512", "ES256", "ES384", "ES512"]
+# Whether login is required. Default true: the app uses local account
+# registration + login. Set AUTH_ENABLED=false to run with no login (every
+# request is served as the shared local "default" user).
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+DEFAULT_LOCAL_USERNAME = "default"
+
+# Secret used to sign local JWTs. MUST be set to a stable random value in
+# production (otherwise all sessions are invalidated on restart / are insecure).
+AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "").strip()
+if not AUTH_SECRET_KEY:
+    AUTH_SECRET_KEY = "dev-insecure-secret-change-me"
+    if AUTH_ENABLED:
+        logger.warning(
+            "AUTH_SECRET_KEY is not set; using an insecure development default. "
+            "Set AUTH_SECRET_KEY to a strong random value for any real deployment."
+        )
+
+AUTH_JWT_ALGORITHM = "HS256"
+AUTH_TOKEN_TTL_DAYS = int(os.getenv("AUTH_TOKEN_TTL_DAYS", "30"))
+
+# Password hashing (PBKDF2-HMAC-SHA256, stdlib only — no extra deps).
+_PBKDF2_ITERATIONS = 200_000
+_PBKDF2_ALGO = "sha256"
 
 
-@lru_cache(maxsize=1)
-def _jwk_client() -> PyJWKClient:
-    return PyJWKClient(AUTH_JWKS_URL)
+def hash_password(password: str) -> str:
+    """Return a self-describing PBKDF2 hash: pbkdf2_sha256$iterations$salt$hash."""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        _PBKDF2_ALGO, password.encode("utf-8"), salt.encode("utf-8"), _PBKDF2_ITERATIONS
+    ).hex()
+    return f"pbkdf2_{_PBKDF2_ALGO}${_PBKDF2_ITERATIONS}${salt}${digest}"
+
+
+def verify_password(password: str, stored: str | None) -> bool:
+    """Constant-time verification of a password against a stored PBKDF2 hash."""
+    if not stored:
+        return False
+    try:
+        scheme, iterations, salt, digest = stored.split("$", 3)
+    except ValueError:
+        return False
+    if not scheme.startswith("pbkdf2_"):
+        return False
+    algo = scheme.split("_", 1)[1]
+    try:
+        computed = hashlib.pbkdf2_hmac(
+            algo, password.encode("utf-8"), salt.encode("utf-8"), int(iterations)
+        ).hex()
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(computed, digest)
+
+
+def create_access_token(user: User) -> str:
+    """Issue a locally-signed JWT for the given user."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user.id),
+        "username": user.username,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(days=AUTH_TOKEN_TTL_DAYS)).timestamp()),
+    }
+    return jwt.encode(payload, AUTH_SECRET_KEY, algorithm=AUTH_JWT_ALGORITHM)
+
+
+def _verify_local_token(token: str) -> dict[str, Any]:
+    try:
+        return jwt.decode(
+            token,
+            AUTH_SECRET_KEY,
+            algorithms=[AUTH_JWT_ALGORITHM],
+            options={"require": ["exp", "sub"]},
+        )
+    except InvalidTokenError as exc:
+        logger.info("Local token validation failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired login token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+def _get_or_create_local_user(db: Session) -> User:
+    """Return the shared local user used when authentication is disabled."""
+    user = db.query(User).filter(User.username == DEFAULT_LOCAL_USERNAME).first()
+    if user:
+        return user
+    user = User(username=DEFAULT_LOCAL_USERNAME, email=None, password_hash=None, is_active="true")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def _extract_token(request: Request) -> str | None:
@@ -42,65 +132,11 @@ def _extract_token(request: Request) -> str | None:
     return request.cookies.get("arena_token")
 
 
-def _external_subject(claims: dict[str, Any]) -> str:
-    subject = claims.get("sub")
-    if subject:
-        return str(subject)
-
-    owner = claims.get("owner")
-    name = claims.get("name") or claims.get("id") or claims.get("email")
-    if owner and name:
-        return f"{owner}/{name}"
-    if name:
-        return str(name)
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authenticated token is missing a stable user subject",
-    )
-
-
-def _local_username_from_claims(claims: dict[str, Any]) -> str:
-    digest = hashlib.sha256(_external_subject(claims).encode("utf-8")).hexdigest()[:32]
-    return f"casdoor_{digest}"
-
-
-def _verify_casdoor_token(token: str) -> dict[str, Any]:
-    if not AUTH_CLIENT_ID or AUTH_CLIENT_ID == "your-casdoor-application-client-id":
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AUTH_CLIENT_ID is not configured; refusing to accept unscoped login tokens",
-        )
-
-    try:
-        signing_key = _jwk_client().get_signing_key_from_jwt(token).key
-        return jwt.decode(
-            token,
-            signing_key,
-            algorithms=AUTH_ALGORITHMS,
-            audience=AUTH_CLIENT_ID,
-            issuer=AUTH_ISSUER,
-            options={"require": ["exp", "iat"]},
-            leeway=30,
-        )
-    except InvalidTokenError as exc:
-        logger.warning("JWT validation failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired login token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("JWT validation infrastructure failed: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication provider verification is temporarily unavailable",
-        ) from exc
-
-
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    # No-auth mode: serve everyone as the shared local user.
+    if not AUTH_ENABLED:
+        return _get_or_create_local_user(db)
+
     token = _extract_token(request)
     if not token:
         raise HTTPException(
@@ -109,22 +145,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    claims = _verify_casdoor_token(token)
-    username = _local_username_from_claims(claims)
-    email = claims.get("email")
+    claims = _verify_local_token(token)
+    try:
+        user_id = int(claims["sub"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid login token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
-    user = db.query(User).filter(User.username == username).first()
-    if user:
-        if email and user.email != email:
-            user.email = email
-            db.commit()
-            db.refresh(user)
-        return user
-
-    user = User(username=username, email=email, is_active="true")
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or user.is_active != "true":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -134,7 +171,9 @@ def get_account_for_current_user(
     db: Session,
     *,
     active_only: bool = True,
-) -> Account:
+):
+    from database.models import Account
+
     query = db.query(Account).filter(Account.id == account_id, Account.user_id == current_user.id)
     if active_only:
         query = query.filter(Account.is_active == "true")

@@ -197,7 +197,7 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
 
       {/* Environment Selector */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium">Environment</label>
+        <label className="block text-sm font-medium">环境</label>
         <div className="space-y-2">
           <label className="flex items-center space-x-2">
             <input
@@ -208,8 +208,8 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
               className="w-4 h-4 text-blue-600"
             />
             <span className="text-sm">
-              <span className="font-medium">Testnet</span>
-              <span className="text-gray-500 ml-2">(Recommended for testing)</span>
+              <span className="font-medium">测试网</span>
+              <span className="text-gray-500 ml-2">(推荐用于测试)</span>
             </span>
           </label>
 
@@ -222,10 +222,10 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
               className="w-4 h-4 text-red-600"
             />
             <span className="text-sm flex items-center">
-              <span className="font-medium">Mainnet</span>
+              <span className="font-medium">主网</span>
               <span className="ml-2 flex items-center text-red-600">
                 <AlertTriangle className="w-4 h-4 mr-1" />
-                REAL MONEY - Use with caution
+                真实资金 - 谨慎使用
               </span>
             </span>
           </label>
@@ -235,7 +235,7 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
       {/* Private Key Input */}
       <div className="space-y-2">
         <label htmlFor="private-key" className="block text-sm font-medium">
-          Private Key
+          私钥
         </label>
         <div className="relative">
           <Input
@@ -248,11 +248,11 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
               // Check input type and show appropriate warning
               const inputType = detectInputType(value);
               if (inputType === 'wallet_address') {
-                setInputWarning('This looks like a wallet ADDRESS, not a private key. Private keys are 64 hex characters. Check your wallet export settings.');
+                setInputWarning('这看起来像钱包地址而非私钥。私钥为64位十六进制字符，请检查钱包导出设置。');
               } else if (inputType === 'key_no_prefix') {
                 setInputWarning(null); // Will auto-add 0x on blur
               } else if (inputType === 'invalid' && value.trim()) {
-                setInputWarning('Invalid format. Private key must be 64 hexadecimal characters.');
+                setInputWarning('格式无效，私钥必须为64位十六进制字符。');
               } else {
                 setInputWarning(null);
               }
@@ -285,17 +285,17 @@ export default function ConfigPanel({ accountId, onConfigUpdated }: ConfigPanelP
           </div>
         )}
         <div className="text-xs text-gray-500 space-y-1">
-          <p>Private key: 64 hex characters (0x prefix will be added automatically if missing)</p>
+          <p>私钥：64位十六进制字符（缺失时自动添加0x前缀）</p>
           <p className="text-amber-600 dark:text-amber-400">
-            DEX trading requires your private key to sign transactions on-chain. This is different from CEX API keys.
+            DEX交易需要私钥在链上签名，与CEX API密钥不同。
           </p>
-          <p>Your key is stored locally in your browser and encrypted. We recommend using a dedicated trading wallet.</p>
+          <p>私钥仅存储在本地浏览器中并加密，建议使用专用交易钱包。</p>
         </div>
       </div>
 
       {/* Leverage Settings */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium">Leverage Settings</h3>
+        <h3 className="text-sm font-medium">杠杆设置</h3>
 
         <div className="space-y-2">
           <div className="flex justify-between items-center">

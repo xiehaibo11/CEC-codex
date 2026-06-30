@@ -256,16 +256,16 @@ export default function PositionsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Size</TableHead>
-                <TableHead className="text-right">Entry</TableHead>
-                <TableHead className="text-right">Mark</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead className="text-right">Unrealized P&L</TableHead>
-                <TableHead className="text-right">Liq. Price</TableHead>
-                <TableHead className="text-center">Leverage</TableHead>
-                <TableHead className="text-center">Actions</TableHead>
+                <TableHead>币种</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead className="text-right">规模</TableHead>
+                <TableHead className="text-right">入场价</TableHead>
+                <TableHead className="text-right">标记价</TableHead>
+                <TableHead className="text-right">价值</TableHead>
+                <TableHead className="text-right">未实现盈亏</TableHead>
+                <TableHead className="text-right">清算价</TableHead>
+                <TableHead className="text-center">杠杆</TableHead>
+                <TableHead className="text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -1,8 +1,31 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import './i18n' // Initialize i18n
-import { Toaster, toast } from 'react-hot-toast'
+import AppProviders from './AppProviders'
+import AppShell, {
+  type Account,
+  type AppUser,
+  type Order,
+  type Overview,
+  type Position,
+  type Trade,
+} from './AppShell'
+import { useHashRoute } from './hooks/useHashRoute'
+import { useTradingWebSocket } from './hooks/useTradingWebSocket'
+import { SplashScreen, HyperAiOnboarding } from '@/components/hyper-ai'
+import LoginPage from '@/components/auth/LoginPage'
+import {
+  approveBuilder,
+  checkMainnetAccounts,
+  getAccounts,
+  isAuthenticated,
+  type AIDecision,
+  type UnauthorizedAccount,
+} from '@/lib/api'
+import { checkWalletUpgradeNeeded } from '@/lib/hyperliquidApi'
+import { useAuth } from '@/contexts/AuthContext'
+import { useTradingMode } from '@/contexts/TradingModeContext'
 
 // Global error handler for debugging
 window.addEventListener('error', (event) => {
@@ -14,97 +37,11 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason)
 })
 
-// Create a module-level WebSocket singleton to avoid duplicate connections in React StrictMode
-let __WS_SINGLETON__: WebSocket | null = null;
-
-const resolveWsUrl = () => {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws`
-}
-
-
-import Header from '@/components/layout/Header'
-import Sidebar from '@/components/layout/Sidebar'
-import ComprehensiveView from '@/components/portfolio/ComprehensiveView'
-import SystemLogs from '@/components/layout/SystemLogs'
-import PromptManager from '@/components/prompt/PromptManager'
-import SignalManager from '@/components/signal/SignalManager'
-import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
-import BacktestTool from '@/components/backtest/BacktestTool'
-import FactorLibrary from '@/components/factor/FactorLibrary'
-import TraderManagement from '@/components/trader/TraderManagement'
-import { HyperliquidPage } from '@/components/hyperliquid'
-import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
-import KlinesView from '@/components/klines/KlinesView'
-import CoinGlassView from '@/components/coinglass/CoinGlassView'
-import MobileModelChat from '@/components/mobile/MobileModelChat'
-import MobileDashboard from '@/components/mobile/MobileDashboard'
-import MobilePrograms from '@/components/mobile/MobilePrograms'
-import ProgramTrader from '@/components/program/ProgramTrader'
-import SettingsPage from '@/components/settings/SettingsPage'
-import { SplashScreen, HyperAiOnboarding, HyperAiPage } from '@/components/hyper-ai'
-import ArenaAssets from '@/components/arena/ArenaAssets'
-import LoginPage from '@/components/auth/LoginPage'
-// Remove CallbackPage import - handle inline
-import { AIDecision, getAccounts, checkMainnetAccounts, approveBuilder, type UnauthorizedAccount } from '@/lib/api'
-import { checkWalletUpgradeNeeded } from '@/lib/hyperliquidApi'
-import { AuthorizationModal, AgentWalletUpgradeModal } from '@/components/hyperliquid'
-import { ArenaDataProvider } from '@/contexts/ArenaDataContext'
-import { TradingModeProvider, useTradingMode } from '@/contexts/TradingModeContext'
-import { AuthProvider, useAuth } from '@/contexts/AuthContext'
-import { ExchangeProvider } from '@/contexts/ExchangeContext'
-
-interface User {
-  id: number
-  username: string
-}
-
-interface Account {
-  id: number
-  user_id: number
-  name: string
-  account_type: string
-  initial_capital: number
-  current_cash: number
-  frozen_cash: number
-}
-
-interface Overview {
-  account: Account
-  total_assets: number
-  positions_value: number
-  portfolio?: {
-    total_assets: number
-    positions_value: number
-  }
-}
-interface Position { id: number; account_id: number; symbol: string; name: string; market: string; quantity: number; available_quantity: number; avg_cost: number; last_price?: number | null; market_value?: number | null }
-interface Order { id: number; order_no: string; symbol: string; name: string; market: string; side: string; order_type: string; price?: number; quantity: number; filled_quantity: number; status: string }
-interface Trade { id: number; order_id: number; account_id: number; symbol: string; name: string; market: string; side: string; price: number; quantity: number; commission: number; trade_time: string }
-
-const PAGE_TITLES: Record<string, string> = {
-  'hyper-ai': 'Hyper AI',
-  comprehensive: 'Dashboard',
-  'system-logs': 'System Logs',
-  'prompt-management': 'Prompt Templates',
-  'program-trader': 'Programs',
-  'signal-management': 'Signal System',
-  'attribution': 'Attribution Analysis',
-  'backtest-tool': 'Backtest Tool',
-  'factor-library': 'Factor Library',
-  'trader-management': 'AI Trader Management',
-  'manual-trading': 'Manual Trading',
-  'klines': 'K-Line Charts',
-  'coinglass': 'CoinGlass',
-  'model-chat': 'Model Chat',
-  'settings': 'Settings',
-  'arena-assets': 'Arena Assets',
-}
-
 function App() {
   const { tradingMode } = useTradingMode()
-  const { setUser: setAuthUser } = useAuth()
-  const [user, setUser] = useState<User | null>(null)
+  const { user: authUser, loading: authLoading, authEnabled } = useAuth()
+  const { currentPage, handlePageChange, pageTitle } = useHashRoute('hyper-ai')
+  const [user, setUser] = useState<AppUser | null>(null)
   const [account, setAccount] = useState<Account | null>(null)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
@@ -113,27 +50,6 @@ function App() {
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
   const [allAssetCurves, setAllAssetCurves] = useState<any[]>([])
   const [hyperliquidRefreshKey, setHyperliquidRefreshKey] = useState(0)
-  const [currentPage, setCurrentPage] = useState<string>('hyper-ai')
-  const tradingModeRef = useRef(tradingMode)
-
-  /**
-   * Hash Routing: Updates both React state and browser URL hash.
-   * This enables:
-   * - Shareable links (e.g., /#prompts)
-   * - Browser back/forward navigation
-   * - Page refresh returns to same page
-   * - Hyper AI can direct users to specific pages via hash
-   *
-   * IMPORTANT: All page navigation should use this function, not setCurrentPage directly.
-   */
-  const handlePageChange = useCallback((page: string) => {
-    setCurrentPage(page)
-    window.location.hash = page
-  }, [])
-
-  const normalizePageName = (pageName: string) => (
-    pageName === 'hyperliquid' ? 'manual-trading' : pageName
-  )
 
   // Hyper AI states - initialization happens during splash
   const [showSplash, setShowSplash] = useState(true)
@@ -143,6 +59,8 @@ function App() {
 
   // Check Hyper AI configuration during splash phase
   const checkHyperAiConfig = useCallback(async () => {
+    // Skip the protected profile check when not logged in (no onboarding prompt).
+    if (!isAuthenticated()) return false
     try {
       const res = await fetch('/api/hyper-ai/profile')
       const data = await res.json()
@@ -172,187 +90,7 @@ function App() {
     setShowOnboarding(false)
   }
 
-  // Check URL hash and pathname for page routing
-  useEffect(() => {
-    const hash = window.location.hash.slice(1)
-    const pathname = window.location.pathname
-
-    // Handle OAuth callback
-    if (pathname === '/callback') {
-      const handleCallback = async () => {
-        try {
-          const urlParams = new URLSearchParams(window.location.search)
-          const sessionParam = urlParams.get('session')
-
-          const {
-            decodeArenaSession,
-            exchangeCodeForToken,
-            exchangeProviderCallbackForToken,
-            getUserInfo,
-            isProviderCallback,
-          } = await import('@/lib/auth')
-          const Cookies = await import('js-cookie')
-
-          if (isProviderCallback(window.location.search)) {
-            const tokenResponse = await exchangeProviderCallbackForToken(window.location.search)
-            if (!tokenResponse?.access_token) {
-              console.error('Failed to exchange provider callback for token')
-              toast.error('Login failed: Unable to get access token')
-              window.location.href = '/login'
-              return
-            }
-
-            const userData = await getUserInfo(tokenResponse.access_token)
-            if (!userData) {
-              console.error('Failed to get user information')
-              toast.error('Login failed: Unable to get user information')
-              window.location.href = '/login'
-              return
-            }
-
-            Cookies.default.set('arena_token', tokenResponse.access_token, { expires: 7 })
-            if (tokenResponse.refresh_token) {
-              Cookies.default.set('arena_refresh_token', tokenResponse.refresh_token, { expires: 30 })
-            }
-            Cookies.default.set('arena_user', JSON.stringify(userData), { expires: 7 })
-            setAuthUser(userData)
-            toast.success('Login successful!')
-            window.location.href = '/'
-            return
-          }
-
-          if (sessionParam) {
-            const session = decodeArenaSession(sessionParam)
-            if (!session || !session.token.access_token) {
-              console.error('Invalid session payload received')
-              toast.error('Login failed: Invalid session payload')
-              window.location.href = '/'
-              return
-            }
-
-            Cookies.default.set('arena_token', session.token.access_token, { expires: 7 })
-            if (session.token.refresh_token) {
-              Cookies.default.set('arena_refresh_token', session.token.refresh_token, { expires: 30 })
-            }
-            Cookies.default.set('arena_user', JSON.stringify(session.user), { expires: 7 })
-            setAuthUser(session.user)
-            toast.success('Login successful!')
-            window.location.href = '/'
-            return
-          }
-
-          // Handle direct token parameter (from Casdoor relay)
-          const tokenParam = urlParams.get('token')
-          if (tokenParam) {
-            console.log('[Callback] Received token from relay server, length:', tokenParam.length)
-
-            try {
-              // Fetch user info with the token
-              const userData = await getUserInfo(tokenParam)
-              if (!userData) {
-                console.error('[Callback] Failed to get user information')
-                toast.error('Login failed: Unable to get user information')
-                window.location.href = '/'
-                return
-              }
-
-              // Save token and user data
-              Cookies.default.set('arena_token', tokenParam, { expires: 7 })
-              Cookies.default.set('arena_user', JSON.stringify(userData), { expires: 7 })
-
-              // Save refresh token if provided
-              const refreshTokenParam = urlParams.get('refresh_token')
-              if (refreshTokenParam) {
-                console.log('[Callback] Saving refresh_token to cookie, length:', refreshTokenParam.length)
-                Cookies.default.set('arena_refresh_token', refreshTokenParam, { expires: 30 })
-              }
-
-              setAuthUser(userData)
-              toast.success('Login successful!')
-              window.location.href = '/'
-              return
-            } catch (err) {
-              console.error('[Callback] Error processing token:', err)
-              toast.error('Login failed: Unable to process token')
-              window.location.href = '/'
-              return
-            }
-          }
-
-          const code = urlParams.get('code')
-          const state = urlParams.get('state')
-
-          if (!code) {
-            console.error('No authorization code received')
-            toast.error('Login failed: No authorization code received')
-            window.location.href = '/'
-            return
-          }
-
-          const tokenResponse = await exchangeCodeForToken(code, state || '')
-          if (!tokenResponse?.access_token) {
-            console.error('Failed to get access token')
-            toast.error('Login failed: Unable to get access token')
-            window.location.href = '/'
-            return
-          }
-
-          const userData = await getUserInfo(tokenResponse.access_token)
-          if (!userData) {
-            console.error('Failed to get user information')
-            toast.error('Login failed: Unable to get user information')
-            window.location.href = '/'
-            return
-          }
-
-          Cookies.default.set('arena_token', tokenResponse.access_token, { expires: 7 })
-          if (tokenResponse.refresh_token) {
-            Cookies.default.set('arena_refresh_token', tokenResponse.refresh_token, { expires: 30 })
-          }
-          Cookies.default.set('arena_user', JSON.stringify(userData), { expires: 7 })
-          setAuthUser(userData)
-          toast.success('Login successful!')
-          window.location.href = '/'
-        } catch (err) {
-          console.error('Callback error:', err)
-          toast.error('Login error occurred')
-          window.location.href = '/'
-        }
-      }
-
-      handleCallback()
-      return
-    }
-
-    /**
-     * Hash routing with optional parameters: #page-name or #page-name?view=ID
-     * Extract page name from hash (everything before ? if present)
-     */
-    if (hash) {
-      const hashParamIndex = hash.indexOf('?')
-      const pageName = normalizePageName(hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash)
-      if (PAGE_TITLES[pageName]) {
-        setCurrentPage(pageName)
-      }
-    }
-  }, [])
-
-  // Listen for hash changes (e.g. from Factor Analysis "Ask AI" button)
-  useEffect(() => {
-    const onHashChange = () => {
-      const hash = window.location.hash.slice(1)
-      if (hash) {
-        const paramIdx = hash.indexOf('?')
-        const pageName = normalizePageName(paramIdx !== -1 ? hash.slice(0, paramIdx) : hash)
-        if (PAGE_TITLES[pageName]) setCurrentPage(pageName)
-      }
-    }
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
-
   const [accountRefreshTrigger, setAccountRefreshTrigger] = useState<number>(0)
-  const wsRef = useRef<WebSocket | null>(null)
   const [accounts, setAccounts] = useState<any[]>([])
   const [accountsLoading, setAccountsLoading] = useState<boolean>(true)
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -387,197 +125,15 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    tradingModeRef.current = tradingMode
-    if (tradingMode !== 'paper') {
-      setHyperliquidRefreshKey(prev => prev + 1)
-    }
-  }, [tradingMode])
-
-  useEffect(() => {
-    let reconnectTimer: NodeJS.Timeout | null = null
-    let ws = __WS_SINGLETON__
-    const created = !ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED
-    
-    const connectWebSocket = () => {
-      try {
-        ws = new WebSocket(resolveWsUrl())
-        __WS_SINGLETON__ = ws
-        wsRef.current = ws
-        
-        const handleOpen = () => {
-          console.log('WebSocket connected')
-          // Start with hardcoded default user for paper trading
-          ws!.send(JSON.stringify({
-            type: 'bootstrap',
-            username: 'default',
-            initial_capital: 10000,
-            trading_mode: tradingMode
-          }))
-        }
-        
-        const handleMessage = (e: MessageEvent) => {
-          try {
-            const msg = JSON.parse(e.data)
-            if (msg.type === 'bootstrap_ok') {
-              if (msg.user) {
-                setUser(msg.user)
-              }
-              if (msg.account) {
-                setAccount(msg.account)
-                // Only request snapshot for paper mode
-                if (tradingMode === 'paper') {
-                  ws!.send(JSON.stringify({
-                    type: 'get_snapshot',
-                    trading_mode: tradingMode
-                  }))
-                }
-              }
-              // refresh accounts list once bootstrapped
-              refreshAccounts()
-            } else if (msg.type === 'snapshot') {
-              // Process snapshot data (backend already filters by trading mode)
-              if (msg.overview) setOverview(msg.overview)
-              if (msg.positions) setPositions(msg.positions)
-              if (msg.orders) setOrders(msg.orders)
-              if (msg.trades) setTrades(msg.trades)
-              if (msg.ai_decisions) setAiDecisions(msg.ai_decisions)
-              if (msg.all_asset_curves) setAllAssetCurves(msg.all_asset_curves)
-              const currentMode = tradingModeRef.current
-              const messageMode = msg.trading_mode as string | undefined
-              if (
-                currentMode !== 'paper' &&
-                (messageMode === undefined || messageMode === currentMode)
-              ) {
-                setHyperliquidRefreshKey(prev => prev + 1)
-              }
-            } else if (msg.type === 'trades') {
-              setTrades(msg.trades || [])
-            } else if (msg.type === 'order_filled') {
-              toast.success('Order filled')
-              const env = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
-              ws!.send(JSON.stringify({
-                type: 'get_snapshot',
-                trading_mode: tradingMode
-              }))
-              ws!.send(JSON.stringify({
-                type: 'get_asset_curve',
-                timeframe: '5m',
-                trading_mode: tradingMode,
-                ...(env ? { environment: env } : {})
-              }))
-            } else if (msg.type === 'order_pending') {
-              toast('Order placed, waiting for fill', { icon: '⏳' })
-              const env = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
-              ws!.send(JSON.stringify({
-                type: 'get_snapshot',
-                trading_mode: tradingMode
-              }))
-              ws!.send(JSON.stringify({
-                type: 'get_asset_curve',
-                timeframe: '5m',
-                trading_mode: tradingMode,
-                ...(env ? { environment: env } : {})
-              }))
-            } else if (msg.type === 'user_switched') {
-              setUser(msg.user)
-            } else if (msg.type === 'account_switched') {
-              setAccount(msg.account)
-              refreshAccounts()
-            } else if (msg.type === 'trade_update') {
-              // Real-time trade update - prepend to trades list
-              setTrades(prev => [msg.trade, ...prev].slice(0, 100))
-              toast.success('New trade executed!', { duration: 2000 })
-            } else if (msg.type === 'position_update') {
-              // Real-time position update
-              setPositions(msg.positions || [])
-            } else if (msg.type === 'model_chat_update') {
-              // Real-time AI decision update - prepend to AI decisions list
-              setAiDecisions(prev => [msg.decision, ...prev].slice(0, 100))
-            } else if (msg.type === 'asset_curve_update') {
-              // Real-time asset curve update
-              setAllAssetCurves(msg.data || [])
-              const currentMode = tradingModeRef.current
-              const messageMode = msg.trading_mode as string | undefined
-              if (
-                currentMode !== 'paper' &&
-                (messageMode === undefined || messageMode === currentMode)
-              ) {
-                setHyperliquidRefreshKey(prev => prev + 1)
-              }
-            } else if (msg.type === 'asset_curve_data') {
-              setAllAssetCurves(msg.data || [])
-              const currentMode = tradingModeRef.current
-              const messageMode = msg.trading_mode as string | undefined
-              if (
-                currentMode !== 'paper' &&
-                (messageMode === undefined || messageMode === currentMode)
-              ) {
-                setHyperliquidRefreshKey(prev => prev + 1)
-              }
-            } else if (msg.type === 'error') {
-              console.error(msg.message)
-              toast.error(msg.message || 'Order error')
-            }
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err)
-          }
-        }
-        
-        const handleClose = (event: CloseEvent) => {
-          console.log('WebSocket closed:', event.code, event.reason)
-          __WS_SINGLETON__ = null
-          if (wsRef.current === ws) wsRef.current = null
-          
-          // Attempt to reconnect after 3 seconds if the close wasn't intentional
-          if (event.code !== 1000 && event.code !== 1001) {
-            reconnectTimer = setTimeout(() => {
-              console.log('Attempting to reconnect WebSocket...')
-              connectWebSocket()
-            }, 3000)
-          }
-        }
-        
-        const handleError = (event: Event) => {
-          console.error('WebSocket error:', event)
-          // Don't show toast for every error to avoid spam
-          // toast.error('Connection error')
-        }
-
-        ws.addEventListener('open', handleOpen)
-        ws.addEventListener('message', handleMessage)
-        ws.addEventListener('close', handleClose)
-        ws.addEventListener('error', handleError)
-        
-        return () => {
-          ws?.removeEventListener('open', handleOpen)
-          ws?.removeEventListener('message', handleMessage)
-          ws?.removeEventListener('close', handleClose)
-          ws?.removeEventListener('error', handleError)
-        }
-      } catch (err) {
-        console.error('Failed to create WebSocket:', err)
-        // Retry connection after 5 seconds
-        reconnectTimer = setTimeout(connectWebSocket, 5000)
-      }
-    }
-    
-    if (created) {
-      connectWebSocket()
-    } else {
-      wsRef.current = ws
-    }
-
-    return () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer)
-      }
-      // Don't close the socket in cleanup to avoid issues with React StrictMode
-    }
-  }, [])
-
   // Centralized accounts fetcher
   const refreshAccounts = async () => {
+    // Wait for AuthContext to finish initialising before checking auth state.
+    if (authLoading) return
+    // Skip protected API calls when not logged in; use empty local default silently.
+    if (!isAuthenticated()) {
+      setAccounts([])
+      return
+    }
     try {
       setAccountsLoading(true)
       const list = await getAccounts()
@@ -647,6 +203,21 @@ function App() {
     }
   }
 
+  const { wsRef, switchUser, switchAccount, requestSnapshot } = useTradingWebSocket({
+    tradingMode,
+    account,
+    refreshAccounts,
+    setUser,
+    setAccount,
+    setOverview,
+    setPositions,
+    setOrders,
+    setTrades,
+    setAiDecisions,
+    setAllAssetCurves,
+    setHyperliquidRefreshKey,
+  })
+
   const handleAuthorizationComplete = () => {
     setAuthModalOpen(false)
     setUnauthorizedAccounts([])
@@ -663,102 +234,14 @@ function App() {
   useEffect(() => {
     refreshAccounts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountRefreshTrigger])
-
-  // Refresh data when trading mode changes
-  useEffect(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && account) {
-      const env = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
-      wsRef.current.send(JSON.stringify({
-        type: 'get_snapshot',
-        trading_mode: tradingMode
-      }))
-      // Also refresh asset curve data
-      wsRef.current.send(JSON.stringify({
-        type: 'get_asset_curve',
-        timeframe: '5m',
-        trading_mode: tradingMode,
-        ...(env ? { environment: env } : {})
-      }))
-    }
-  }, [tradingMode, account])
-
-  // Auto-refresh via WebSocket every 5 minutes (matches backend cache update interval)
-  useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !account) {
-        return
-      }
-      const env = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
-      wsRef.current.send(JSON.stringify({
-        type: 'get_snapshot',
-        trading_mode: tradingMode
-      }))
-      wsRef.current.send(JSON.stringify({
-        type: 'get_asset_curve',
-        timeframe: '5m',
-        trading_mode: tradingMode,
-        ...(env ? { environment: env } : {})
-      }))
-    }, 300000)
-
-    return () => clearInterval(refreshInterval)
-  }, [account, tradingMode])
-
-  const placeOrder = (payload: any) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.warn('WS not connected, cannot place order')
-      toast.error('Not connected to server')
-      return
-    }
-    try {
-      wsRef.current.send(JSON.stringify({ type: 'place_order', ...payload }))
-      toast('Placing order...', { icon: '📝' })
-    } catch (e) {
-      console.error(e)
-      toast.error('Failed to send order')
-    }
-  }
-
-  const switchUser = (username: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.warn('WS not connected, cannot switch user')
-      toast.error('Not connected to server')
-      return
-    }
-    try {
-      wsRef.current.send(JSON.stringify({ type: 'switch_user', username }))
-    } catch (e) {
-      console.error(e)
-      toast.error('Failed to switch user')
-    }
-  }
-
-  const switchAccount = (accountId: number) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.warn('WS not connected, cannot switch account')
-      toast.error('Not connected to server')
-      return
-    }
-    try {
-      wsRef.current.send(JSON.stringify({ type: 'switch_account', account_id: accountId }))
-    } catch (e) {
-      console.error(e)
-      toast.error('Failed to switch AI trader')
-    }
-  }
+  }, [accountRefreshTrigger, authLoading])
 
   const handleAccountUpdated = () => {
     // Increment refresh trigger to force AccountSelector to refresh
     setAccountRefreshTrigger(prev => prev + 1)
 
     // Also refresh the current data snapshot
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'get_snapshot',
-        trading_mode: tradingMode
-      }))
-    }
+    requestSnapshot()
   }
 
   // For non-paper modes, create minimal state to avoid loading screen
@@ -772,6 +255,13 @@ function App() {
   const isDataReady = !!(user && account && (effectiveOverview || tradingMode !== 'paper'))
 
   if (window.location.pathname === '/login') {
+    return <LoginPage />
+  }
+
+  // Global auth gate: require login before rendering any business page.
+  // When auth is enabled and the user is not logged in, render the login page
+  // instead of the app so no protected API calls fire (eliminates page-wide 401s).
+  if (authEnabled && !authLoading && !authUser) {
     return <LoginPage />
   }
 
@@ -790,177 +280,48 @@ function App() {
     )
   }
 
-  const renderMainContent = () => {
-    const refreshData = () => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: 'get_snapshot',
-          trading_mode: tradingMode
-        }))
-      }
-    }
-
-    return (
-      <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${currentPage === 'hyper-ai' ? '' : 'p-4'}`}>
-
-        {currentPage === 'hyper-ai' && (
-          <HyperAiPage />
-        )}
-
-        {currentPage === 'comprehensive' && (
-          tradingMode === 'paper' ? (
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden pr-1">
-              <ComprehensiveView
-                overview={effectiveOverview}
-                positions={positions}
-                orders={orders}
-                trades={trades}
-                aiDecisions={aiDecisions}
-                allAssetCurves={allAssetCurves}
-                wsRef={wsRef}
-                onSwitchUser={switchUser}
-                onSwitchAccount={switchAccount}
-                onRefreshData={refreshData}
-                accountRefreshTrigger={accountRefreshTrigger}
-                accounts={accounts}
-                loadingAccounts={accountsLoading}
-                onPageChange={handlePageChange}
-              />
-            </div>
-          ) : (
-            <>
-              {/* Mobile: MobileDashboard, Desktop: HyperliquidView */}
-              <div className="md:hidden flex flex-col flex-1 min-h-0">
-                <MobileDashboard />
-              </div>
-              <div className="hidden md:flex flex-col flex-1 min-h-0">
-                <HyperliquidView
-                  wsRef={wsRef}
-                  refreshKey={hyperliquidRefreshKey}
-                  onPageChange={handlePageChange}
-                />
-              </div>
-            </>
-          )
-        )}
-
-        {currentPage === 'system-logs' && (
-          <SystemLogs />
-        )}
-
-        {currentPage === 'prompt-management' && (
-          <PromptManager />
-        )}
-
-        {currentPage === 'program-trader' && (
-          <>
-            {/* Mobile: MobilePrograms, Desktop: ProgramTrader */}
-            <div className="md:hidden flex flex-col flex-1 min-h-0">
-              <MobilePrograms />
-            </div>
-            <div className="hidden md:flex flex-col flex-1 min-h-0">
-              <ProgramTrader />
-            </div>
-          </>
-        )}
-
-        {currentPage === 'signal-management' && (
-          <SignalManager />
-        )}
-
-        {currentPage === 'attribution' && (
-          <AttributionAnalysis />
-        )}
-
-        {currentPage === 'backtest-tool' && (
-          <BacktestTool />
-        )}
-
-        {currentPage === 'factor-library' && (
-          <FactorLibrary />
-        )}
-
-        {currentPage === 'trader-management' && (
-          <TraderManagement />
-        )}
-
-        {currentPage === 'manual-trading' && (
-          <HyperliquidPage accountId={account?.id || 1} />
-        )}
-
-        {currentPage === 'klines' && (
-          <KlinesView onAccountUpdated={handleAccountUpdated} />
-        )}
-
-        {currentPage === 'coinglass' && (
-          <CoinGlassView />
-        )}
-
-        {currentPage === 'model-chat' && (
-          <MobileModelChat />
-        )}
-
-        {currentPage === 'settings' && (
-          <SettingsPage />
-        )}
-
-        {currentPage === 'arena-assets' && (
-          <ArenaAssets />
-        )}
-      </main>
-    )
-  }
-
-  const pageTitle = PAGE_TITLES[currentPage] ?? PAGE_TITLES.comprehensive
-
   return (
-    <>
-      <div className="h-screen flex overflow-hidden">
-        <Sidebar
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          onAccountUpdated={handleAccountUpdated}
-        />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header
-            title={pageTitle}
-            currentAccount={account}
-            showAccountSelector={currentPage === 'comprehensive'}
-          />
-          {renderMainContent()}
-        </div>
-      </div>
-      <AuthorizationModal
-        isOpen={authModalOpen}
-        onClose={handleAuthModalClose}
-        unauthorizedAccounts={unauthorizedAccounts}
-        onAuthorizationComplete={handleAuthorizationComplete}
-      />
-      <AgentWalletUpgradeModal
-        isOpen={agentUpgradeModalOpen}
-        onClose={() => setAgentUpgradeModalOpen(false)}
-        walletsToUpgrade={walletsNeedUpgrade}
-        onUpgradeComplete={() => {
-          setAgentUpgradeModalOpen(false)
-          setWalletsNeedUpgrade([])
-          refreshAccounts()
-        }}
-      />
-    </>
+    <AppShell
+      currentPage={currentPage}
+      pageTitle={pageTitle}
+      tradingMode={tradingMode}
+      account={account}
+      effectiveOverview={effectiveOverview}
+      positions={positions}
+      orders={orders}
+      trades={trades}
+      aiDecisions={aiDecisions}
+      allAssetCurves={allAssetCurves}
+      wsRef={wsRef}
+      hyperliquidRefreshKey={hyperliquidRefreshKey}
+      accountRefreshTrigger={accountRefreshTrigger}
+      accounts={accounts}
+      accountsLoading={accountsLoading}
+      onSwitchUser={switchUser}
+      onSwitchAccount={switchAccount}
+      onRefreshData={requestSnapshot}
+      onPageChange={handlePageChange}
+      onAccountUpdated={handleAccountUpdated}
+      authModalOpen={authModalOpen}
+      unauthorizedAccounts={unauthorizedAccounts}
+      onAuthModalClose={handleAuthModalClose}
+      onAuthorizationComplete={handleAuthorizationComplete}
+      agentUpgradeModalOpen={agentUpgradeModalOpen}
+      walletsNeedUpgrade={walletsNeedUpgrade}
+      onAgentUpgradeClose={() => setAgentUpgradeModalOpen(false)}
+      onAgentUpgradeComplete={() => {
+        setAgentUpgradeModalOpen(false)
+        setWalletsNeedUpgrade([])
+        refreshAccounts()
+      }}
+    />
   )
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <ExchangeProvider>
-        <TradingModeProvider>
-          <ArenaDataProvider>
-            <Toaster position="top-right" />
-            <App />
-          </ArenaDataProvider>
-        </TradingModeProvider>
-      </ExchangeProvider>
-    </AuthProvider>
+    <AppProviders>
+      <App />
+    </AppProviders>
   </React.StrictMode>,
 )

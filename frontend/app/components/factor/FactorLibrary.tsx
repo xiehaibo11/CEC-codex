@@ -422,7 +422,7 @@ export default function FactorLibrary() {
         <div className="flex items-end gap-3 flex-wrap">
           {symbols.length > 0 ? (
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Symbol</label>
+              <label className="text-xs text-muted-foreground">币种</label>
               <Select value={symbol} onValueChange={setSymbol}>
                 <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -626,7 +626,7 @@ export default function FactorLibrary() {
               {/* Target: symbol + period */}
               <div className="flex gap-3 items-end">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-muted-foreground">Symbol</label>
+                  <label className="text-xs text-muted-foreground">币种</label>
                   <Select value={symbol} onValueChange={setSymbol}>
                     <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -759,7 +759,7 @@ export default function FactorLibrary() {
         {/* Category filter - includes Custom */}
         <div className="flex gap-1.5 flex-wrap">
           <Badge variant={categoryFilter === 'all' ? 'default' : 'outline'} className="cursor-pointer text-xs"
-            onClick={() => setCategoryFilter('all')}>All</Badge>
+            onClick={() => setCategoryFilter('all')}>全部</Badge>
           {categories.map(c => (
             <Badge key={c} variant={categoryFilter === c ? 'default' : 'outline'}
               className="cursor-pointer text-xs" onClick={() => setCategoryFilter(c)}>

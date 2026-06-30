@@ -172,7 +172,7 @@ export default function WalletApiUsage({ accountId, environment, exchange = DEFA
           {/* Progress Bar */}
           <div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-600">Usage</span>
+              <span className="text-sm text-gray-600">用量</span>
               <span className={`text-sm font-semibold ${getUsageTextColor()}`}>
                 {rateLimit.usagePercent.toFixed(1)}%
               </span>
@@ -191,14 +191,13 @@ export default function WalletApiUsage({ accountId, environment, exchange = DEFA
               <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-red-800 mb-1">
-                  ⚠️ API Quota Exceeded
+                  ⚠️ API配额已超出
                 </p>
                 <p className="text-xs text-red-700">
-                  You have exceeded your request limit by {(rateLimit.nRequestsUsed - rateLimit.nRequestsCap).toLocaleString()} requests.
-                  All order placement operations will be rejected until you increase your quota.
+                  您已超出请求限制 {(rateLimit.nRequestsUsed - rateLimit.nRequestsCap).toLocaleString()} 个请求，所有下单操作将被拒绝，直到增加配额为止。
                 </p>
                 <p className="text-xs text-red-700 mt-2 font-medium">
-                  💡 Solution: Trade ${(rateLimit.nRequestsUsed - rateLimit.nRequestsCap).toLocaleString()} USDC to free up quota (1 USDC = 1 request).
+                  💡 解决方案：交易 ${(rateLimit.nRequestsUsed - rateLimit.nRequestsCap).toLocaleString()} USDC 以释放配额（1 USDC = 1个请求）。
                 </p>
               </div>
             </div>
@@ -210,22 +209,22 @@ export default function WalletApiUsage({ accountId, environment, exchange = DEFA
               <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-gray-700 space-y-2">
                 <p>
-                  <strong>What is this?</strong> Hyperliquid uses address-based request quotas to prevent API abuse.
+                  <strong>这是什么？</strong>Hyperliquid 使用基于地址的请求配额来防止API滥用。
                 </p>
                 <p>
-                  <strong>Cumulative Volume:</strong> Total trading volume (USDC) completed on your wallet. Higher volume = more quota.
+                  <strong>累计交易量：</strong>钱包已完成的总交易量（USDC），交易量越高配额越多。
                 </p>
                 <p>
-                  <strong>Requests Used:</strong> All API requests from your wallet, including queries (prices, positions) and orders.
+                  <strong>已用请求数：</strong>钱包的所有API请求，包括查询（价格、持仓）和下单。
                 </p>
                 <p>
-                  <strong>Requests Cap:</strong> Maximum allowed requests = 10,000 (base) + your cumulative volume. Each $1 USDC traded adds 1 request.
+                  <strong>请求上限：</strong>最大允许请求数 = 10,000（基础）+ 累计交易量，每交易$1 USDC增加1个请求。
                 </p>
                 <p>
-                  <strong>What happens if exceeded?</strong> Order placement will fail with "Too many requests" error. Query operations (balance, positions, prices) are not affected.
+                  <strong>超出会怎样？</strong>下单将失败并提示"请求过多"，查询操作（余额、持仓、价格）不受影响。
                 </p>
                 <p className="font-semibold text-blue-800">
-                  To increase your quota: Complete more trades. Every $1 USDC traded releases 1 request.
+                  增加配额：多完成交易，每交易$1 USDC释放1个请求。
                 </p>
               </div>
             </div>
@@ -234,14 +233,14 @@ export default function WalletApiUsage({ accountId, environment, exchange = DEFA
           {/* Last Update Time */}
           {lastUpdateTime && (
             <p className="text-xs text-gray-500 text-center">
-              Last updated: {formatDateTime(lastUpdateTime)}
+              上次更新：{formatDateTime(lastUpdateTime)}
             </p>
           )}
         </div>
       ) : (
         <div className="text-center py-8">
           <p className="text-gray-600 mb-4">
-            Click "Update" to check your wallet's API usage status
+            点击"更新"检查钱包API使用状态
           </p>
           <Button
             onClick={handleUpdate}
@@ -249,7 +248,7 @@ export default function WalletApiUsage({ accountId, environment, exchange = DEFA
             className="flex items-center space-x-2 mx-auto"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>{loading ? 'Loading...' : 'Check Status'}</span>
+            <span>{loading ? '加载中...' : '检查状态'}</span>
           </Button>
         </div>
       )}

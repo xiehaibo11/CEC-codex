@@ -61,15 +61,15 @@ export default function TradeButtons({
           <span className="text-xs">{currencySymbol}{amount.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-xs">Available Cash</span>
+          <span className="text-xs">可用资金</span>
           <span className="text-xs text-green-500">{currencySymbol}{cashAvailable.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-xs">Frozen Cash</span>
+          <span className="text-xs">冻结资金</span>
           <span className="text-xs text-orange-500">{currencySymbol}{frozenCash.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-xs">Sellable Position</span>
+          <span className="text-xs">可卖仓位</span>
           <span className="text-xs text-destructive">{positionAvailable}</span>
         </div>
         <div className="flex justify-between">

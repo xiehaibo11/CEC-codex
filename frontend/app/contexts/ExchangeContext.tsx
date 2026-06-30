@@ -11,6 +11,8 @@ import {
   EXCHANGE_DISPLAY_NAMES,
   EXCHANGE_STATUS_COLORS
 } from '@/lib/types/exchange';
+import { isAuthenticated } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ExchangeContext = createContext<ExchangeContextType | undefined>(undefined);
 
@@ -24,10 +26,24 @@ const STORAGE_KEY = 'hyper-alpha-arena-selected-exchange';
 export function ExchangeProvider({ children }: ExchangeProviderProps) {
   const [currentExchange, setCurrentExchange] = useState<ExchangeId>(DEFAULT_EXCHANGE);
   const [isLoading, setIsLoading] = useState(false);
+  const { loading: authLoading } = useAuth();
 
   // Initialize exchange selection from backend
   useEffect(() => {
     const loadExchangeConfig = async () => {
+      if (authLoading) return;  // 等待 auth 初始化完成
+      // Skip the protected backend call when not logged in; use localStorage default silently.
+      if (!isAuthenticated()) {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored && ['hyperliquid', 'binance', 'aster'].includes(stored)) {
+            setCurrentExchange(stored as ExchangeId);
+          }
+        } catch {
+          // Ignore localStorage access errors and keep the default exchange.
+        }
+        return;
+      }
       try {
         const response = await fetch('/api/users/exchange-config');
         if (response.ok) {
@@ -57,7 +73,7 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
     };
 
     loadExchangeConfig();
-  }, []);
+  }, [authLoading]);
 
   // Exchange data with selection state
   const exchanges: ExchangeInfo[] = [

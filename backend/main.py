@@ -29,33 +29,6 @@ from config.settings import DEFAULT_TRADING_CONFIGS
 from version import __version__
 
 logger = logging.getLogger(__name__)
-AUTH_PROXY_UPSTREAM = os.getenv("AUTH_PROXY_UPSTREAM", "https://auth.bocail.com").rstrip("/")
-AUTH_PROXY_HOST = AUTH_PROXY_UPSTREAM.replace("https://", "").replace("http://", "")
-AUTH_PROXY_RETRY_STATUSES = {500, 502, 503, 504}
-AUTH_PROXY_REQUEST_HEADER_EXCLUDE = {
-    "host",
-    "connection",
-    "content-length",
-    "transfer-encoding",
-    "upgrade",
-}
-AUTH_PROXY_RESPONSE_HEADER_EXCLUDE = {
-    "connection",
-    "content-encoding",
-    "content-length",
-    "date",
-    "server",
-    "transfer-encoding",
-}
-AUTH_PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-AUTH_CONFIG_ENV_OVERRIDES = {
-    "authProvider": "AUTH_PROVIDER",
-    "authProxyProvider": "AUTH_PROXY_PROVIDER",
-    "clientId": "AUTH_CLIENT_ID",
-    "appName": "AUTH_APP_NAME",
-    "organizationName": "AUTH_ORGANIZATION_NAME",
-    "redirectPath": "AUTH_REDIRECT_PATH",
-}
 
 app = FastAPI(
     title="CEC-codex API",
@@ -72,164 +45,6 @@ async def health_check():
         "version": __version__
     }
 
-
-def _auth_proxy_url(request: Request) -> str:
-    url = f"{AUTH_PROXY_UPSTREAM}{request.url.path}"
-    if request.url.query:
-        url = f"{url}?{request.url.query}"
-    return url
-
-
-def _apply_auth_config_env(config: dict) -> dict:
-    """Allow production auth settings to be changed without rebuilding frontend."""
-    merged = dict(config)
-
-    for config_key, env_key in AUTH_CONFIG_ENV_OVERRIDES.items():
-        value = os.getenv(env_key, "").strip()
-        if value:
-            merged[config_key] = value
-
-    providers = list(merged.get("oauthProviders") or [])
-
-    def upsert_provider(
-        provider_type: str,
-        client_id_env: str,
-        provider_name_env: str,
-        default_name: str,
-        display_name: str,
-    ) -> None:
-        client_id = os.getenv(client_id_env, "").strip()
-        provider_name = os.getenv(provider_name_env, "").strip() or default_name
-        if not client_id:
-            return
-
-        for provider in providers:
-            if provider.get("type") == provider_type:
-                provider["clientId"] = client_id
-                provider["name"] = provider_name
-                provider.setdefault("displayName", display_name)
-                return
-
-        providers.append(
-            {
-                "type": provider_type,
-                "name": provider_name,
-                "displayName": display_name,
-                "clientId": client_id,
-            }
-        )
-
-    upsert_provider(
-        "GitHub",
-        "AUTH_GITHUB_CLIENT_ID",
-        "AUTH_GITHUB_PROVIDER_NAME",
-        "github_login",
-        "GitHub",
-    )
-    upsert_provider(
-        "Google",
-        "AUTH_GOOGLE_CLIENT_ID",
-        "AUTH_GOOGLE_PROVIDER_NAME",
-        "google_login",
-        "Google",
-    )
-
-    if providers:
-        merged["oauthProviders"] = providers
-
-    return merged
-
-
-async def _proxy_auth_request(request: Request, attempts: int = 3) -> Response:
-    body = await request.body()
-    headers = {
-        key: value
-        for key, value in request.headers.items()
-        if key.lower() not in AUTH_PROXY_REQUEST_HEADER_EXCLUDE
-    }
-    url = _auth_proxy_url(request)
-    last_error: Exception | None = None
-
-    for attempt in range(1, attempts + 1):
-        try:
-            upstream = requests.request(
-                request.method,
-                url,
-                data=body,
-                headers=headers,
-                timeout=12,
-                allow_redirects=False,
-            )
-
-            if upstream.status_code not in AUTH_PROXY_RETRY_STATUSES or attempt == attempts:
-                response_headers = {}
-                for key, value in upstream.headers.items():
-                    lowered = key.lower()
-                    if lowered in AUTH_PROXY_RESPONSE_HEADER_EXCLUDE or lowered == "set-cookie":
-                        continue
-                    response_headers[key] = value
-
-                response = Response(
-                    content=upstream.content,
-                    status_code=upstream.status_code,
-                    headers=response_headers,
-                    media_type=upstream.headers.get("content-type"),
-                )
-
-                set_cookie_headers = []
-                raw_headers = getattr(upstream.raw, "headers", None)
-                if raw_headers is not None and hasattr(raw_headers, "getlist"):
-                    set_cookie_headers = raw_headers.getlist("Set-Cookie")
-                if not set_cookie_headers and upstream.headers.get("Set-Cookie"):
-                    set_cookie_headers = [upstream.headers["Set-Cookie"]]
-                for cookie_header in set_cookie_headers:
-                    response.headers.append("set-cookie", cookie_header)
-
-                return response
-
-            logger.warning(
-                "Auth proxy upstream %s returned %s on attempt %s/%s",
-                request.url.path,
-                upstream.status_code,
-                attempt,
-                attempts,
-            )
-        except requests.RequestException as exc:
-            last_error = exc
-            logger.warning(
-                "Auth proxy upstream %s failed on attempt %s/%s: %s",
-                request.url.path,
-                attempt,
-                attempts,
-                exc,
-            )
-
-        await asyncio.sleep(min(0.2 * attempt, 1.0))
-
-    message = "Authentication provider is temporarily unavailable"
-    if last_error:
-        message = f"{message}: {last_error}"
-    return Response(
-        content=json.dumps({"status": "error", "msg": message, "data": None}),
-        status_code=502,
-        media_type="application/json",
-    )
-
-
-@app.api_route("/api/get-app-login", methods=["GET", "OPTIONS"])
-async def proxy_auth_get_app_login(request: Request):
-    return await _proxy_auth_request(request, attempts=5)
-
-
-@app.api_route("/api/get-account", methods=["GET", "OPTIONS"])
-async def proxy_auth_get_account(request: Request):
-    return await _proxy_auth_request(request, attempts=3)
-
-
-@app.api_route("/api/login", methods=AUTH_PROXY_METHODS)
-@app.api_route("/api/login/{auth_path:path}", methods=AUTH_PROXY_METHODS)
-async def proxy_auth_login(request: Request, auth_path: str = ""):
-    return await _proxy_auth_request(request, attempts=5)
 
 # Manual frontend rebuild endpoint
 @app.post("/api/rebuild-frontend")
@@ -471,8 +286,15 @@ def on_startup():
     _start_runtime_monitor()
     print("Runtime monitor started")
 
-    # Create tables
+    # Create main database tables
     Base.metadata.create_all(bind=engine)
+
+    # Create snapshot database tables (hyperliquid_trades, hyperliquid_account_snapshots)
+    try:
+        from database.init_snapshot_db import init_snapshot_database
+        init_snapshot_database()
+    except Exception as e:
+        print(f"[startup] Snapshot DB init error (non-fatal): {e}")
 
     # Run all migrations (idempotent - safe to run every startup)
     try:
@@ -641,6 +463,31 @@ def on_startup():
 
     finally:
         db.close()
+
+    # Initialize Hyper AI LLM config from env vars (only if not yet configured)
+    hyper_ai_provider = os.getenv("HYPER_AI_LLM_PROVIDER", "").strip()
+    hyper_ai_api_key = os.getenv("HYPER_AI_LLM_API_KEY", "").strip()
+    hyper_ai_model = os.getenv("HYPER_AI_LLM_MODEL", "").strip()
+    if hyper_ai_provider and hyper_ai_api_key:
+        try:
+            from services.hyper_ai_service import save_llm_config, get_or_create_profile
+            _hai_db = SessionLocal()
+            try:
+                profile = get_or_create_profile(_hai_db)
+                if not profile.llm_provider:
+                    save_llm_config(
+                        _hai_db,
+                        provider=hyper_ai_provider,
+                        api_key=hyper_ai_api_key,
+                        model=hyper_ai_model or None,
+                    )
+                    print(f"[startup] Hyper AI LLM configured: {hyper_ai_provider} / {hyper_ai_model}")
+                else:
+                    print(f"[startup] Hyper AI LLM already configured: {profile.llm_provider}, skipping env init")
+            finally:
+                _hai_db.close()
+        except Exception as e:
+            print(f"[startup] Hyper AI LLM init error (non-fatal): {e}")
 
     # ============================================================
     # Upgrade: Initialize Hyperliquid trading mode config & fix NULL environment data
@@ -849,17 +696,6 @@ async def restore_discord_gateway():
         print(f"[startup] Discord Gateway restore failed (non-fatal): {e}")
 
 
-@app.on_event("startup")
-async def startup_hyper_insight_wallet_runtime():
-    """Start Hyper Insight wallet runtime service."""
-    try:
-        from services.hyper_insight_wallet_service import hyper_insight_wallet_service
-        await hyper_insight_wallet_service.startup()
-        print("[startup] Hyper Insight wallet runtime initialized")
-    except Exception as e:
-        print(f"[startup] Hyper Insight wallet runtime failed (non-fatal): {e}")
-
-
 @app.on_event("shutdown")
 def on_shutdown():
     global runtime_monitor_running
@@ -880,17 +716,8 @@ async def shutdown_discord_gateway():
         print(f"[shutdown] Discord Gateway stop failed (non-fatal): {e}")
 
 
-@app.on_event("shutdown")
-async def shutdown_hyper_insight_wallet_runtime():
-    """Stop Hyper Insight wallet runtime service."""
-    try:
-        from services.hyper_insight_wallet_service import hyper_insight_wallet_service
-        await hyper_insight_wallet_service.shutdown()
-    except Exception as e:
-        print(f"[shutdown] Hyper Insight wallet runtime stop failed (non-fatal): {e}")
-
-
 # API routes
+from api.local_auth_routes import router as local_auth_router
 from api.market_data_routes import router as market_data_router
 from api.order_routes import router as order_router
 from api.account_routes import router as account_router
@@ -925,6 +752,7 @@ from api.event_contract_routes import router as event_contract_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
+app.include_router(local_auth_router)
 app.include_router(market_data_router)
 app.include_router(order_router)
 app.include_router(account_router)
@@ -1000,31 +828,6 @@ from api.ws import websocket_endpoint
 
 app.websocket("/ws")(websocket_endpoint)
 
-# Serve auth config file
-@app.get("/auth-config.json")
-async def serve_auth_config():
-    """Serve the auth configuration file with optional environment overrides."""
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    config_path = os.path.join(static_dir, "auth-config.json")
-
-    if os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as config_file:
-            config = json.load(config_file)
-
-        config = _apply_auth_config_env(config)
-        return Response(
-            content=json.dumps(config, ensure_ascii=False),
-            media_type="application/json",
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        )
-    else:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Auth config not found")
-
 # Serve frontend index.html for root and SPA routes
 @app.get("/")
 async def serve_root():
@@ -1049,7 +852,7 @@ async def serve_root():
 async def serve_spa(full_path: str):
     """Serve existing frontend files first, then index.html for SPA routes."""
     # Skip API and explicitly mounted/config routes
-    if full_path.startswith("api") or full_path.startswith("static") or full_path.startswith("docs") or full_path.startswith("openapi.json") or full_path == "auth-config.json":
+    if full_path.startswith("api") or full_path.startswith("static") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
     

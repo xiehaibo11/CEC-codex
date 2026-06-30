@@ -229,9 +229,9 @@ function AssetPalette({ onPlace, onCustomCrop }: {
     <div className="w-52 shrink-0 overflow-y-auto border border-border/30 rounded-lg bg-black/20"
       style={{ maxHeight: CANVAS_H + 68 }}>
       <div className="p-2 text-xs font-semibold border-b border-border/30 flex justify-between">
-        <span>Assets</span>
+        <span>素材</span>
         <button onClick={onCustomCrop}
-          className="text-[10px] text-blue-400 hover:text-blue-300">Custom Crop</button>
+          className="text-[10px] text-blue-400 hover:text-blue-300">自定义裁切</button>
       </div>
       {Object.entries(ITEM_CATALOG).map(([cat, items]) => (
         <div key={cat}>
@@ -402,13 +402,13 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
           </div>
           <button onClick={onRemove}
             className="px-2 py-0.5 text-xs bg-red-900/60 rounded text-red-300 hover:bg-red-900/80 border border-red-800/30 ml-2">
-            Delete
+            删除
           </button>
           <span className="text-[10px] text-muted-foreground/50 ml-2">
             pos: ({Math.round(selectedAsset.x)}, {Math.round(selectedAsset.y)})
           </span>
         </>) : (
-          <span className="text-[11px] text-muted-foreground">Click asset to select, drag to move, corner handle to resize</span>
+          <span className="text-[11px] text-muted-foreground">点击素材选中，拖动移位，角标拖动缩放</span>
         )}
       </div>
       {/* Canvas */}
@@ -585,7 +585,7 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
             style={{ top: 16 }}>
             <div className="text-[10px] font-mono text-center"
               style={{ color: 'rgba(74,222,128,0.3)' }}>
-              Idle characters + screens
+              空闲角色 + 屏幕
             </div>
           </div>
           <div className="absolute bottom-1 left-2 flex items-center gap-1" style={{ zIndex: 2 }}
@@ -634,7 +634,7 @@ function CustomCropPicker({ onSelect, onCancel }: {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center" onClick={onCancel}>
       <div className="bg-[#1a1c28] rounded-lg border border-border/50 p-4 max-w-lg" onClick={e => e.stopPropagation()}>
-        <div className="text-sm font-semibold mb-3">Select spritesheet to crop from</div>
+        <div className="text-sm font-semibold mb-3">选择精灵图进行裁切</div>
         <div className="grid grid-cols-2 gap-1 max-h-[60vh] overflow-y-auto">
           {ALL_FILES.map(f => (
             <button key={`${f.cat}/${f.file}`}
@@ -644,7 +644,7 @@ function CustomCropPicker({ onSelect, onCancel }: {
             </button>
           ))}
         </div>
-        <button onClick={onCancel} className="mt-3 px-3 py-1 text-xs bg-muted rounded">Cancel</button>
+        <button onClick={onCancel} className="mt-3 px-3 py-1 text-xs bg-muted rounded">取消</button>
       </div>
     </div>
   )
@@ -703,9 +703,9 @@ function AssetCropper({ src, label, onConfirm, onCancel }: {
       <div className="bg-[#1a1c28] rounded-lg border border-border/50 p-4 max-w-[90vw] max-h-[90vh] flex flex-col gap-3"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Crop: {label}</span>
+          <span className="text-sm font-semibold">裁切：{label}</span>
           <span className="text-xs text-muted-foreground">
-            {sel ? `${sel.w}×${sel.h}px from (${sel.x},${sel.y})` : 'Click & drag to select region'}
+            {sel ? `${sel.w}×${sel.h}px 起点(${sel.x},${sel.y})` : '点击并拖动以选择区域'}
           </span>
         </div>
         <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
@@ -727,7 +727,7 @@ function AssetCropper({ src, label, onConfirm, onCancel }: {
         <div className="flex items-center gap-3">
           {sel && sel.w > 2 && sel.h > 2 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Preview:</span>
+              <span className="text-xs text-muted-foreground">预览：</span>
               <div className="border border-border/30 bg-black/40 p-1" style={{
                 width: sel.w * 2 + 8, height: sel.h * 2 + 8,
               }}>
@@ -743,11 +743,11 @@ function AssetCropper({ src, label, onConfirm, onCancel }: {
           )}
           <div className="flex gap-2 ml-auto">
             <button onClick={onCancel}
-              className="px-3 py-1.5 rounded text-xs bg-muted hover:bg-muted/80">Cancel</button>
+              className="px-3 py-1.5 rounded text-xs bg-muted hover:bg-muted/80">取消</button>
             <button disabled={!sel || sel.w < 2 || sel.h < 2}
               onClick={() => sel && onConfirm(sel.x, sel.y, sel.w, sel.h)}
               className="px-3 py-1.5 rounded text-xs bg-primary text-primary-foreground disabled:opacity-30">
-              Place on Canvas
+              放置到画布
             </button>
           </div>
         </div>
@@ -757,14 +757,14 @@ function AssetCropper({ src, label, onConfirm, onCancel }: {
 }
 
 const STATE_LABELS: Record<string, string> = {
-  idle: 'Idle (no position)',
-  holding_profit: 'Holding Profit',
-  holding_loss: 'Holding Loss',
-  just_traded: 'Just Traded',
-  program_running: 'Program Running',
-  ai_thinking: 'AI Thinking',
-  error: 'Error',
-  offline: 'Offline',
+  idle: '空闲（无持仓）',
+  holding_profit: '持仓盈利',
+  holding_loss: '持仓亏损',
+  just_traded: '刚刚交易',
+  program_running: '程序运行中',
+  ai_thinking: 'AI 思考中',
+  error: '错误',
+  offline: '离线',
 }
 
 function AnimPreview({ animName }: { animName: string }) {
@@ -802,7 +802,7 @@ function AnimationMapper({ map, onChange }: {
 }) {
   return (
     <div>
-      <h3 className="text-sm font-semibold mb-2">Animation Mapping (global)</h3>
+      <h3 className="text-sm font-semibold mb-2">动画映射（全局）</h3>
       <div className="grid grid-cols-2 gap-2" style={{ maxWidth: 800 }}>
         {Object.entries(STATE_LABELS).map(([state, label]) => (
           <div key={state} className="flex items-center gap-2 bg-black/20 rounded px-3 py-1.5">
@@ -922,7 +922,7 @@ export default function SceneEditor() {
       <div className="flex gap-2 items-center">
         <button onClick={save}
           className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500">
-          {saved ? 'Saved!' : 'Save Config'}
+          {saved ? '已保存！' : '保存配置'}
         </button>
         <button onClick={() => setConfig(normalizeSceneConfig({
           sceneVersion: config.sceneVersion ?? OFFICIAL_SCENE_VERSION,
@@ -932,10 +932,10 @@ export default function SceneEditor() {
           newsArea: { ...DEFAULT_NEWS_AREA },
         }))}
           className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 text-red-300 hover:bg-red-900/70">
-          Reset All
+          重置全部
         </button>
         <span className="text-xs text-muted-foreground ml-2">
-          {config.assets.length} assets placed
+          已放置 {config.assets.length} 个素材
         </span>
       </div>
 

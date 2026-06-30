@@ -1,104 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import AssetCurveWithData from './AssetCurveWithData'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import HyperliquidSummary from './HyperliquidSummary'
 import StrategyPanel from '@/components/portfolio/StrategyPanel'
 import {
-  AIDecision,
   ArenaPositionItem,
   ArenaPositionsAccount,
   getArenaPositions,
 } from '@/lib/api'
 import AlphaArenaFeed from './AlphaArenaFeed'
 import ArenaAnalyticsFeed from './ArenaAnalyticsFeed'
-import FlipNumber from './FlipNumber'
-import RealtimePrice from './RealtimePrice'
 import { useTradingMode } from '@/contexts/TradingModeContext'
-
-interface Account {
-  id: number
-  user_id: number
-  name: string
-  account_type: string
-  initial_capital: number
-  current_cash: number
-  frozen_cash: number
-}
-
-interface Overview {
-  account: Account
-  total_assets: number
-  positions_value: number
-}
-
-interface Position {
-  id: number
-  account_id?: number
-  user_id?: number
-  symbol: string
-  name: string
-  market: string
-  quantity: number
-  available_quantity: number
-  avg_cost: number
-  last_price?: number | null
-  market_value?: number | null
-}
-
-interface Order {
-  id: number
-  order_no: string
-  symbol: string
-  name: string
-  market: string
-  side: string
-  order_type: string
-  price?: number
-  quantity: number
-  filled_quantity: number
-  status: string
-}
-
-interface Trade {
-  id: number
-  order_id: number
-  account_id?: number
-  user_id?: number
-  symbol: string
-  name: string
-  market: string
-  side: string
-  price: number
-  quantity: number
-  commission: number
-  trade_time: string
-}
-
-interface AccountDataViewProps {
-  overview: Overview | null
-  positions: Position[]
-  orders: Order[]
-  trades: Trade[]
-  aiDecisions: AIDecision[]
-  allAssetCurves: any[]
-  wsRef?: React.MutableRefObject<WebSocket | null>
-  onSwitchAccount: (accountId: number) => void
-  onRefreshData: () => void
-  accountRefreshTrigger?: number
-  showAssetCurves?: boolean
-  showStrategyPanel?: boolean
-  accounts?: any[]
-  loadingAccounts?: boolean
-}
-
-function formatCurrency(value?: number | null, fractionDigits = 2) {
-  if (value === undefined || value === null || Number.isNaN(value)) return '$0.00'
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: Math.max(2, fractionDigits),
-  })}`
-}
-
-const SUPPORTED_SYMBOLS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE'] as const
+import AccountSelector from './account-data-view/AccountSelector'
+import SummaryCards from './account-data-view/SummaryCards'
+import { SUPPORTED_SYMBOLS } from './account-data-view/constants'
+import type { AccountDataViewProps } from './account-data-view/types'
 
 export default function AccountDataView(props: AccountDataViewProps) {
   const {
@@ -384,89 +298,23 @@ export default function AccountDataView(props: AccountDataViewProps) {
   return (
     <div className="h-full flex flex-col space-y-6 min-h-0">
       <div className="border border-border rounded-lg bg-card shadow-sm px-4 py-3 flex flex-col gap-4">
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 overflow-x-auto pb-1">
-              {positionSummaries.map((position) => (
-                <div
-                  key={position.symbol}
-                  className="flex items-center gap-3 rounded-md bg-muted/70 px-3 py-2 shadow-sm border border-border/70 w-[160px]"
-                >
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-muted text-[11px] font-semibold text-muted-foreground">
-                    {position.symbol.slice(0, 4).toUpperCase()}
-                  </span>
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {position.symbol}
-                    </span>
-                    <FlipNumber
-                      value={position.marketValue}
-                      prefix="$"
-                      decimals={2}
-                      className="text-sm font-semibold text-primary"
-                    />
-                    <RealtimePrice
-                      symbol={position.symbol}
-                      wsRef={wsRef}
-                      className="mt-0.5"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <SummaryCards
+          positions={positionSummaries}
+          totals={aggregatedTotals}
+          wsRef={wsRef}
+        />
 
-          <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-wide text-muted-foreground">
-            <div className="flex flex-col leading-tight">
-              <span>Cash Available</span>
-              <FlipNumber
-                value={aggregatedTotals.availableCash}
-                prefix="$"
-                decimals={2}
-                className="text-base font-semibold text-foreground"
-              />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span>Frozen Cash</span>
-              <FlipNumber
-                value={aggregatedTotals.frozenCash}
-                prefix="$"
-                decimals={2}
-                className="text-base font-semibold text-foreground"
-              />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span>Positions Value</span>
-              <FlipNumber
-                value={aggregatedTotals.positionsValue}
-                prefix="$"
-                decimals={2}
-                className="text-base font-semibold text-foreground"
-              />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span>Total Assets</span>
-              <FlipNumber
-                value={aggregatedTotals.totalAssets}
-                prefix="$"
-                decimals={2}
-                className="text-base font-semibold text-primary"
-              />
-            </div>
-          </div>
-      </div>
-
-      {/* Main Content */}
-      <div className={`grid gap-6 ${showAssetCurves ? 'grid-cols-5' : 'grid-cols-1'} min-h-0`}>
+        {/* Main Content */}
+        <div className={`grid gap-6 ${showAssetCurves ? 'grid-cols-5' : 'grid-cols-1'} min-h-0`}>
           {/* Asset Curves */}
           {showAssetCurves && (
             <div className="col-span-3 min-h-0 flex flex-col gap-4">
               <div className="flex-1 min-h-[320px] border border-border rounded-lg bg-card shadow-sm px-4 py-3 flex flex-col gap-4">
-                <AssetCurveWithData
-                  data={allAssetCurves}
+                <AccountSelector
+                  allAssetCurves={allAssetCurves}
+                  selectedAccount={selectedArenaAccount}
                   wsRef={wsRef}
-                  highlightAccountId={selectedArenaAccount}
-                  onHighlightAccountChange={handleArenaAccountChange}
+                  onSelectedAccountChange={handleArenaAccountChange}
                 />
               </div>
               <div className="rounded-xl border text-card-foreground shadow p-6 space-y-6">
@@ -480,40 +328,40 @@ export default function AccountDataView(props: AccountDataViewProps) {
 
           {/* Tabs and Strategy Panel */}
           <div className={`${showAssetCurves ? 'col-span-2' : 'col-span-1'} overflow-hidden flex flex-col min-h-0`}>
-          {/* Content Area */}
-          <div className={`flex-1 h-0 min-h-0 overflow-hidden ${showStrategyPanel ? 'grid grid-cols-4 gap-4' : ''}`}>
-            <div className={`${showStrategyPanel ? 'col-span-3' : 'col-span-1'} flex flex-col flex-1 min-h-0 overflow-hidden border border-border rounded-lg bg-card shadow-sm px-4 py-3 gap-4`}>
-              {showAssetCurves ? (
-                <AlphaArenaFeed
-                  refreshKey={accountRefreshTrigger}
-                  wsRef={wsRef}
-                  selectedAccount={selectedArenaAccount}
-                  onSelectedAccountChange={handleArenaAccountChange}
-                />
-              ) : (
-                <ArenaAnalyticsFeed
-                  refreshKey={accountRefreshTrigger}
-                  selectedAccount={selectedArenaAccount}
-                  onSelectedAccountChange={handleArenaAccountChange}
-                />
+            {/* Content Area */}
+            <div className={`flex-1 h-0 min-h-0 overflow-hidden ${showStrategyPanel ? 'grid grid-cols-4 gap-4' : ''}`}>
+              <div className={`${showStrategyPanel ? 'col-span-3' : 'col-span-1'} flex flex-col flex-1 min-h-0 overflow-hidden border border-border rounded-lg bg-card shadow-sm px-4 py-3 gap-4`}>
+                {showAssetCurves ? (
+                  <AlphaArenaFeed
+                    refreshKey={accountRefreshTrigger}
+                    wsRef={wsRef}
+                    selectedAccount={selectedArenaAccount}
+                    onSelectedAccountChange={handleArenaAccountChange}
+                  />
+                ) : (
+                  <ArenaAnalyticsFeed
+                    refreshKey={accountRefreshTrigger}
+                    selectedAccount={selectedArenaAccount}
+                    onSelectedAccountChange={handleArenaAccountChange}
+                  />
+                )}
+              </div>
+
+              {showStrategyPanel && overview?.account && (
+                <div className="col-span-1 overflow-hidden min-h-0">
+                  <StrategyPanel
+                    accountId={overview.account.id}
+                    accountName={overview.account.name}
+                    refreshKey={accountRefreshTrigger}
+                    accounts={strategyAccounts}
+                    onAccountChange={handleStrategyAccountChange}
+                    accountsLoading={props.loadingAccounts}
+                  />
+                </div>
               )}
             </div>
-
-            {showStrategyPanel && overview?.account && (
-              <div className="col-span-1 overflow-hidden min-h-0">
-                <StrategyPanel
-                  accountId={overview.account.id}
-                  accountName={overview.account.name}
-                  refreshKey={accountRefreshTrigger}
-                  accounts={strategyAccounts}
-                  onAccountChange={handleStrategyAccountChange}
-                  accountsLoading={props.loadingAccounts}
-                />
-              </div>
-            )}
           </div>
         </div>
-      </div>
       </div>
     </div>
   )

@@ -11,9 +11,10 @@ import { directionClass, formatPct, formatPrice, formatTime, MetricCard } from '
 type Props = {
   prediction: EventPrediction | null
   loadingPrediction: boolean
+  consensusMode?: string
 }
 
-export function PredictionPanel({ prediction, loadingPrediction }: Props) {
+export function PredictionPanel({ prediction, loadingPrediction, consensusMode }: Props) {
   const { t } = useTranslation()
 
   return (
@@ -106,7 +107,11 @@ export function PredictionPanel({ prediction, loadingPrediction }: Props) {
           </>
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            {loadingPrediction ? t('common.loading', 'Loading...') : t('backtestTool.noPrediction', 'No prediction yet')}
+            {loadingPrediction ? (
+              consensusMode === 'ai_confirmed'
+                ? t('backtestTool.loadingAiConfirm', 'Running 30 AI confirmations... (≈45s)')
+                : t('common.loading', 'Loading...')
+            ) : t('backtestTool.noPrediction', 'No prediction yet')}
           </div>
         )}
       </CardContent>

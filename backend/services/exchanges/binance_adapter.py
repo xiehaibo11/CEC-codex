@@ -7,6 +7,7 @@ to unified internal format.
 
 import logging
 import json
+import os
 import requests
 from decimal import Decimal
 from typing import List, Optional
@@ -22,6 +23,7 @@ from .base_adapter import (
     UnifiedSentiment,
 )
 from .symbol_mapper import SymbolMapper
+from services.api_rate_limiter import acquire_api_slot, record_api_response
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,10 @@ class BinanceAdapter(BaseExchangeAdapter):
         self.base_url = self.TESTNET_URL if environment == "testnet" else self.BASE_URL
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+        proxy = os.environ.get("BINANCE_HTTPS_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            self.session.proxies.update({"http": proxy, "https": proxy})
+            logger.info(f"[BinanceAdapter] Using proxy: {proxy}")
 
     def _get_exchange_name(self) -> str:
         return "binance"
@@ -57,13 +63,30 @@ class BinanceAdapter(BaseExchangeAdapter):
     def _request(self, endpoint: str, params: dict = None) -> dict:
         """Make HTTP request to Binance API."""
         url = f"{self.base_url}{endpoint}"
+        request_weight = self._request_weight(endpoint, params or {})
+        acquire_api_slot("binance", cost=request_weight)
         try:
             response = self.session.get(url, params=params, timeout=10)
+            record_api_response("binance", response.headers)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             logger.error(f"Binance API request failed: {endpoint} - {e}")
             raise
+
+    def _request_weight(self, endpoint: str, params: dict) -> float:
+        env_key = "BINANCE_RATE_WEIGHT_" + endpoint.strip("/").upper().replace("/", "_").replace("-", "_")
+        if os.getenv(env_key):
+            try:
+                return max(float(os.getenv(env_key, "1")), 0.001)
+            except ValueError:
+                return 1.0
+        if endpoint == "/fapi/v1/klines" and os.getenv("BINANCE_RATE_WEIGHT_KLINES"):
+            try:
+                return max(float(os.getenv("BINANCE_RATE_WEIGHT_KLINES", "1")), 0.001)
+            except ValueError:
+                return 1.0
+        return max(float(os.getenv("BINANCE_RATE_WEIGHT_DEFAULT", "1")), 0.001)
 
     def _interval_to_binance(self, interval: str) -> str:
         """Convert internal interval format to Binance format."""

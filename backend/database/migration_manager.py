@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Each script MUST have idempotency checks (check if column/table exists before adding)
 MIGRATIONS = [
     "add_environment_to_crypto_klines.py",
+    "add_exchange_to_crypto_klines.py",
     "add_prompt_template_fields.py",
     "add_ai_prompt_chat.py",
     "fix_timestamp_bigint.py",
@@ -55,13 +56,18 @@ MIGRATIONS = [
     "add_backtest_extended_fields.py",
     "add_regime_body_ratio_cvd_divisor.py",
     "create_market_sentiment_metrics_table.py",
+    "create_perp_funding_table.py",
+    "create_price_samples_table.py",
     "create_hyperliquid_backfill_tasks.py",
+    "add_kline_collection_system.py",
     "add_exchange_to_signals.py",
     "add_source_fields_to_signal_pools.py",
+    "migrate_to_multi_wallet.py",
     "add_binance_wallet_tables.py",
     "add_exchange_to_trigger_configs.py",
     "add_exchange_to_decision_logs.py",
     "add_rebate_working_to_binance_wallets.py",
+    "add_wallet_environment.py",
     "add_prompt_id_to_ai_prompt_conversations.py",
     "unify_ai_message_fields.py",
     "add_interrupt_reason_to_ai_messages.py",
@@ -79,10 +85,13 @@ MIGRATIONS = [
     "create_event_contract_backtest_tables.py",
     "add_event_contract_audit_fields.py",
     "add_event_contract_signal_fields.py",
+    "add_event_contract_backtest_tasks.py",
     "create_news_articles_table.py",
     "add_large_order_fields.py",
     "add_news_image_url.py",
     "create_coinglass_user_keys.py",
+    "add_user_exchange_config.py",
+    "add_sampling_depth_to_global_config.py",
 ]
 
 

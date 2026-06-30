@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'react-hot-toast'
-import { Bot, Loader2, Play, RefreshCw, Save } from 'lucide-react'
+import { Bot, Loader2, Pause, Play, RefreshCw, Save } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   getEventContractSymbols,
+  createEventContractBacktestTask,
   getCoinGlassEventContractCapability,
+  getEventContractBacktestTask,
   getHyperAiProfile,
+  isAuthenticated,
+  pauseEventContractBacktestTask,
   predictEventContract,
-  runEventContractBacktest,
   type CoinGlassEventContractCapability,
   type EventAiDecision,
   type EventBacktestResponse,
+  type EventBacktestTaskStatus,
   type EventContractBacktestConfig,
   type EventContractConfig,
   type EventContractSymbol,
@@ -30,6 +34,8 @@ import { formatTime, fromLocalInputValue, toLocalInputValue } from './shared'
 import { PERIOD_OPTIONS, PERIOD_SECONDS, type FormState } from './types'
 
 const BACKTEST_CONFIG_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:config:v1'
+const BACKTEST_TASK_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:active-task:v1'
+const ACTIVE_TASK_STATUSES = new Set(['pending', 'running', 'pause_requested'])
 
 function buildDefaultForm(start: Date, end: Date): FormState {
   return {
@@ -49,6 +55,10 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     slippage_bps: 0,
     delay_seconds: 0,
     consensus_threshold: 30,
+    target_win_rate: 75,
+    enable_edge_quality_gate: true,
+    max_trade_range_risk: 45,
+    allow_pullback_trades: false,
     draw_result: 'loss',
     enable_fake_breakout_filter: true,
     enable_trap_filter: true,
@@ -87,7 +97,9 @@ export default function BacktestTool() {
   const [hyperAiProfile, setHyperAiProfile] = useState<HyperAiProfile | null>(null)
   const [loadingSymbols, setLoadingSymbols] = useState(false)
   const [loadingPrediction, setLoadingPrediction] = useState(false)
-  const [runningBacktest, setRunningBacktest] = useState(false)
+  const [startingBacktest, setStartingBacktest] = useState(false)
+  const [pausingBacktest, setPausingBacktest] = useState(false)
+  const [taskStatus, setTaskStatus] = useState<EventBacktestTaskStatus | null>(null)
   const [prediction, setPrediction] = useState<EventPrediction | null>(null)
   const [backtest, setBacktest] = useState<EventBacktestResponse | null>(null)
   const [selectedTrade, setSelectedTrade] = useState<EventTradeLog | null>(null)
@@ -95,6 +107,7 @@ export default function BacktestTool() {
   const [coinglassCapability, setCoinGlassCapability] = useState<CoinGlassEventContractCapability | null>(null)
   const [loadingCoinGlassCapability, setLoadingCoinGlassCapability] = useState(false)
   const coinGlassAvailable = coinglassCapability?.available === true
+  const runningBacktest = taskStatus ? ACTIVE_TASK_STATUSES.has(taskStatus.status) : false
 
   const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm(prev => {
@@ -172,6 +185,10 @@ export default function BacktestTool() {
     consensus_mode: form.consensus_mode,
     max_ai_evaluations: Number(form.max_ai_evaluations),
     consensus_threshold: Number(form.consensus_threshold),
+    target_win_rate: Number(form.target_win_rate),
+    enable_edge_quality_gate: form.enable_edge_quality_gate,
+    max_trade_range_risk: Number(form.max_trade_range_risk),
+    allow_pullback_trades: form.allow_pullback_trades,
     enable_fake_breakout_filter: form.enable_fake_breakout_filter,
     enable_trap_filter: form.enable_trap_filter,
     enable_range_filter: form.enable_range_filter,
@@ -216,27 +233,107 @@ export default function BacktestTool() {
 
   const runBacktest = async () => {
     try {
-      setRunningBacktest(true)
+      setStartingBacktest(true)
       setSelectedTrade(null)
-      const data = await runEventContractBacktest(buildBacktestPayload())
-      setBacktest(data)
-      setSelectedTrade(data.trades?.[0] || null)
-      toast.success(t('backtestTool.backtestComplete', 'Backtest complete'))
+      setBacktest(null)
+      const task = await createEventContractBacktestTask(buildBacktestPayload())
+      window.localStorage.setItem(BACKTEST_TASK_STORAGE_KEY, String(task.task_id))
+      setTaskStatus(task)
+      toast.success(t('backtestTool.backtestStarted', 'Backtest started'))
     } catch (error: any) {
-      console.error('Backtest failed:', error)
+      console.error('Backtest task failed to start:', error)
       toast.error(error?.message || t('backtestTool.backtestFailed', 'Backtest failed'))
     } finally {
-      setRunningBacktest(false)
+      setStartingBacktest(false)
     }
   }
+
+  const pauseBacktest = async () => {
+    if (!taskStatus?.task_id) return
+    try {
+      setPausingBacktest(true)
+      const task = await pauseEventContractBacktestTask(taskStatus.task_id)
+      setTaskStatus(task)
+      toast.success(t('backtestTool.pauseRequested', 'Pause requested'))
+    } catch (error: any) {
+      console.error('Pause backtest failed:', error)
+      toast.error(error?.message || t('backtestTool.pauseFailed', 'Pause failed'))
+    } finally {
+      setPausingBacktest(false)
+    }
+  }
+
+  const applyTaskStatus = useCallback((task: EventBacktestTaskStatus) => {
+    setTaskStatus(task)
+    if (task.result) {
+      setBacktest(task.result)
+      setSelectedTrade(task.result.trades?.[0] || null)
+    }
+    if (['completed', 'failed', 'paused'].includes(task.status)) {
+      window.localStorage.removeItem(BACKTEST_TASK_STORAGE_KEY)
+    }
+  }, [])
 
   useEffect(() => {
     loadSymbols()
   }, [loadSymbols])
 
   useEffect(() => {
+    const rawTaskId = window.localStorage.getItem(BACKTEST_TASK_STORAGE_KEY)
+    const taskId = rawTaskId ? Number(rawTaskId) : 0
+    if (!taskId) return
+    let cancelled = false
+    getEventContractBacktestTask(taskId)
+      .then(task => {
+        if (!cancelled) applyTaskStatus(task)
+      })
+      .catch(error => {
+        console.error('Failed to restore backtest task:', error)
+        window.localStorage.removeItem(BACKTEST_TASK_STORAGE_KEY)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [applyTaskStatus])
+
+  useEffect(() => {
+    if (!taskStatus?.task_id || !ACTIVE_TASK_STATUSES.has(taskStatus.status)) return
+    let cancelled = false
+    const pollTask = async () => {
+      try {
+        const task = await getEventContractBacktestTask(taskStatus.task_id)
+        if (!cancelled) applyTaskStatus(task)
+      } catch (error) {
+        if (!cancelled) console.error('Failed to poll backtest task:', error)
+      }
+    }
+    const interval = window.setInterval(pollTask, 2000)
+    pollTask()
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [taskStatus?.task_id, taskStatus?.status, applyTaskStatus])
+
+  useEffect(() => {
     let cancelled = false
     const loadCapability = async () => {
+      if (!isAuthenticated()) {
+        if (cancelled) return
+        setCoinGlassCapability({
+          available: false,
+          configured: false,
+          status: 'not_authenticated',
+          reason: t('backtestTool.loginRequired', 'Login required'),
+          period: form.period,
+          metrics: [],
+        })
+        setForm(prev => prev.enable_coinglass_features
+          ? { ...prev, enable_coinglass_features: false }
+          : prev)
+        setLoadingCoinGlassCapability(false)
+        return
+      }
       try {
         setLoadingCoinGlassCapability(true)
         const capability = await getCoinGlassEventContractCapability({
@@ -314,10 +411,21 @@ export default function BacktestTool() {
               {loadingPrediction ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {t('backtestTool.refreshPrediction', 'Refresh Prediction')}
             </Button>
-            <Button onClick={runBacktest} disabled={runningBacktest}>
-              {runningBacktest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {t('backtestTool.runBacktest', 'Run Event Backtest')}
-            </Button>
+            {runningBacktest ? (
+              <Button variant="outline" onClick={pauseBacktest} disabled={pausingBacktest || taskStatus?.status === 'pause_requested'}>
+                {pausingBacktest || taskStatus?.status === 'pause_requested'
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Pause className="h-4 w-4" />}
+                {taskStatus?.status === 'pause_requested'
+                  ? t('backtestTool.pauseRequestedShort', 'Pausing')
+                  : t('backtestTool.pauseBacktest', 'Pause')}
+              </Button>
+            ) : (
+              <Button onClick={runBacktest} disabled={startingBacktest}>
+                {startingBacktest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                {t('backtestTool.runBacktest', 'Run Event Backtest')}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -339,10 +447,11 @@ export default function BacktestTool() {
           </div>
 
           <div className="min-w-0 space-y-4">
-            <PredictionPanel prediction={prediction} loadingPrediction={loadingPrediction} />
+            <PredictionPanel prediction={prediction} loadingPrediction={loadingPrediction} consensusMode={form.consensus_mode} />
             <BacktestResultsPanel
               backtest={backtest}
               runningBacktest={runningBacktest}
+              taskStatus={taskStatus}
               chartData={chartData}
               displayAi={displayAi}
               displayFactors={displayFactors}

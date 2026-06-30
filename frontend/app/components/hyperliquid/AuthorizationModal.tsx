@@ -118,9 +118,9 @@ export default function AuthorizationModal({
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold flex items-center gap-1">
-              <span>AI Trading requires</span>
+              <span>AI交易需要</span>
               <HyperliquidLogo />
-              <span>Hyperliquid authorization</span>
+              <span>Hyperliquid 授权</span>
             </h2>
             <Button
               variant="ghost"

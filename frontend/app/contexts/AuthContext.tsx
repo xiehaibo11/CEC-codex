@@ -1,15 +1,12 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
-import Cookies from 'js-cookie'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import {
-  getTokenExpiryTime,
-  getUserInfo,
-  isTokenExpiringSoon,
+  getCurrentUser,
   loadAuthConfig,
-  markNextLoginForFreshAuthorization,
-  refreshAccessToken,
-  ssoLogout,
+  loginUser,
+  logoutUser,
+  registerUser,
   type User,
 } from '@/lib/auth'
 
@@ -18,6 +15,8 @@ interface AuthContextType {
   loading: boolean
   authEnabled: boolean
   setUser: (user: User | null) => void
+  login: (username: string, password: string) => Promise<User>
+  register: (username: string, password: string) => Promise<User>
   logout: () => void
 }
 
@@ -27,200 +26,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [authEnabled, setAuthEnabled] = useState(false)
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const clearAuthState = () => {
-    Cookies.remove('arena_token')
-    Cookies.remove('arena_refresh_token')
-    Cookies.remove('arena_user')
-    setUser(null)
-  }
-
-  const syncHyperInsightRuntimeToken = async (token: string | null) => {
-    try {
-      if (!token) {
-        await fetch('/api/signals/wallet-tracking/token', { method: 'DELETE' })
-        return
-      }
-
-      await fetch('/api/signals/wallet-tracking/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: token }),
-      })
-    } catch (error) {
-      console.warn('[AuthContext] Failed to sync Hyper Insight runtime token:', error)
-    }
-  }
-
-  // Function to handle token refresh
-  const handleTokenRefresh = async (force: boolean = false): Promise<boolean> => {
-    const currentToken = Cookies.get('arena_token')
-    const refreshToken = Cookies.get('arena_refresh_token')
-
-    if (!currentToken || !refreshToken) {
-      console.log('[AuthContext] No tokens available for refresh')
-      return false
-    }
-
-    // Check if token needs refresh (within 5 minutes of expiry)
-    const expiryTime = getTokenExpiryTime(currentToken)
-    const expiringSoon = isTokenExpiringSoon(currentToken, 5)
-    console.log(`[AuthContext] Token check: force=${force}, expiringSoon=${expiringSoon}, expiryTime=${expiryTime}, now=${Date.now()}`)
-
-    if (!force && !expiringSoon) {
-      if (expiryTime) {
-        const minutesLeft = Math.floor((expiryTime - Date.now()) / 1000 / 60)
-        console.log(`[AuthContext] Token still valid for ${minutesLeft} minutes, no refresh needed`)
-      }
-      return false
-    }
-
-    console.log(`[AuthContext] Token expiring soon (force=${force}, expiringSoon=${expiringSoon}), refreshing...`)
-
-    try {
-      const tokenResponse = await refreshAccessToken(refreshToken)
-
-      if (!tokenResponse || !tokenResponse.access_token) {
-        console.error('[AuthContext] Failed to refresh token')
-        await syncHyperInsightRuntimeToken(null)
-        clearAuthState()
-        return false
-      }
-
-      // Update cookies with new tokens
-      Cookies.set('arena_token', tokenResponse.access_token, { expires: 7 })
-      if (tokenResponse.refresh_token) {
-        Cookies.set('arena_refresh_token', tokenResponse.refresh_token, { expires: 30 })
-      }
-      await syncHyperInsightRuntimeToken(tokenResponse.access_token)
-
-      // Update user info with new token
-      const userData = await getUserInfo(tokenResponse.access_token)
-      if (userData) {
-        setUser(userData)
-        Cookies.set('arena_user', JSON.stringify(userData), { expires: 7 })
-        console.log('[AuthContext] Token refreshed successfully')
-        return true
-      } else {
-        console.error('[AuthContext] Failed to get user info after token refresh')
-        await syncHyperInsightRuntimeToken(null)
-        clearAuthState()
-        return false
-      }
-    } catch (error) {
-      console.error('[AuthContext] Token refresh error:', error)
-      return false
-    }
-  }
-
-  // Schedule next token refresh based on token expiry time
-  const scheduleTokenRefresh = () => {
-    const currentToken = Cookies.get('arena_token')
-    if (!currentToken) return
-
-    const expiryTime = getTokenExpiryTime(currentToken)
-    if (!expiryTime) {
-      console.warn('[AuthContext] Cannot get token expiry time, skipping scheduled refresh')
-      return
-    }
-
-    // Calculate when to refresh: 5 minutes before expiry
-    const REFRESH_BUFFER_MS = 5 * 60 * 1000 // 5 minutes
-    const refreshTime = expiryTime - REFRESH_BUFFER_MS
-    const delayMs = refreshTime - Date.now()
-
-    // Clear existing timer
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current)
-      refreshTimerRef.current = null
-    }
-
-    // If token already expired or will expire very soon (< 1 minute), refresh immediately
-    if (delayMs < 60 * 1000) {
-      console.log('[AuthContext] Token expiring very soon, refreshing immediately')
-      handleTokenRefresh(true).then(success => {
-        if (success) {
-          scheduleTokenRefresh()
-        }
-      })
-      return
-    }
-
-    // JavaScript setTimeout max delay is ~24.8 days (2147483647ms)
-    // If delay exceeds this, skip scheduling - token is valid for a long time
-    const MAX_TIMEOUT_MS = 2147483647
-    if (delayMs > MAX_TIMEOUT_MS) {
-      const daysLeft = Math.floor(delayMs / 1000 / 60 / 60 / 24)
-      console.log(`[AuthContext] Token valid for ${daysLeft} days, no refresh scheduling needed`)
-      return
-    }
-
-    // Schedule refresh at precise time
-    const delayMinutes = Math.floor(delayMs / 1000 / 60)
-    console.log(`[AuthContext] Token refresh scheduled in ${delayMinutes} minutes (${new Date(refreshTime).toLocaleString()})`)
-
-    refreshTimerRef.current = setTimeout(async () => {
-      console.log('[AuthContext] Scheduled token refresh triggered')
-      const success = await handleTokenRefresh(true)
-      if (success) {
-        scheduleTokenRefresh()
-      }
-    }, delayMs)
-  }
 
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check if auth is configured
-        const config = await loadAuthConfig()
-        const isAuthEnabled = !!config
-        setAuthEnabled(isAuthEnabled)
+        const cfg = await loadAuthConfig()
+        setAuthEnabled(!!cfg)
 
-        if (!isAuthEnabled) {
-          // Auth disabled, skip authentication
-          setLoading(false)
-          return
-        }
-
-        // Try to load user from cache first
-        const cachedUser = Cookies.get('arena_user')
-        if (cachedUser) {
-          try {
-            setUser(JSON.parse(cachedUser))
-          } catch (e) {
-            console.error('Failed to parse cached user:', e)
-          }
-        }
-
-        // Try to refresh user info with token
-        const token = Cookies.get('arena_token')
-        if (token) {
-          console.log('[AuthContext] Page loaded/refreshed, checking token status...')
-          const refreshToken = Cookies.get('arena_refresh_token')
-
-          if (refreshToken) {
-            console.log('[AuthContext] Refresh token found, forcing token refresh on page load')
-            const refreshed = await handleTokenRefresh(true)
-            if (!refreshed) {
-              console.warn('[AuthContext] Forced refresh failed on page load, user will need to sign in again')
-              clearAuthState()
-            } else {
-              scheduleTokenRefresh()
-            }
-          } else {
-            console.log('[AuthContext] No refresh token available, falling back to existing access token')
-            const userData = await getUserInfo(token)
-            if (userData) {
-              setUser(userData)
-              Cookies.set('arena_user', JSON.stringify(userData), { expires: 7 })
-              await syncHyperInsightRuntimeToken(token)
-              scheduleTokenRefresh()
-            } else {
-              await syncHyperInsightRuntimeToken(null)
-              clearAuthState()
-            }
-          }
+        if (cfg) {
+          const currentUser = await getCurrentUser()
+          setUser(currentUser)
         }
       } catch (error) {
         console.error('Auth initialization error:', error)
@@ -232,36 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth()
   }, [])
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = null
-        console.log('[AuthContext] Token refresh timer cleared on unmount')
-      }
-    }
-  }, [])
+  const login = async (username: string, password: string): Promise<User> => {
+    const loggedInUser = await loginUser(username, password)
+    setUser(loggedInUser)
+    return loggedInUser
+  }
+
+  const register = async (username: string, password: string): Promise<User> => {
+    const newUser = await registerUser(username, password)
+    setUser(newUser)
+    return newUser
+  }
 
   const logout = async () => {
-    const currentToken = Cookies.get('arena_token')
-    markNextLoginForFreshAuthorization()
-    if (currentToken) {
-      await ssoLogout(currentToken)
-    }
-
-    Cookies.remove('arena_token')
-    Cookies.remove('arena_refresh_token')
-    Cookies.remove('arena_user')
-    await syncHyperInsightRuntimeToken(null)
+    await logoutUser()
     setUser(null)
-
-    // Clear refresh timer
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current)
-      refreshTimerRef.current = null
-    }
-
     window.location.href = '/login'
   }
 
@@ -271,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       authEnabled,
       setUser,
-      logout
+      login,
+      register,
+      logout,
     }}>
       {children}
     </AuthContext.Provider>

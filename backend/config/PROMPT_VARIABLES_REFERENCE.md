@@ -27,7 +27,7 @@ triggered_signals:
     current_value: 3.5
 ```
 
-When triggered by **wallet signal** (Hyper Insight wallet tracking):
+When triggered by **wallet signal** (CoinGlass wallet tracking):
 ```
 === TRIGGER CONTEXT ===
 trigger_type: wallet_signal

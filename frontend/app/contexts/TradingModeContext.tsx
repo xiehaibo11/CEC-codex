@@ -12,6 +12,8 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { setGlobalTradingMode, getGlobalTradingMode } from '@/lib/hyperliquidApi';
+import { isAuthenticated } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type TradingMode = 'testnet' | 'mainnet';
 
@@ -31,10 +33,14 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
   };
 
   const [tradingMode, setTradingModeState] = useState<TradingMode>(getInitialMode);
+  const { loading: authLoading } = useAuth();
 
   // Sync with backend on mount to get the source of truth
   useEffect(() => {
     const syncWithBackend = async () => {
+      if (authLoading) return;  // 等待 auth 初始化完成
+      // Skip the protected sync call when not logged in; keep localStorage default silently.
+      if (!isAuthenticated()) return;
       try {
         console.log('[TradingModeContext] Syncing with backend on mount...');
         const response = await getGlobalTradingMode();
@@ -54,7 +60,7 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
     };
 
     syncWithBackend();
-  }, []);
+  }, [authLoading]);
 
   // Save to localStorage when changed and sync with backend before reload
   const setTradingMode = async (mode: TradingMode) => {

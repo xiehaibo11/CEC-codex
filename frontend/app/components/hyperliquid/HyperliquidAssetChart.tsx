@@ -482,7 +482,7 @@ export default function HyperliquidAssetChart({
         const badgeY = cy + size / 2 - badgeSize / 2
 
         return (
-          <g>
+          <g key={`terminal-dot-${account.key}-${index}`}>
             {pulseIteration > 0 && (
               <circle
                 cx={cx}

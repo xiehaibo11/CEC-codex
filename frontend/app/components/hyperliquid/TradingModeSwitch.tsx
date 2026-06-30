@@ -48,12 +48,12 @@ export default function TradingModeSwitch() {
       const result = await setGlobalTradingMode(targetMode)
 
       if (result.success && result.changed) {
-        toast.success(`✅ Switched to ${targetMode.toUpperCase()}`)
+        toast.success(`✅ 已切换至${targetMode === 'mainnet' ? '主网' : '测试网'}`)
         await loadModeInfo()
       } else if (result.success && !result.changed) {
-        toast('Already on ' + targetMode)
+        toast(`当前已在${targetMode === 'mainnet' ? '主网' : '测试网'}`)
       } else {
-        toast.error('Failed to switch trading mode')
+        toast.error('切换交易模式失败')
       }
 
       setShowConfirm(false)
@@ -80,9 +80,9 @@ export default function TradingModeSwitch() {
   return (
     <div className="p-6 border rounded-lg space-y-4">
       <div>
-        <h3 className="text-lg font-medium mb-1">Global Trading Environment</h3>
+        <h3 className="text-lg font-medium mb-1">全局交易环境</h3>
         <p className="text-sm text-muted-foreground">
-          Controls which network all AI Traders connect to
+          控制所有AI交易员连接的网络环境
         </p>
       </div>
 
@@ -90,14 +90,14 @@ export default function TradingModeSwitch() {
       <div className="p-4 rounded-lg bg-muted">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm text-muted-foreground mb-1">Current Mode</div>
+            <div className="text-sm text-muted-foreground mb-1">当前模式</div>
             <div className="flex items-center gap-2">
               <div
                 className={`text-2xl font-bold ${
                   isTestnet ? 'text-green-600' : 'text-orange-600'
                 }`}
               >
-                {isTestnet ? 'TESTNET' : 'MAINNET'}
+                {isTestnet ? '测试网' : '主网'}
               </div>
             </div>
             <div className="text-sm text-muted-foreground mt-1">
@@ -117,8 +117,8 @@ export default function TradingModeSwitch() {
             className="h-20 flex-col"
           >
             <div className="text-lg font-semibold mb-1">TEST</div>
-            <div>Testnet</div>
-            <div className="text-xs opacity-70">Paper Trading</div>
+            <div>测试网</div>
+            <div className="text-xs opacity-70">模拟交易</div>
           </Button>
           <Button
             variant={!isTestnet ? 'default' : 'outline'}
@@ -127,8 +127,8 @@ export default function TradingModeSwitch() {
             className="h-20 flex-col"
           >
             <div className="text-lg font-semibold mb-1">MAIN</div>
-            <div>Mainnet</div>
-            <div className="text-xs opacity-70">Real Funds</div>
+            <div>主网</div>
+            <div className="text-xs opacity-70">真实资金</div>
           </Button>
         </div>
       ) : (
@@ -139,25 +139,25 @@ export default function TradingModeSwitch() {
             <div className="flex-1">
               <div className="font-medium text-orange-700">
                 {targetMode === 'mainnet'
-                  ? 'Switch to MAINNET?'
-                  : 'Switch back to TESTNET?'}
+                  ? '切换到主网？'
+                  : '切换回测试网？'}
               </div>
               <div className="text-sm text-muted-foreground mt-1">
                 {targetMode === 'mainnet' ? (
                   <>
                     <p className="font-medium text-orange-700 mb-2">
-                      ⚠️ WARNING: This will use REAL FUNDS!
+                      ⚠️ 警告：此操作将使用真实资金！
                     </p>
-                    <p>All AI Traders will connect to Hyperliquid Mainnet and execute trades with real money. Make sure:</p>
+                    <p>所有AI交易员将连接到Hyperliquid主网并用真实资金执行交易。请确认：</p>
                     <ul className="list-disc list-inside mt-1 space-y-1">
-                      <li>All strategies have been thoroughly tested on Testnet</li>
-                      <li>Wallet addresses have sufficient balance</li>
-                      <li>You understand the risks involved</li>
+                      <li>所有策略已在测试网上充分验证</li>
+                      <li>钱包地址余额充足</li>
+                      <li>您了解其中涉及的风险</li>
                     </ul>
                   </>
                 ) : (
                   <>
-                    <p>All AI Traders will switch to Testnet (paper trading). No real funds will be used.</p>
+                    <p>所有AI交易员将切换至测试网（模拟交易），不会使用真实资金。</p>
                   </>
                 )}
               </div>
@@ -174,10 +174,10 @@ export default function TradingModeSwitch() {
               {switching ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Switching...
+                  切换中...
                 </>
               ) : (
-                `Yes, switch to ${targetMode.toUpperCase()}`
+                `确认切换至${targetMode === 'mainnet' ? '主网' : '测试网'}`
               )}
             </Button>
             <Button
@@ -185,7 +185,7 @@ export default function TradingModeSwitch() {
               onClick={() => setShowConfirm(false)}
               disabled={switching}
             >
-              Cancel
+              取消
             </Button>
           </div>
         </div>
@@ -194,10 +194,10 @@ export default function TradingModeSwitch() {
       {/* Info Box */}
       <div className="text-xs text-muted-foreground space-y-1">
         <p>
-          • <strong>Testnet:</strong> Safe testing environment with fake funds. Perfect for strategy development.
+          • <strong>测试网：</strong>使用模拟资金的安全测试环境，适合策略开发验证。
         </p>
         <p>
-          • <strong>Mainnet:</strong> Real trading with actual funds. Only switch when strategies are proven.
+          • <strong>主网：</strong>使用真实资金交易，仅在策略经过充分验证后切换。
         </p>
       </div>
     </div>

@@ -329,10 +329,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('comprehensive')}
-          title="Dashboard"
+          title="数据看板"
         >
           <BarChart3 className="w-5 h-5" />
-          <span className="text-xs mt-1">Dashboard</span>
+          <span className="text-xs mt-1">数据看板</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -341,10 +341,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('klines')}
-          title="K-Lines"
+          title="K线图表"
         >
           <KLinesIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">K-Lines</span>
+          <span className="text-xs mt-1">K线图表</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -353,10 +353,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('model-chat')}
-          title="Chat"
+          title="模型对话"
         >
           <MessageSquare className="w-5 h-5" />
-          <span className="text-xs mt-1">Chat</span>
+          <span className="text-xs mt-1">模型对话</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -365,10 +365,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('program-trader')}
-          title="Programs"
+          title="程序化交易"
         >
           <MobileProgramsIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">Programs</span>
+          <span className="text-xs mt-1">程序化交易</span>
         </button>
       </nav>
 

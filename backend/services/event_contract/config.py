@@ -68,12 +68,23 @@ class EventContractConfigMixin:
                 config.get("strict_coinglass_quality", True if config.get("enable_coinglass_features") else False)
             ),
             "coinglass_metrics": config.get("coinglass_metrics"),
+            "coinglass_interval": config.get("coinglass_interval"),
             "coinglass_no_future_leakage": bool(config.get("coinglass_no_future_leakage", True)),
-            "max_coinglass_lag_seconds": int(config.get("max_coinglass_lag_seconds") or PERIOD_SECONDS[period] * 2),
+            "max_coinglass_lag_seconds": int(
+                config.get("max_coinglass_lag_seconds")
+                or PERIOD_SECONDS.get(str(config.get("coinglass_interval") or period), PERIOD_SECONDS[period]) * 2
+            ),
             "max_coinglass_pages_per_metric": int(config.get("max_coinglass_pages_per_metric") or 80),
             "_coinglass_api_key": str(config.get("_coinglass_api_key") or "").strip(),
             "_coinglass_key_source": str(config.get("_coinglass_key_source") or "server"),
             "consensus_threshold": int(config.get("consensus_threshold") or 30),
+            "target_win_rate": float(config["target_win_rate"] if config.get("target_win_rate") is not None else 75),
+            "target_min_trades": int(config.get("target_min_trades") or 10),
+            "enable_edge_quality_gate": bool(config.get("enable_edge_quality_gate", True)),
+            "max_trade_range_risk": float(
+                config["max_trade_range_risk"] if config.get("max_trade_range_risk") is not None else 45
+            ),
+            "allow_pullback_trades": bool(config.get("allow_pullback_trades", False)),
             "enable_fake_breakout_filter": bool(config.get("enable_fake_breakout_filter", True)),
             "enable_trap_filter": bool(config.get("enable_trap_filter", True)),
             "enable_range_filter": bool(config.get("enable_range_filter", True)),
@@ -96,9 +107,15 @@ class EventContractConfigMixin:
         cfg["min_l2_coverage_pct"] = min(max(cfg["min_l2_coverage_pct"], 0), 100)
         cfg["max_l2_lag_seconds"] = min(max(cfg["max_l2_lag_seconds"], 0), PERIOD_SECONDS[period] * 3)
         cfg["min_coinglass_coverage_pct"] = min(max(cfg["min_coinglass_coverage_pct"], 0), 100)
-        cfg["max_coinglass_lag_seconds"] = min(max(cfg["max_coinglass_lag_seconds"], 0), PERIOD_SECONDS[period] * 10)
+        # CoinGlass max-lag scales off the CG sampling interval (which may be coarser than
+        # the K-line period - e.g. 30m CG on 1m bars needs >= 1800s lag for forward-fill).
+        cg_lag_unit = PERIOD_SECONDS.get(str(cfg.get("coinglass_interval") or period), PERIOD_SECONDS[period])
+        cfg["max_coinglass_lag_seconds"] = min(max(cfg["max_coinglass_lag_seconds"], 0), cg_lag_unit * 10)
         cfg["max_coinglass_pages_per_metric"] = min(max(cfg["max_coinglass_pages_per_metric"], 1), 500)
         cfg["consensus_threshold"] = min(max(cfg["consensus_threshold"], 28), 30)
+        cfg["target_win_rate"] = min(max(cfg["target_win_rate"], 0), 100)
+        cfg["target_min_trades"] = min(max(cfg["target_min_trades"], 1), 10000)
+        cfg["max_trade_range_risk"] = min(max(cfg["max_trade_range_risk"], 0), 100)
         cfg["stake_amount"] = max(cfg["stake_amount"], 1)
         cfg["initial_balance"] = max(cfg["initial_balance"], cfg["stake_amount"])
         cfg["return_trade_limit"] = min(max(cfg["return_trade_limit"], 1), 1000)

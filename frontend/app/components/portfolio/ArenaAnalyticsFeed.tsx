@@ -339,35 +339,35 @@ export default function ArenaAnalyticsFeed({
             </div>
             <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-wide">
               <div>
-                <span className="block text-[10px] text-muted-foreground">Total P&amp;L</span>
+                <span className="block text-[10px] text-muted-foreground">总盈亏</span>
                 <span className={`font-semibold ${pnlClass}`}>{formatSignedCurrency(account.total_pnl)}</span>
                 <span className={`block text-[10px] ${returnClass}`}>{formatPercent(account.total_return_pct)}</span>
               </div>
               <div>
-                <span className="block text-[10px] text-muted-foreground">Total Assets</span>
+                <span className="block text-[10px] text-muted-foreground">总资产</span>
                 <span className="font-semibold text-foreground">${formatCurrency(account.total_assets)}</span>
               </div>
               <div>
-                <span className="block text-[10px] text-muted-foreground">Fees Paid</span>
+                <span className="block text-[10px] text-muted-foreground">已付手续费</span>
                 <span className="font-semibold text-foreground">${formatCurrency(account.total_fees)}</span>
               </div>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
             <div>
-              <span className="block text-[10px] uppercase tracking-wide">Biggest Win</span>
+              <span className="block text-[10px] uppercase tracking-wide">最大盈利</span>
               <span className="font-semibold text-foreground">{formatSignedCurrency(account.biggest_gain)}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase tracking-wide">Biggest Loss</span>
+              <span className="block text-[10px] uppercase tracking-wide">最大亏损</span>
               <span className="font-semibold text-foreground">{formatSignedCurrency(account.biggest_loss)}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase tracking-wide">Sharpe</span>
+              <span className="block text-[10px] uppercase tracking-wide">夏普</span>
               <span className={`font-semibold ${sharpeClass}`}>{formatDecimal(account.sharpe_ratio, 3)}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase tracking-wide">Win Rate</span>
+              <span className="block text-[10px] uppercase tracking-wide">胜率</span>
               <span className={`font-semibold ${winRateClass}`}>{formatPercent(account.win_rate, 1)}</span>
             </div>
           </div>
@@ -378,10 +378,10 @@ export default function ArenaAnalyticsFeed({
 
   const renderSummary = () => {
     if (loading && !summary) {
-      return <div className="text-xs text-muted-foreground">Loading overall statistics…</div>
+      return <div className="text-xs text-muted-foreground">加载整体统计...</div>
     }
     if (!summary) {
-      return <div className="text-xs text-muted-foreground">No summary available.</div>
+      return <div className="text-xs text-muted-foreground">暂无汇总数据</div>
     }
 
     const ratioClass = getTrendColor(summary.total_return_pct)
@@ -391,11 +391,11 @@ export default function ArenaAnalyticsFeed({
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-border rounded-lg bg-muted/40 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Assets</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">总资产</div>
             <div className="text-lg font-semibold text-foreground">${formatCurrency(summary.total_assets)}</div>
           </div>
           <div className="border border-border rounded-lg bg-muted/40 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Aggregate P&amp;L</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">综合盈亏</div>
             <div className={`text-lg font-semibold ${getTrendColor(summary.total_pnl)}`}>
               {formatSignedCurrency(summary.total_pnl)}
             </div>
@@ -533,7 +533,7 @@ export default function ArenaAnalyticsFeed({
             }}
             className="h-8 rounded border border-border bg-muted px-2 text-xs uppercase tracking-wide text-foreground"
           >
-            <option value="">All Traders</option>
+            <option value="">全部交易员</option>
             {accountOptions.map((meta) => (
               <option key={meta.account_id} value={meta.account_id}>
                 {meta.name}{meta.model ? ` (${meta.model})` : ''}

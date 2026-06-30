@@ -114,6 +114,30 @@ export function BacktestConfigPanel({
             />
           </div>
           <div className="space-y-1">
+            <Label className="text-xs">{t('backtestTool.targetWinRate', 'Target Win Rate')}</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={form.target_win_rate}
+              disabled={!form.enable_edge_quality_gate}
+              onChange={event => updateForm('target_win_rate', Number(event.target.value))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t('backtestTool.maxRangeRisk', 'Max Range Risk')}</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={form.max_trade_range_risk}
+              disabled={!form.enable_edge_quality_gate}
+              onChange={event => updateForm('max_trade_range_risk', Number(event.target.value))}
+            />
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs">{t('backtestTool.l2Coverage', 'L2 Min Coverage')}</Label>
             <Input
               type="number"
@@ -193,6 +217,13 @@ export function BacktestConfigPanel({
         </div>
 
         <div className="grid gap-2">
+          <ToggleRow label={t('backtestTool.edgeQualityGate', '75% edge quality gate')} checked={form.enable_edge_quality_gate} onChange={value => updateForm('enable_edge_quality_gate', value)} />
+          <ToggleRow
+            label={t('backtestTool.allowPullbackTrades', 'Allow pullback trades')}
+            checked={form.allow_pullback_trades}
+            disabled={!form.enable_edge_quality_gate}
+            onChange={value => updateForm('allow_pullback_trades', value)}
+          />
           <ToggleRow label={t('backtestTool.fakeFilter', 'Fake breakout filter')} checked={form.enable_fake_breakout_filter} onChange={value => updateForm('enable_fake_breakout_filter', value)} />
           <ToggleRow label={t('backtestTool.trapFilter', 'Bull/Bear trap filter')} checked={form.enable_trap_filter} onChange={value => updateForm('enable_trap_filter', value)} />
           <ToggleRow label={t('backtestTool.rangeFilter', 'Range middle no-trade filter')} checked={form.enable_range_filter} onChange={value => updateForm('enable_range_filter', value)} />

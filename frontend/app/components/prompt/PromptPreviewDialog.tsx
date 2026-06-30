@@ -154,9 +154,9 @@ export default function PromptPreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Prompt Preview: {templateName}</DialogTitle>
+          <DialogTitle>提示词预览：{templateName}</DialogTitle>
           <DialogDescription>
-            Select AI traders and exchanges to preview the filled prompt with real-time data
+            选择AI交易员和交易所，用实时数据预览填充后的提示词
           </DialogDescription>
         </DialogHeader>
 
@@ -164,11 +164,11 @@ export default function PromptPreviewDialog({
           {/* Left Panel: Selection */}
           <div className="border rounded-lg p-4 flex flex-col gap-4 overflow-auto">
             <div>
-              <h3 className="text-sm font-semibold mb-2">Select AI Traders</h3>
+              <h3 className="text-sm font-semibold mb-2">选择AI交易员</h3>
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
+                <p className="text-sm text-muted-foreground">加载中...</p>
               ) : accounts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No AI traders found</p>
+                <p className="text-sm text-muted-foreground">未找到AI交易员</p>
               ) : (
                 <div className="space-y-2">
                   {accounts.map((account) => (
@@ -233,19 +233,19 @@ export default function PromptPreviewDialog({
 
             {templateKey === 'hyperliquid' && (
               <div className="border-t pt-4">
-                <h3 className="text-sm font-semibold mb-2">Configured Watchlists</h3>
+                <h3 className="text-sm font-semibold mb-2">已配置自选列表</h3>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Prompt preview uses the watchlist symbols for the selected exchange
+                  预览使用所选交易所的自选币种
                 </p>
                 {watchlistLoading ? (
-                  <p className="text-xs text-muted-foreground">Loading watchlist…</p>
+                  <p className="text-xs text-muted-foreground">加载自选列表中…</p>
                 ) : (
                   <div className="space-y-3">
                     {selectedExchanges.includes('hyperliquid') && (
                       <div>
                         <p className="text-xs font-medium mb-1">Hyperliquid:</p>
                         {hyperliquidWatchlist.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No symbols configured</p>
+                          <p className="text-xs text-muted-foreground">未配置币种</p>
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {hyperliquidWatchlist.map((symbol) => (
@@ -261,7 +261,7 @@ export default function PromptPreviewDialog({
                       <div>
                         <p className="text-xs font-medium mb-1">Binance:</p>
                         {binanceWatchlist.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No symbols configured</p>
+                          <p className="text-xs text-muted-foreground">未配置币种</p>
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {binanceWatchlist.map((symbol) => (
@@ -283,7 +283,7 @@ export default function PromptPreviewDialog({
               disabled={generating || selectedAccountId === null || selectedExchanges.length === 0}
               className="mt-4"
             >
-              {generating ? 'Generating...' : 'Generate Preview'}
+              {generating ? '生成中...' : '生成预览'}
             </Button>
           </div>
 
@@ -292,8 +292,8 @@ export default function PromptPreviewDialog({
             {previews.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 <div className="text-center">
-                  <p className="text-sm">No previews generated yet</p>
-                  <p className="text-xs mt-1">Select traders and click Generate Preview</p>
+                  <p className="text-sm">暂无预览</p>
+                  <p className="text-xs mt-1">选择交易员后点击"生成预览"</p>
                 </div>
               </div>
             ) : (
@@ -322,7 +322,7 @@ export default function PromptPreviewDialog({
                         <p className="text-xs text-muted-foreground">
                           {preview.exchange === 'binance' ? 'Binance' : 'Hyperliquid'}
                           {preview.symbols && preview.symbols.length > 0 && (
-                            <span> | Symbols: {preview.symbols.join(', ')}</span>
+                            <span> | 币种: {preview.symbols.join(', ')}</span>
                           )}
                         </p>
                       </div>
@@ -331,7 +331,7 @@ export default function PromptPreviewDialog({
                         size="sm"
                         onClick={() => handleCopyToClipboard(preview.filledPrompt)}
                       >
-                        Copy to Clipboard
+                        复制到剪贴板
                       </Button>
                     </div>
 

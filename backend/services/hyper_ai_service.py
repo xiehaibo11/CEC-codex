@@ -522,6 +522,27 @@ def build_messages_for_api(
     else:
         messages.append({"role": "user", "content": user_message})
 
+    # For new conversations (no history), inject the configured init image into
+    # the first user message so the AI has visual context from the very start.
+    if not history_orm:
+        init_image_path = os.getenv("HYPER_AI_INIT_IMAGE", "").strip()
+        if init_image_path and os.path.exists(init_image_path):
+            try:
+                import base64 as _b64
+                ext = os.path.splitext(init_image_path)[1].lower().lstrip(".")
+                mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "gif": "gif", "webp": "webp"}.get(ext, "png")
+                with open(init_image_path, "rb") as _f:
+                    img_b64 = _b64.b64encode(_f.read()).decode()
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i].get("role") == "user" and isinstance(messages[i].get("content"), str):
+                        messages[i]["content"] = [
+                            {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{img_b64}"}},
+                            {"type": "text", "text": messages[i]["content"]},
+                        ]
+                        break
+            except Exception as _img_err:
+                print(f"[hyper_ai] Failed to inject init image: {_img_err}")
+
     # Inject skill workflow as a separate system message right before user message.
     # Placed here (not in system prompt) so it's the last thing AI reads before
     # the user's request, giving it highest attention weight.

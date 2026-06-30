@@ -54,6 +54,18 @@ class EventContractAnalysisMixin:
             blocked_reasons.append("1m/3m/5m/15m directions conflict")
         if cfg["enable_cvd_filter"] and abs(features["cvd_proxy"]) < 0.08:
             blocked_reasons.append(f"{features['cvd_source']} CVD does not confirm direction")
+        edge_quality_blocked = False
+        if cfg.get("enable_edge_quality_gate"):
+            target_win_rate = cfg.get("target_win_rate", 75)
+            if not cfg.get("allow_pullback_trades", False) and features["market_state"] == "pullback":
+                blocked_reasons.append(f"{target_win_rate:.0f}% edge gate excludes pullback market state")
+                edge_quality_blocked = True
+            max_range_risk = cfg.get("max_trade_range_risk", 45)
+            if features["range_risk"] > max_range_risk:
+                blocked_reasons.append(
+                    f"{target_win_rate:.0f}% edge gate strict range risk {features['range_risk']:.2f} > {max_range_risk:.2f}"
+                )
+                edge_quality_blocked = True
 
         risk_penalty = (features["trap_risk"] + features["fake_breakout_risk"] + features["range_risk"]) / 3
         signal_strength = max(0, min(100, consensus_rate * 0.72 + avg_confidence * 0.28 - risk_penalty * 0.12))
@@ -76,8 +88,32 @@ class EventContractAnalysisMixin:
         if critical_holds:
             final_direction = "hold"
             signal_type = "hold_signal"
+        if edge_quality_blocked:
+            final_direction = "hold"
+            signal_type = "hold_signal"
         if not allow_trade and signal_type == "hold_signal":
             final_direction = "hold"
+
+        # Exhaustion reversal gate: momentum + overextension + trap detection + high signal quality.
+        # signal_strength >= 89 filters out noisy exhaustion signals (88.8-88.9 were empirical loss points).
+        exhaustion_reversal = False
+        if allow_trade and final_direction in ("long", "short"):
+            ex_long = features.get("exhaustion_long", False)
+            ex_short = features.get("exhaustion_short", False)
+            has_exhaustion = (final_direction == "long" and ex_long) or (final_direction == "short" and ex_short)
+            if has_exhaustion and signal_strength >= 89.0:
+                # High-quality exhaustion: flip direction (fade the momentum)
+                final_direction = "short" if final_direction == "long" else "long"
+                exhaustion_reversal = True
+            else:
+                # Either no exhaustion extreme, or signal quality below 89: skip
+                allow_trade = False
+                signal_type = "hold_signal"
+                final_direction = "hold"
+                if not has_exhaustion:
+                    blocked_reasons.append("No exhaustion extreme: 5m momentum signal blocked")
+                else:
+                    blocked_reasons.append(f"Exhaustion signal_strength {signal_strength:.1f} < 89: quality gate blocked")
 
         long_probability = self._probability_from_votes("long", long_votes, short_votes, hold_votes, features, avg_confidence)
         short_probability = self._probability_from_votes("short", long_votes, short_votes, hold_votes, features, avg_confidence)
@@ -162,11 +198,11 @@ class EventContractAnalysisMixin:
             "ai_model": (ai_meta or {}).get("model"),
             "ai_account_name": (ai_meta or {}).get("account_name"),
             "ai_consensus": ai_consensus,
+            "exhaustion_reversal": exhaustion_reversal,
         }
 
     def _compute_features(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         closes = [k["close"] for k in history]
-        opens = [k["open"] for k in history]
         highs = [k["high"] for k in history]
         lows = [k["low"] for k in history]
         volumes = [k["volume"] for k in history]
@@ -198,8 +234,12 @@ class EventContractAnalysisMixin:
         cvd_proxy_raw = self._signed_volume_delta(history[-30:])
         flow = last.get("coinglass") or {}
         cvd_value = flow.get("cvd_delta_norm")
-        cvd_proxy = cvd_value if cvd_value is not None else cvd_proxy_raw
-        cvd_source = "CoinGlass" if cvd_value is not None else "OHLCV proxy"
+        # Keep cvd_proxy at the OHLCV 1m-resolution measure so the 30 rule-based AI
+        # votes don't lose fidelity when CG is on (CG is 30m forward-filled, would
+        # otherwise pin the same value across 30 consecutive bars and degrade votes).
+        # The CG CVD signal still contributes via coinglass_reversal_score below.
+        cvd_proxy = cvd_proxy_raw
+        cvd_source = "OHLCV proxy"
         taker_delta = flow.get("taker_delta_norm")
         taker_buy_sell_ratio = flow.get("taker_buy_sell_ratio")
         oi_change_pct = flow.get("oi_change_pct")
@@ -260,6 +300,101 @@ class EventContractAnalysisMixin:
         range_risk = min(100, range_middle * 70 + (20 if range_width_pct < max(atr_pct * 2.2, 0.08) else 0) + (10 if body_ratio < 0.25 else 0))
         trap_risk = max(fake_breakout_risk * 0.8, bull_trap_risk, bear_trap_risk)
 
+        # CoinGlass-derived reversal evidence. Positive = supports LONG exhaustion (fade up).
+        # Negative = supports SHORT exhaustion (fade down). 0 when CoinGlass is disabled.
+        # Each component is a directional vote in [-30, +30]; we cap the sum at +/-60.
+        cg_components: List[float] = []
+        cg_available = bool(flow.get("available_metrics"))
+        if cg_available:
+            # 1. Funding extremes mean one side is paying the other heavily -> crowded -> fade.
+            #    +0.02%/8h (mainstream "high") = strong long crowding -> fade up (positive)
+            #    -0.005%/8h = strong short crowding -> fade down (negative)
+            if funding_rate is not None:
+                fr_bp = funding_rate * 10_000  # convert to basis points per 8h
+                if fr_bp > 1.5:    cg_components.append(min(30, fr_bp * 10))
+                elif fr_bp < -0.5: cg_components.append(max(-30, fr_bp * 30))
+
+            # 2. OI change + same-direction price = positions piling in -> reversal risk.
+            #    OI +1% with price up = late longs -> fade up.
+            if oi_change_pct is not None:
+                if oi_change_pct > 0.8 and trend_score > 0:
+                    cg_components.append(min(25, oi_change_pct * 15))
+                elif oi_change_pct > 0.8 and trend_score < 0:
+                    cg_components.append(-min(25, oi_change_pct * 15))
+
+            # 3. Liquidation cascade *opposite* to current move = capitulation -> fade
+            #    More longs liquidated (imbalance < 0) during downtrend = capitulation low -> short exhaustion (fade down)
+            #    More shorts liquidated (imbalance > 0) during uptrend = squeeze high -> long exhaustion (fade up)
+            if liquidation_imbalance is not None:
+                if liquidation_imbalance > 0.3 and trend_score > 0:
+                    cg_components.append(min(30, liquidation_imbalance * 60))
+                elif liquidation_imbalance < -0.3 and trend_score < 0:
+                    cg_components.append(max(-30, liquidation_imbalance * 60))
+
+            # 4. CVD vs price divergence. Price up + CVD weakening = buy power waning.
+            if cvd_value is not None:
+                # CVD < 0.15 means buy/sell roughly balanced; price up with weak CVD = divergence.
+                if trend_score > 0.05 and cvd_value < 0.10:
+                    cg_components.append(15)
+                elif trend_score < -0.05 and cvd_value > -0.10:
+                    cg_components.append(-15)
+
+            # 5. Taker ratio extremes (75% one side).
+            if taker_buy_sell_ratio is not None:
+                if taker_buy_sell_ratio > 2.5 and trend_score > 0:
+                    cg_components.append(15)
+                elif taker_buy_sell_ratio < 0.4 and trend_score < 0:
+                    cg_components.append(-15)
+
+        coinglass_reversal_score = max(-60.0, min(60.0, sum(cg_components))) if cg_components else 0.0
+        # Exhaustion detection: 30/30 consensus = everyone agrees → extreme → likely to reverse.
+        # trap_risk > 28: price getting "trapped" at extremes. signal_strength >= 89 gate applied later.
+        # range_pos extremes are implicit via max_trade_range_risk=45 edge quality gate.
+        # OHLCV-only exhaustion (works without CoinGlass; this is the 75% baseline).
+        ohlcv_exhaustion_long = (
+            trend_score > 0.10         # STRONG 3-5m momentum up (the spike, not noise)
+            and volume_ratio > 1.1     # volume confirming the push
+            and rsi > 63               # overbought
+            and ret15 < 0.25           # 15m context not strongly up (spike not sustained trend)
+            and trap_risk > 28         # momentum getting "trapped" at extreme
+        )
+        ohlcv_exhaustion_short = (
+            trend_score < -0.10        # STRONG 3-5m momentum down (the spike, not noise)
+            and volume_ratio > 1.1     # volume confirming the drop
+            and rsi < 37               # oversold
+            and ret15 > -0.25          # 15m context not strongly down (spike not sustained trend)
+            and trap_risk > 28         # momentum getting "trapped" at extreme
+        )
+
+        # CoinGlass is PURELY ADDITIVE - it can let extra signals through but never
+        # cancels OHLCV ones. This keeps the 75% OHLCV baseline intact.
+        #
+        # Boost: when CG reversal_score >= +/-25 confirms the same direction as the
+        # OHLCV exhaustion shape, we relax trap_risk (28 -> 18). This admits marginal
+        # OHLCV setups that CG independently corroborates with funding/liq/CVD evidence.
+        #
+        # No veto: the 30-day test showed cg_veto erased many winning shorts during a
+        # net-down market (lots of short-side liquidation makes cg_score skew long).
+        # Direction is decided by OHLCV; CG only widens the gate when it agrees.
+        cg_boost_long  = cg_available and coinglass_reversal_score >=  25
+        cg_boost_short = cg_available and coinglass_reversal_score <= -25
+
+        cg_boosted_long = (
+            cg_boost_long
+            and trend_score > 0.10 and volume_ratio > 1.1
+            and rsi > 63 and ret15 < 0.25
+            and trap_risk > 18
+        )
+        cg_boosted_short = (
+            cg_boost_short
+            and trend_score < -0.10 and volume_ratio > 1.1
+            and rsi < 37 and ret15 > -0.25
+            and trap_risk > 18
+        )
+
+        exhaustion_long  = ohlcv_exhaustion_long  or cg_boosted_long
+        exhaustion_short = ohlcv_exhaustion_short or cg_boosted_short
+
         if fake_breakout_risk > 60:
             market_state = "fake_breakout"
         elif bull_trap_risk > 60:
@@ -315,6 +450,11 @@ class EventContractAnalysisMixin:
             "bid_depth_10": l2.get("bid_depth_10"),
             "ask_depth_10": l2.get("ask_depth_10"),
             "trend_score": trend_score,
+            "exhaustion_long": exhaustion_long,
+            "exhaustion_short": exhaustion_short,
+            "coinglass_reversal_score": coinglass_reversal_score,
+            "ohlcv_exhaustion_long": ohlcv_exhaustion_long,
+            "ohlcv_exhaustion_short": ohlcv_exhaustion_short,
             "mtf_dirs": mtf_dirs,
             "mtf_conflict": mtf_conflict,
             "breakout_up": breakout_up,

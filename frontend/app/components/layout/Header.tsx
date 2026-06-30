@@ -1,4 +1,4 @@
-import { LogOut, UserCog } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,9 +9,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
-import { loadAuthConfig } from '@/lib/auth'
 
 interface Account {
   id: number
@@ -37,12 +36,6 @@ export default function Header({ title = 'CEC-codex', currentAccount, showAccoun
     window.location.href = '/login'
   }
 
-  const handleOpenAccount = async () => {
-    const config = await loadAuthConfig()
-    const authProvider = config?.authProvider || 'https://auth.bocail.com'
-    window.open(`${authProvider}/account`, '_blank', 'noopener,noreferrer')
-  }
-
   return (
     <header className="w-full border-b bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="w-full py-2 px-3 md:px-4 flex items-center justify-between">
@@ -61,9 +54,8 @@ export default function Header({ title = 'CEC-codex', currentAccount, showAccoun
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={user.avatar} alt={user.displayName || user.name} />
                         <AvatarFallback className="text-xs">
-                          {user.displayName?.[0] || user.name?.[0] || "U"}
+                          {user.username?.[0]?.toUpperCase() || "U"}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -72,18 +64,16 @@ export default function Header({ title = 'CEC-codex', currentAccount, showAccoun
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">
-                          {user.displayName || user.name}
+                          {user.username}
                         </p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
-                        </p>
+                        {user.email && (
+                          <p className="text-xs leading-none text-muted-foreground">
+                            {user.email}
+                          </p>
+                        )}
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleOpenAccount}>
-                      <UserCog className="mr-2 h-4 w-4" />
-                      <span>{t('header.myAccount', 'My Account')}</span>
-                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={logout}>
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>{t('header.signOut', 'Sign Out')}</span>

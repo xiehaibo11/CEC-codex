@@ -5,325 +5,59 @@ import {
   BarChart3,
   CheckCircle2,
   Database,
-  KeyRound,
   Lock,
   RefreshCw,
   Search,
   Table2,
-  Trash2,
 } from 'lucide-react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { apiRequest } from '@/lib/api'
+import { CatalogPanel } from './coinglass-view/CatalogPanel'
+import { ResultChart } from './coinglass-view/ResultChart'
+import { ResultTable } from './coinglass-view/ResultTable'
+import { SubscriptionKeyPanel } from './coinglass-view/SubscriptionKeyPanel'
+import { EXCHANGES, INTERVALS } from './coinglass-view/constants'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-
-type PlanName = 'Hobbyist' | 'Startup' | 'Standard' | 'Professional' | 'Enterprise'
-
-interface CoinGlassParam {
-  name: string
-  required: boolean
-  type: string
-  default?: string | number | null
-  description?: string
-}
-
-interface CoinGlassEndpoint {
-  id: string
-  title: string
-  category: string
-  path: string
-  method?: string
-  summary: string
-  params: CoinGlassParam[]
-  required_params: string[]
-  min_plan?: PlanName | null
-  availability?: Record<string, boolean | null>
-  interval_limit?: Record<string, string | null>
-  doc_path: string
-}
-
-interface CoinGlassDataset {
-  id: string
-  label: string
-  category: string
-  path: string
-  focus: string
-  default_params: Record<string, string>
-  endpoint?: CoinGlassEndpoint
-}
-
-interface CoinGlassCatalog {
-  total: number
-  categories: Array<{ name: string; count: number; startup_available: number; standard_plus: number }>
-  endpoints: CoinGlassEndpoint[]
-  datasets: CoinGlassDataset[]
-}
-
-interface CoinGlassSubscription {
-  configured: boolean
-  user_key_configured?: boolean
-  server_key_configured?: boolean
-  key_source?: 'user' | 'server' | 'none'
-  key_masked?: string | null
-  ok?: boolean
-  level?: string | null
-  expired?: boolean | null
-  expire_time?: number | null
-}
-
-type ParamOverrides = Partial<Record<
-  'symbol' | 'exchange' | 'exchange_list' | 'interval' | 'limit' | 'range' | 'min_liquidation_amount',
-  string | number | null | undefined
->>
-
-const PLAN_ORDER: PlanName[] = ['Hobbyist', 'Startup', 'Standard', 'Professional', 'Enterprise']
-const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']
-const EXCHANGES = ['Binance', 'OKX', 'Bybit', 'Bitget', 'Gate']
-const PLAN_LABELS: Record<string, string> = {
-  Hobbyist: '爱好者版',
-  Startup: '创业版',
-  Standard: '标准版',
-  Professional: '专业版',
-  Enterprise: '企业版',
-}
-const DATASET_LABELS: Record<string, string> = {
-  pairs_markets: '交易对市场行情',
-  price_history: '价格历史 K 线',
-  aggregated_cvd: '聚合 CVD',
-  pair_taker_volume: '交易对主动买卖量',
-  coin_taker_volume: '币种主动买卖量',
-  coin_netflow: '币种净流入',
-  open_interest: '聚合持仓量',
-  global_long_short: '全局账户多空比',
-  funding_rate: '资金费率历史 K 线',
-  pair_liquidation: '交易对爆仓历史',
-  coin_liquidation: '币种爆仓历史',
-  liquidation_orders: '爆仓订单',
-  orderbook_depth: '订单簿买卖盘历史',
-  fear_greed: '恐惧贪婪指数',
-}
-const CATEGORY_LABELS: Record<string, string> = {
-  WebSocket: '实时订阅',
-  '订单薄(L2)': '订单簿(L2)',
-}
-const CHART_COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-]
-
-const minutesByInterval: Record<string, number> = {
-  '1m': 1,
-  '3m': 3,
-  '5m': 5,
-  '15m': 15,
-  '30m': 30,
-  '1h': 60,
-  '4h': 240,
-  '6h': 360,
-  '8h': 480,
-  '12h': 720,
-  '1d': 1440,
-  '1w': 10080,
-}
-
-function planRank(plan?: string | null) {
-  if (!plan) return -1
-  const normalized = PLAN_ORDER.find((item) => item.toLowerCase() === plan.toLowerCase())
-  return normalized ? PLAN_ORDER.indexOf(normalized) : -1
-}
-
-function displayPlan(plan?: string | null) {
-  if (!plan) return '-'
-  const normalized = PLAN_ORDER.find((item) => item.toLowerCase() === plan.toLowerCase())
-  return normalized ? PLAN_LABELS[normalized] : plan
-}
-
-function keySourceLabel(source?: 'user' | 'server' | 'none') {
-  if (source === 'user') return '个人'
-  if (source === 'server') return '服务器'
-  return '无'
-}
-
-function categoryTitle(category?: string | null) {
-  if (!category) return '-'
-  return CATEGORY_LABELS[category] || category
-}
-
-function datasetTitle(dataset?: CoinGlassDataset | null) {
-  if (!dataset) return '-'
-  return DATASET_LABELS[dataset.id] || dataset.label || '-'
-}
-
-function endpointTitle(endpoint?: CoinGlassEndpoint | null) {
-  if (!endpoint) return '-'
-  const fileName = endpoint.doc_path?.split('/').pop()?.replace(/\.md$/, '')
-  return fileName || endpoint.title || endpoint.path
-}
-
-function statusTitle(loading: boolean, result: any) {
-  if (loading) return '加载中'
-  if (result?.ok) return '成功'
-  if (result) return '已返回'
-  return '-'
-}
-
-function displayError(message: string) {
-  const normalized = message.toLowerCase()
-  if (normalized.includes('api key') && normalized.includes('required')) return '请输入 CoinGlass API 密钥'
-  if (normalized.includes('api key') && normalized.includes('not configured')) return '未配置 CoinGlass API 密钥'
-  if (normalized.includes('failed to save')) return '保存 CoinGlass API 密钥失败'
-  if (normalized.includes('failed to remove')) return '删除 CoinGlass API 密钥失败'
-  if (normalized.includes('failed to load')) return '加载 CoinGlass 数据失败'
-  if (normalized.includes('does not allow')) return '当前 CoinGlass 权限等级不支持该接口或参数'
-  if (normalized.includes('forbidden') || normalized.includes('permission')) return '当前 CoinGlass 权限不足'
-  if (normalized.includes('unauthorized') || normalized.includes('invalid')) return 'CoinGlass API 密钥无效或未授权'
-  return message
-}
-
-function formatNumber(value: unknown) {
-  const number = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(number)) return String(value ?? '-')
-  const abs = Math.abs(number)
-  if (abs >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(2)}B`
-  if (abs >= 1_000_000) return `${(number / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `${(number / 1_000).toFixed(2)}K`
-  if (abs > 0 && abs < 0.01) return number.toPrecision(3)
-  return number.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
-}
-
-function formatTime(value: unknown) {
-  const raw = Number(value)
-  if (!Number.isFinite(raw)) return String(value ?? '-')
-  const timestamp = raw < 10_000_000_000 ? raw * 1000 : raw
-  return new Date(timestamp).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function toNumber(value: unknown) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-function rowFromUnknown(item: unknown): Record<string, unknown> {
-  if (Array.isArray(item)) {
-    return item.reduce<Record<string, unknown>>((acc, value, index) => {
-      acc[index === 0 ? 'time' : `value_${index}`] = value
-      return acc
-    }, {})
-  }
-  if (item && typeof item === 'object') return item as Record<string, unknown>
-  return { value: item }
-}
-
-function extractRows(data: unknown): Record<string, unknown>[] {
-  if (Array.isArray(data)) return data.map(rowFromUnknown)
-  if (data && typeof data === 'object') {
-    const record = data as Record<string, unknown>
-    const arrayKey = Object.keys(record).find((key) => Array.isArray(record[key]))
-    if (arrayKey) return (record[arrayKey] as unknown[]).map(rowFromUnknown)
-    return [record]
-  }
-  return []
-}
-
-function timeKeyFor(rows: Record<string, unknown>[]) {
-  const keys = Object.keys(rows[0] || {})
-  return keys.find((key) => ['time', 'timestamp', 'open_time', 'created_at', 'date'].includes(key)) || null
-}
-
-function numericKeysFor(rows: Record<string, unknown>[]) {
-  const sample = rows.slice(0, 40)
-  const keys = new Set<string>()
-  sample.forEach((row) => {
-    Object.entries(row).forEach(([key, value]) => {
-      if (key === 'time' || key.endsWith('_time') || key === 'timestamp') return
-      if (toNumber(value) !== null) keys.add(key)
-    })
-  })
-  return Array.from(keys)
-}
-
-function preferredKeys(keys: string[], focus?: string) {
-  const priority = [
-    'close',
-    'current_price',
-    'volume_usd',
-    'open_interest_usd',
-    'open_interest',
-    'long_volume_usd',
-    'short_volume_usd',
-    'agg_taker_buy_vol',
-    'agg_taker_sell_vol',
-    'cum_vol_delta',
-    'long_liquidation_usd',
-    'short_liquidation_usd',
-    'aggregated_long_liquidation_usd',
-    'aggregated_short_liquidation_usd',
-    'long_short_ratio',
-    'funding_rate',
-    'value',
-  ]
-  const focusBoost = focus === 'ratio' ? ['long_short_ratio', 'long_account', 'short_account'] : []
-  const ordered = [...focusBoost, ...priority]
-    .map((key) => keys.find((candidate) => candidate === key || candidate.includes(key)))
-    .filter(Boolean) as string[]
-  const remaining = keys.filter((key) => !ordered.includes(key))
-  return [...ordered, ...remaining].slice(0, 5)
-}
-
-function endpointNeedsPlan(endpoint?: CoinGlassEndpoint, currentPlan?: string | null) {
-  if (!endpoint?.min_plan || !currentPlan) return false
-  const current = planRank(currentPlan)
-  const required = planRank(endpoint.min_plan)
-  return current >= 0 && required >= 0 && current < required
-}
-
-function startupIntervalBlocked(endpoint: CoinGlassEndpoint | undefined, currentPlan: string | null | undefined, interval: string) {
-  if (!endpoint || currentPlan?.toLowerCase() !== 'startup') return false
-  const limit = endpoint.interval_limit?.Startup
-  if (!limit || limit.includes('No Limit')) return false
-  const required = limit.includes('>=30m') ? 30 : limit.includes('>=4h') ? 240 : 0
-  return required > 0 && (minutesByInterval[interval] || required) < required
-}
+  chartRowsFor,
+  columnsFor,
+  endpointNeedsPlan,
+  extractRows,
+  numericKeysFor,
+  preferredKeys,
+  startupIntervalBlocked,
+  timeKeyFor,
+} from './coinglass-view/data-shaping'
+import {
+  categoryTitle,
+  datasetTitle,
+  displayError,
+  displayPlan,
+  endpointTitle,
+  formatTime,
+  keySourceLabel,
+} from './coinglass-view/formatters'
+import type {
+  CoinGlassCatalog,
+  CoinGlassEndpoint,
+  CoinGlassSubscription,
+  ParamOverrides,
+} from './coinglass-view/types'
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
+  const endpoint = url.startsWith('/api/') ? url.slice(4) : url
+  const response = await apiRequest(endpoint, init)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     const detail = payload?.detail || response.statusText
     throw new Error(Array.isArray(detail) ? detail.join(', ') : detail)
+  }
+  if (payload && typeof payload === 'object' && 'ok' in payload && payload.ok === false) {
+    const detail = payload.reason || payload.msg || payload.payload?.msg || payload.payload?.message || 'CoinGlass request failed'
+    throw new Error(displayError(detail))
   }
   return payload as T
 }
@@ -360,23 +94,8 @@ export default function CoinGlassView() {
     () => preferredKeys(numericKeys, selectedDataset?.focus),
     [numericKeys, selectedDataset?.focus],
   )
-  const chartRows = useMemo(() => {
-    return rows.slice(-120).map((row, index) => {
-      const next: Record<string, unknown> = {
-        label: rowTimeKey ? formatTime(row[rowTimeKey]) : String(index + 1),
-      }
-      chartKeys.forEach((key) => {
-        next[key] = toNumber(row[key])
-      })
-      return next
-    })
-  }, [rows, rowTimeKey, chartKeys])
-
-  const columns = useMemo(() => {
-    const keys = Object.keys(rows[0] || {})
-    const priority = ['time', 'timestamp', 'exchange_name', 'symbol', 'instrument_id', ...chartKeys]
-    return Array.from(new Set([...priority.filter((key) => keys.includes(key)), ...keys])).slice(0, 12)
-  }, [rows, chartKeys])
+  const chartRows = useMemo(() => chartRowsFor(rows, rowTimeKey, chartKeys), [rows, rowTimeKey, chartKeys])
+  const columns = useMemo(() => columnsFor(rows, chartKeys), [rows, chartKeys])
 
   const filteredEndpoints = useMemo(() => {
     const search = catalogSearch.trim().toLowerCase()
@@ -450,7 +169,12 @@ export default function CoinGlassView() {
     try {
       setSubscription(await fetchJson<CoinGlassSubscription>('/api/coinglass/subscription'))
     } catch (err) {
-      setSubscription({ configured: false })
+      setSubscription({
+        configured: false,
+        ok: false,
+        status: 'invalid_key',
+        reason: err instanceof Error ? err.message : 'CoinGlass API key is not available',
+      })
     }
   }
 
@@ -570,6 +294,8 @@ export default function CoinGlassView() {
               <Badge variant={subscription?.expired ? 'destructive' : 'secondary'}>
                 {subscription.level ? displayPlan(subscription.level) : '已配置'}
               </Badge>
+            ) : subscription?.reason ? (
+              <Badge variant="destructive">密钥无效</Badge>
             ) : (
               <Badge variant="outline">未配置</Badge>
             )}
@@ -611,49 +337,14 @@ export default function CoinGlassView() {
         </div>
       </div>
 
-      <Card className="flex-shrink-0">
-        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-primary" />
-              <div className="text-sm font-medium">CoinGlass API 密钥</div>
-              {subscription?.user_key_configured ? (
-                <Badge variant="secondary">个人密钥</Badge>
-              ) : subscription?.server_key_configured ? (
-                <Badge variant="outline">服务器密钥</Badge>
-              ) : (
-                <Badge variant="destructive">未配置</Badge>
-              )}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {subscription?.configured
-                ? `正在使用${subscription.key_source === 'user' ? '个人密钥' : '服务器密钥'}${subscription.key_masked ? ` ${subscription.key_masked}` : ''}。当前等级：${subscription.level ? displayPlan(subscription.level) : '已配置'}`
-                : '添加个人 CoinGlass 密钥后，将优先使用你的密钥查询付费接口。'}
-            </div>
-          </div>
-          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(240px,420px)_auto_auto] lg:w-auto">
-            <Input
-              type="password"
-              value={apiKeyInput}
-              onChange={(event) => setApiKeyInput(event.target.value)}
-              placeholder={subscription?.user_key_configured ? '输入新的密钥以替换当前个人密钥' : '粘贴你的 CoinGlass API 密钥'}
-              autoComplete="off"
-            />
-            <Button onClick={saveApiKey} disabled={savingKey || !apiKeyInput.trim()}>
-              <KeyRound className="h-4 w-4" />
-              {savingKey ? '保存中' : '保存密钥'}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={deleteApiKey}
-              disabled={savingKey || !subscription?.user_key_configured}
-            >
-              <Trash2 className="h-4 w-4" />
-              删除
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <SubscriptionKeyPanel
+        subscription={subscription}
+        apiKeyInput={apiKeyInput}
+        savingKey={savingKey}
+        onApiKeyInputChange={setApiKeyInput}
+        onSave={saveApiKey}
+        onDelete={deleteApiKey}
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
         <Card className="min-h-[260px] overflow-hidden xl:sticky xl:top-0 xl:max-h-[calc(100vh-13rem)]">
@@ -759,6 +450,7 @@ export default function CoinGlassView() {
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                   <div className="space-y-1">
                     {!subscription?.configured ? <div>未配置 CoinGlass 密钥。可以在上方添加个人密钥。</div> : null}
+                    {subscription?.reason ? <div>{displayError(subscription.reason)}</div> : null}
                     {minPlanBlocked ? <div>当前密钥等级 {displayPlan(subscriptionLevel)} 低于该接口要求的 {displayPlan(requiredPlan)}。</div> : null}
                     {intervalBlocked ? <div>当前密钥等级 {displayPlan(subscriptionLevel)} 查询该接口时要求周期不小于 30m。</div> : null}
                     {error ? <div>{displayError(error)}</div> : null}
@@ -769,207 +461,32 @@ export default function CoinGlassView() {
           </Card>
 
           {viewMode === 'catalog' ? (
-            <Card className="min-h-[420px] overflow-hidden">
-              <CardHeader className="flex-row items-center justify-between p-4 pb-3">
-                <CardTitle className="text-sm">接口目录</CardTitle>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部分类</SelectItem>
-                    {(catalog?.categories || []).map((category) => (
-                      <SelectItem key={category.name} value={category.name}>{categoryTitle(category.name)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardHeader>
-              <CardContent className="max-h-[calc(100vh-18rem)] min-h-[360px] overflow-auto p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-36">分类</TableHead>
-                      <TableHead>接口</TableHead>
-                      <TableHead className="w-20">方式</TableHead>
-                      <TableHead className="w-28">等级</TableHead>
-                      <TableHead className="w-52">必填参数</TableHead>
-                      <TableHead className="w-24 text-right">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEndpoints.map((endpoint) => {
-                      const runnable = (endpoint.method || 'GET') === 'GET' && endpoint.path.startsWith('/api/')
-                      return (
-                        <TableRow key={endpoint.id}>
-                          <TableCell className="text-muted-foreground">{categoryTitle(endpoint.category)}</TableCell>
-                          <TableCell>
-                            <div className="font-medium">{endpointTitle(endpoint)}</div>
-                            <div className="mt-1 font-mono text-[11px] text-muted-foreground">{endpoint.path}</div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{endpoint.method || 'GET'}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={endpointNeedsPlan(endpoint, subscriptionLevel) ? 'destructive' : 'secondary'}>
-                              {endpoint.min_plan ? displayPlan(endpoint.min_plan) : '不限'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {endpoint.required_params.length ? endpoint.required_params.join(', ') : '-'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="outline" size="sm" onClick={() => loadEndpoint(endpoint)} disabled={loading || !runnable}>
-                              加载
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <CatalogPanel
+              catalog={catalog}
+              endpoints={filteredEndpoints}
+              categoryFilter={categoryFilter}
+              subscriptionLevel={subscriptionLevel}
+              loading={loading}
+              onCategoryFilterChange={setCategoryFilter}
+              onLoadEndpoint={loadEndpoint}
+            />
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="flex min-h-0 flex-col gap-4">
-                <div className="grid flex-shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="text-[11px] font-medium text-muted-foreground">数据行数</div>
-                      <div className="mt-1 text-xl font-semibold">{rows.length}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="text-[11px] font-medium text-muted-foreground">数值字段</div>
-                      <div className="mt-1 text-xl font-semibold">{numericKeys.length}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="text-[11px] font-medium text-muted-foreground">数据集</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{displayedDatasetTitle}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="text-[11px] font-medium text-muted-foreground">状态</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{statusTitle(loading, result)}</div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card className="h-[clamp(260px,34vh,380px)] overflow-hidden">
-                  <CardHeader className="p-4 pb-2">
-                    <CardTitle className="text-sm">时间序列</CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-[calc(100%-3.25rem)] p-4 pt-0">
-                    {chartRows.length && chartKeys.length ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartRows}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={28} />
-                          <YAxis tick={{ fontSize: 11 }} tickFormatter={formatNumber} width={70} />
-                          <RechartsTooltip formatter={(value) => formatNumber(value)} labelStyle={{ color: 'hsl(var(--foreground))' }} />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
-                          {chartKeys.map((key, index) => (
-                            <Line
-                              key={key}
-                              type="monotone"
-                              dataKey={key}
-                              stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                              dot={false}
-                              strokeWidth={2}
-                              connectNulls
-                            />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                        {loading ? '正在加载 CoinGlass 数据...' : '暂无可绘制的数据'}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="h-[clamp(220px,28vh,320px)] overflow-hidden">
-                  <CardHeader className="p-4 pb-2">
-                    <CardTitle className="text-sm">数据分布</CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-[calc(100%-3.25rem)] p-4 pt-0">
-                    {chartRows.length && chartKeys.length ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartRows.slice(-50)}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={32} />
-                          <YAxis tick={{ fontSize: 11 }} tickFormatter={formatNumber} width={70} />
-                          <RechartsTooltip formatter={(value) => formatNumber(value)} labelStyle={{ color: 'hsl(var(--foreground))' }} />
-                          {chartKeys.slice(0, 3).map((key, index) => (
-                            <Bar key={key} dataKey={key} fill={CHART_COLORS[index % CHART_COLORS.length]} radius={[3, 3, 0, 0]} />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">暂无分布数据</div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="flex min-h-0 flex-col gap-4">
-                <Card className="max-h-[280px] min-h-[180px] overflow-hidden">
-                  <CardHeader className="p-4 pb-2">
-                    <CardTitle className="text-sm">最新数值</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 overflow-auto p-4 pt-0">
-                    {chartKeys.length ? chartKeys.map((key, index) => {
-                      const latest = rows[rows.length - 1]?.[key]
-                      return (
-                        <div key={key} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
-                            <span className="truncate text-xs text-muted-foreground">{key}</span>
-                          </div>
-                          <span className="font-mono text-xs font-semibold">{formatNumber(latest)}</span>
-                        </div>
-                      )
-                    }) : (
-                      <div className="text-sm text-muted-foreground">暂无数值字段</div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="min-h-[360px] flex-1 overflow-hidden">
-                  <CardHeader className="p-4 pb-2">
-                    <CardTitle className="text-sm">表格预览</CardTitle>
-                  </CardHeader>
-                  <CardContent className="max-h-[calc(100vh-33rem)] min-h-[300px] overflow-auto p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {columns.map((column) => <TableHead key={column}>{column}</TableHead>)}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.slice(-80).map((row, rowIndex) => (
-                          <TableRow key={rowIndex}>
-                            {columns.map((column) => {
-                              const value = row[column]
-                              return (
-                                <TableCell key={column} className="max-w-44 truncate font-mono">
-                                  {column === rowTimeKey ? formatTime(value) : typeof value === 'object' ? JSON.stringify(value) : formatNumber(value)}
-                                </TableCell>
-                              )
-                            })}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {!rows.length ? <div className="p-4 text-sm text-muted-foreground">暂无加载的数据行</div> : null}
-                  </CardContent>
-                </Card>
-              </div>
+              <ResultChart
+                rows={rows}
+                numericKeys={numericKeys}
+                chartRows={chartRows}
+                chartKeys={chartKeys}
+                displayedDatasetTitle={displayedDatasetTitle}
+                loading={loading}
+                result={result}
+              />
+              <ResultTable
+                rows={rows}
+                chartKeys={chartKeys}
+                columns={columns}
+                rowTimeKey={rowTimeKey}
+              />
             </div>
           )}
         </div>

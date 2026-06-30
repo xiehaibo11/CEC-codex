@@ -26,8 +26,10 @@ from database.models import (
     PromptTemplate,
     TradingProgram,
     BinanceWallet,
+    User,
 )
 from database.snapshot_models import HyperliquidTrade
+from api.auth_dependencies import get_current_user
 from services.asset_calculator import calc_positions_value
 from services.price_cache import get_cached_price, cache_price
 from services.market_data import get_last_price
@@ -70,7 +72,12 @@ def _get_latest_price(symbol: str, market: str = "CRYPTO") -> Optional[float]:
         return None
 
 
-def _get_hyperliquid_positions(db: Session, account_id: Optional[int], environment: str) -> dict:
+def _get_hyperliquid_positions(
+    db: Session,
+    account_id: Optional[int],
+    environment: str,
+    current_user_id: Optional[int] = None,
+) -> dict:
     """
     Get real-time positions from Hyperliquid API (testnet or mainnet)
 
@@ -94,6 +101,8 @@ def _get_hyperliquid_positions(db: Session, account_id: Optional[int], environme
 
     if account_id:
         accounts_query = accounts_query.filter(Account.id == account_id)
+    if current_user_id is not None:
+        accounts_query = accounts_query.filter(Account.user_id == current_user_id)
 
     accounts = accounts_query.all()
     snapshots = []
@@ -245,7 +254,12 @@ def _get_hyperliquid_positions(db: Session, account_id: Optional[int], environme
     }
 
 
-def _get_binance_positions(db: Session, account_id: Optional[int], environment: str) -> list:
+def _get_binance_positions(
+    db: Session,
+    account_id: Optional[int],
+    environment: str,
+    current_user_id: Optional[int] = None,
+) -> list:
     """
     Get real-time positions from Binance Futures API.
 
@@ -263,6 +277,8 @@ def _get_binance_positions(db: Session, account_id: Optional[int], environment: 
     )
     if account_id:
         accounts_query = accounts_query.filter(Account.id == account_id)
+    if current_user_id is not None:
+        accounts_query = accounts_query.filter(Account.user_id == current_user_id)
 
     accounts = accounts_query.all()
     snapshots = []
@@ -1180,6 +1196,7 @@ def get_positions_snapshot(
     account_id: Optional[int] = None,
     trading_mode: Optional[str] = Query(None, regex="^(paper|testnet|mainnet)$"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Return consolidated positions and cash for active AI accounts, filtered by trading mode."""
     start_threads = get_current_thread_count()
@@ -1198,9 +1215,9 @@ def get_positions_snapshot(
 
     # For Hyperliquid modes (testnet/mainnet), fetch real-time data from exchanges
     if trading_mode and trading_mode in ["testnet", "mainnet"]:
-        result = _get_hyperliquid_positions(db, account_id, trading_mode)
+        result = _get_hyperliquid_positions(db, account_id, trading_mode, current_user.id)
         # Also include Binance accounts
-        binance_accounts = _get_binance_positions(db, account_id, trading_mode)
+        binance_accounts = _get_binance_positions(db, account_id, trading_mode, current_user.id)
         result["accounts"] = result.get("accounts", []) + binance_accounts
         _log_request()
         return result
@@ -1211,6 +1228,7 @@ def get_positions_snapshot(
         Account.is_active == "true",
         Account.show_on_dashboard == True,
         Account.is_deleted != True,
+        Account.user_id == current_user.id,
     )
 
     if account_id:

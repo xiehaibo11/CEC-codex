@@ -307,6 +307,8 @@ backend/data.db
 us_crypto_news.json
 data.db
 backend/tests/
+!backend/tests/
+!backend/tests/test_event_contract_backtest.py
 .vscode/
 backend/.DS_Store
 
@@ -331,6 +333,8 @@ REAL_TRADING_PLAN.md
 # Memory Bank and Prompts (local only)
 memory-bank/
 prompts/
+!backend/api/prompts/
+!backend/api/prompts/**
 
 # Backup files
 *.backup.*

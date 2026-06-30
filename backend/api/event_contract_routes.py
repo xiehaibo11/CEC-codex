@@ -12,6 +12,12 @@ from api.auth_dependencies import get_current_user
 from database.connection import SessionLocal
 from database.models import CoinGlassUserKey
 from services.event_contract_service import event_contract_service
+from services.event_contract.tasks import (
+    create_event_backtest_task,
+    get_event_backtest_task,
+    request_event_backtest_pause,
+    start_event_backtest_task_thread,
+)
 from utils.encryption import decrypt_private_key
 
 
@@ -36,6 +42,11 @@ class PredictRequest(BaseModel):
     ai_trader_id: Optional[int] = None
     max_ai_evaluations: int = Field(default=1, ge=1, le=200)
     consensus_threshold: int = Field(default=30, ge=28, le=30)
+    target_win_rate: float = Field(default=75, ge=0, le=100)
+    target_min_trades: int = Field(default=10, ge=1, le=10000)
+    enable_edge_quality_gate: bool = True
+    max_trade_range_risk: float = Field(default=45, ge=0, le=100)
+    allow_pullback_trades: bool = False
     enable_fake_breakout_filter: bool = True
     enable_trap_filter: bool = True
     enable_range_filter: bool = True
@@ -46,6 +57,7 @@ class PredictRequest(BaseModel):
     min_coinglass_coverage_pct: Optional[float] = Field(default=96, ge=0, le=100)
     strict_coinglass_quality: bool = True
     coinglass_metrics: Optional[List[str]] = None
+    coinglass_interval: Optional[str] = Field(default=None, description="CoinGlass sampling interval (e.g. '30m', '1h'). Default = K-line period. Standard plan needs >= 30m.")
     coinglass_no_future_leakage: bool = True
     max_entry_lag_seconds: Optional[int] = Field(default=None, ge=0, le=10800)
     max_expiry_lag_seconds: Optional[int] = Field(default=None, ge=0, le=10800)
@@ -108,6 +120,48 @@ def backtest_event_contract(request: Request, payload_model: BacktestRequest, db
         raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
 
 
+@router.post("/backtest/tasks")
+def create_backtest_task(request: Request, payload_model: BacktestRequest, db: Session = Depends(get_db)):
+    try:
+        payload: Dict[str, Any] = payload_model.model_dump()
+        task = create_event_backtest_task(
+            db,
+            config=payload,
+            user_id=_current_user_id(request, db),
+        )
+        start_event_backtest_task_thread(task["task_id"])
+        return task
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Backtest task failed to start: {exc}")
+
+
+@router.get("/backtest/tasks/{task_id}")
+def get_backtest_task(task_id: int, db: Session = Depends(get_db)):
+    try:
+        task = get_event_backtest_task(db, task_id)
+        if task.get("run_id"):
+            task["result"] = event_contract_service.get_backtest_response(db, task["run_id"])
+        return task
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/backtest/tasks/{task_id}/pause")
+def pause_backtest_task(task_id: int, db: Session = Depends(get_db)):
+    try:
+        return request_event_backtest_pause(db, task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 def _attach_user_coinglass_key(payload: Dict[str, Any], request: Request, db: Session) -> Dict[str, Any]:
     if not payload.get("enable_coinglass_features"):
         return payload
@@ -121,6 +175,14 @@ def _attach_user_coinglass_key(payload: Dict[str, Any], request: Request, db: Se
     payload["_coinglass_api_key"] = decrypt_private_key(record.api_key_encrypted)
     payload["_coinglass_key_source"] = "user"
     return payload
+
+
+def _current_user_id(request: Request, db: Session) -> Optional[int]:
+    try:
+        current_user = get_current_user(request, db)
+    except HTTPException:
+        return None
+    return getattr(current_user, "id", None)
 
 
 @router.get("/backtest/{run_id}")
@@ -142,5 +204,26 @@ def get_backtest_trades(
 ):
     try:
         return event_contract_service.get_trade_logs(db, run_id, limit=limit, offset=offset)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/reviewers/stats")
+def get_reviewer_team_stats(db: Session = Depends(get_db)):
+    """Bayesian learning snapshot for the 30-reviewer panel.
+
+    Returns each reviewer's posterior accuracy, evolution score, current
+    vote weight, and the risk_flags it has emitted most. Used by the
+    Dashboard team-stats panel to show which reviewers have earned trust.
+    """
+    try:
+        from services.event_contract.reviewer_learning import get_reviewer_evolution_snapshot
+        from services.event_contract.reviewer_expertise import REVIEWER_EXPERTISE
+        snapshot = get_reviewer_evolution_snapshot(db)
+        return {
+            "reviewers": snapshot,
+            "expertise": {name: payload for name, payload in REVIEWER_EXPERTISE.items()},
+            "lookback_trades": 1500,
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

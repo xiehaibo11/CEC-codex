@@ -1,55 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Trash2, Plus, Pencil, Download, Upload, Loader2 } from 'lucide-react'
-import {
-  getAccounts as getAccounts,
-  createAccount as createAccount,
-  updateAccount as updateAccount,
-  testLLMConnection,
-  exportTraderData,
-  type TradingAccount,
-  type TradingAccountCreate,
-  type TradingAccountUpdate,
-  type UnauthorizedAccount,
-  type TraderExportData
-} from '@/lib/api'
-import {
-  connectBrowserWallet,
-  checkBuilderFeeAuthorized,
-  approveBuilderFee,
-} from '@/lib/hyperliquidWalletSetup'
-import ExchangeWalletsPanel from '@/components/trader/ExchangeWalletsPanel'
+import { Plus } from 'lucide-react'
+import { getAccounts, createAccount, updateAccount, testLLMConnection, exportTraderData, type UnauthorizedAccount } from '@/lib/api'
+import { connectBrowserWallet, checkBuilderFeeAuthorized, approveBuilderFee } from '@/lib/hyperliquidWalletSetup'
 import { AuthorizationModal } from '@/components/hyperliquid'
 import TraderDataImportDialog from '@/components/trader/TraderDataImportDialog'
 import { useTranslation } from 'react-i18next'
-import { Switch } from '@/components/ui/switch'
+import { TraderAccountCard } from './settings-dialog/TraderAccountCard'
+import { TraderAccountForm } from './settings-dialog/TraderAccountForm'
+import type { AIAccount, AIAccountCreate } from './settings-dialog/types'
 
 interface SettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAccountUpdated?: () => void  // Add callback for when account is updated
   embedded?: boolean  // Add embedded mode support
-}
-
-interface AIAccount extends TradingAccount {
-  model?: string
-  base_url?: string
-  api_key?: string
-}
-
-interface AIAccountCreate extends TradingAccountCreate {
-  model?: string
-  base_url?: string
-  api_key?: string
 }
 
 function formatDependencies(deps: string[], t: (key: string) => string): string {
@@ -83,7 +50,6 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
   const [unauthorizedAccounts, setUnauthorizedAccounts] = useState<UnauthorizedAccount[]>([])
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [importTargetAccount, setImportTargetAccount] = useState<AIAccount | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [newAccount, setNewAccount] = useState<AIAccountCreate>({
     name: '',
     model: '',
@@ -130,7 +96,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       setTestResult(null)
 
       if (!newAccount.name || !newAccount.name.trim()) {
-        setError('Trader name is required')
+        setError('交易员名称不能为空')
         setLoading(false)
         setTesting(false)
         return
@@ -138,7 +104,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
 
       // If AI fields are provided, test LLM connection first
       if (newAccount.model || newAccount.base_url || newAccount.api_key) {
-        setTestResult('Testing LLM connection...')
+        setTestResult('正在测试LLM连接...')
         try {
           const testResponse = await testLLMConnection({
             model: newAccount.model,
@@ -146,18 +112,18 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
             api_key: newAccount.api_key,
           })
           if (!testResponse.success) {
-            const message = testResponse.message || 'LLM connection test failed'
-            setError(`LLM Test Failed: ${message}`)
-            setTestResult(`❌ Test failed: ${message}`)
+            const message = testResponse.message || 'LLM连接测试失败'
+            setError(`LLM测试失败：${message}`)
+            setTestResult(`❌ 测试失败：${message}`)
             setLoading(false)
             setTesting(false)
             return
           }
-          setTestResult('✅ LLM connection test passed! Creating AI trader...')
+          setTestResult('✅ LLM连接测试通过！正在创建AI交易员...')
         } catch (testError) {
-          const message = testError instanceof Error ? testError.message : 'LLM connection test failed'
-          setError(`LLM Test Failed: ${message}`)
-          setTestResult(`❌ Test failed: ${message}`)
+          const message = testError instanceof Error ? testError.message : 'LLM连接测试失败'
+          setError(`LLM测试失败：${message}`)
+          setTestResult(`❌ 测试失败：${message}`)
           setLoading(false)
           setTesting(false)
           return
@@ -170,15 +136,15 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       setShowAddForm(false)
       await loadAccounts()
 
-      toast.success('AI trader created successfully!')
+      toast.success('AI交易员创建成功！')
 
       // Notify parent component that account was created
       onAccountUpdated?.()
     } catch (error) {
       console.error('Failed to create account:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create AI trader'
+      const errorMessage = error instanceof Error ? error.message : '创建AI交易员失败'
       setError(errorMessage)
-      toast.error(`Failed to create AI trader: ${errorMessage}`)
+      toast.error(`创建AI交易员失败：${errorMessage}`)
     } finally {
       setLoading(false)
       setTesting(false)
@@ -195,7 +161,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       setTestResult(null)
       
       if (!editAccount.name || !editAccount.name.trim()) {
-        setError('Trader name is required')
+        setError('交易员名称不能为空')
         setLoading(false)
         setTesting(false)
         return
@@ -203,7 +169,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       
       // Test LLM connection first if AI model data is provided
       if (editAccount.model || editAccount.base_url || editAccount.api_key) {
-        setTestResult('Testing LLM connection...')
+        setTestResult('正在测试LLM连接...')
         
         try {
           const testResponse = await testLLMConnection({
@@ -213,18 +179,18 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
           })
           
           if (!testResponse.success) {
-            setError(`LLM Test Failed: ${testResponse.message}`)
-            setTestResult(`❌ Test failed: ${testResponse.message}`)
+            setError(`LLM测试失败：${testResponse.message}`)
+            setTestResult(`❌ 测试失败：${testResponse.message}`)
             setLoading(false)
             setTesting(false)
             return
           }
-          
-          setTestResult('✅ LLM connection test passed!')
+
+          setTestResult('✅ LLM连接测试通过！')
         } catch (testError) {
-          const errorMessage = testError instanceof Error ? testError.message : 'LLM connection test failed'
-          setError(`LLM Test Failed: ${errorMessage}`)
-          setTestResult(`❌ Test failed: ${errorMessage}`)
+          const errorMessage = testError instanceof Error ? testError.message : 'LLM连接测试失败'
+          setError(`LLM测试失败：${errorMessage}`)
+          setTestResult(`❌ 测试失败：${errorMessage}`)
           setLoading(false)
           setTesting(false)
           return
@@ -232,7 +198,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       }
       
       setTesting(false)
-      setTestResult('Test passed! Saving AI trader...')
+      setTestResult('测试通过！正在保存AI交易员...')
 
       console.log('Updating account with data:', editAccount)
       await updateAccount(editingId, editAccount)
@@ -241,16 +207,16 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       setTestResult(null)
       await loadAccounts()
       
-      toast.success('AI trader updated successfully!')
+      toast.success('AI交易员更新成功！')
       
       // Notify parent component that account was updated
       onAccountUpdated?.()
     } catch (error) {
       console.error('Failed to update account:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update AI trader'
+      const errorMessage = error instanceof Error ? error.message : '更新AI交易员失败'
       setError(errorMessage)
       setTestResult(null)
-      toast.error(`Failed to update AI trader: ${errorMessage}`)
+      toast.error(`更新AI交易员失败：${errorMessage}`)
     } finally {
       setLoading(false)
       setTesting(false)
@@ -311,11 +277,11 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       setAccounts((prev) =>
         prev.map((acc) => (acc.id === account.id ? { ...acc, auto_trading_enabled: nextValue } : acc))
       )
-      toast.success(nextValue ? `Auto trading enabled for ${account.name}` : `Auto trading paused for ${account.name}`)
+      toast.success(nextValue ? `已为 ${account.name} 启动自动交易` : `已为 ${account.name} 暂停自动交易`)
       onAccountUpdated?.()
     } catch (error) {
       console.error('Failed to toggle auto trading:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update trading status'
+      const errorMessage = error instanceof Error ? error.message : '更新交易状态失败'
       toast.error(errorMessage)
     } finally {
       setToggleLoadingId(null)
@@ -401,9 +367,9 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
     <>
       {!embedded && (
         <DialogHeader>
-          <DialogTitle>AI Trader Management</DialogTitle>
+          <DialogTitle>AI交易员管理</DialogTitle>
           <DialogDescription>
-            Manage your AI traders and their configurations
+            管理AI交易员及其配置
           </DialogDescription>
         </DialogHeader>
       )}
@@ -423,195 +389,47 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
                 className="flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
-                Add AI Trader
+                添加AI交易员
               </Button>
             </div>
 
             {loading && accounts.length === 0 ? (
-              <div>Loading AI traders...</div>
+              <div>加载AI交易员中...</div>
             ) : (
               <div className="space-y-3 overflow-y-auto">
                 {/* Add New Account Form */}
                 {showAddForm && (
-                  <div className="space-y-4 border rounded-lg p-4 bg-muted/50">
-                    <h3 className="text-lg font-medium">Add New AI Trader</h3>
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input
-                          placeholder="Trader name"
-                          value={newAccount.name || ''}
-                          onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
-                        />
-                        <Input
-                          placeholder="Model (e.g., gpt-4)"
-                          value={newAccount.model || ''}
-                          onChange={(e) => setNewAccount({ ...newAccount, model: e.target.value })}
-                        />
-                      </div>
-                      <Input
-                        placeholder="Base URL (e.g., https://api.openai.com/v1)"
-                        value={newAccount.base_url || ''}
-                        onChange={(e) => setNewAccount({ ...newAccount, base_url: e.target.value })}
-                      />
-                      <Input
-                        placeholder="API Key"
-                        type="password"
-                        value={newAccount.api_key || ''}
-                        onChange={(e) => setNewAccount({ ...newAccount, api_key: e.target.value })}
-                      />
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Switch
-                          checked={newAccount.auto_trading_enabled ?? true}
-                          onCheckedChange={(checked) => setNewAccount({ ...newAccount, auto_trading_enabled: checked })}
-                        />
-                        <span>Start Trading</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button onClick={handleCreateAccount} disabled={loading}>
-                          Test and Create
-                        </Button>
-                        <Button variant="outline" onClick={() => setShowAddForm(false)}>
-                          Cancel
-                        </Button>
-                      </div>
-                      {testResult && (
-                        <div className="text-sm text-muted-foreground">
-                          {testResult}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <TraderAccountForm
+                    mode="create"
+                    account={newAccount}
+                    onAccountChange={setNewAccount}
+                    onSubmit={handleCreateAccount}
+                    onCancel={() => setShowAddForm(false)}
+                    loading={loading}
+                    testResult={testResult}
+                  />
                 )}
 
                 {accounts.map((account) => (
-                  <div key={account.id} className="border rounded-lg p-4 space-y-4">
-                    {editingId === account.id ? (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input
-                            placeholder="Trader name"
-                            value={editAccount.name || ''}
-                            onChange={(e) => setEditAccount({ ...editAccount, name: e.target.value })}
-                          />
-                          <Input
-                            placeholder="Model"
-                            value={editAccount.model || ''}
-                            onChange={(e) => setEditAccount({ ...editAccount, model: e.target.value })}
-                          />
-                        </div>
-                        <Input
-                          placeholder="Base URL"
-                          value={editAccount.base_url || ''}
-                          onChange={(e) => setEditAccount({ ...editAccount, base_url: e.target.value })}
-                        />
-                        <Input
-                          placeholder="API Key"
-                          type="password"
-                          value={editAccount.api_key || ''}
-                          onChange={(e) => setEditAccount({ ...editAccount, api_key: e.target.value })}
-                        />
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Switch
-                            checked={editAccount.auto_trading_enabled ?? true}
-                            onCheckedChange={(checked) => setEditAccount({ ...editAccount, auto_trading_enabled: checked })}
-                          />
-                          <span>Start Trading</span>
-                        </div>
-                        {testResult && (
-                          <div className={`text-xs p-2 rounded ${
-                            testResult.includes('❌')
-                              ? 'bg-red-50 text-red-700 border border-red-200'
-                              : 'bg-green-50 text-green-700 border border-green-200'
-                          }`}>
-                            {testResult}
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <Button onClick={handleUpdateAccount} disabled={loading || testing} size="sm">
-                            {testing ? 'Testing...' : 'Test and Save'}
-                          </Button>
-                          <Button onClick={cancelEdit} variant="outline" size="sm" disabled={loading || testing}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="space-y-1 flex-1">
-                            <div className="font-medium">{account.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {account.model ? `Model: ${account.model}` : 'No model configured'}
-                            </div>
-                            {account.base_url && (
-                              <div className="text-xs text-muted-foreground truncate">
-                                Base URL: {account.base_url}
-                              </div>
-                            )}
-                            {account.api_key && (
-                              <div className="text-xs text-muted-foreground truncate max-w-full">
-                                API Key: {'*'.repeat(Math.min(20, Math.max(0, (account.api_key?.length || 0) - 4)))}{account.api_key?.slice(-4) || '****'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
-                              {toggleLoadingId === account.id && (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              )}
-                              <span>Start Trading</span>
-                              <Switch
-                                checked={account.auto_trading_enabled ?? true}
-                                disabled={toggleLoadingId === account.id || loading}
-                                onCheckedChange={(checked) => handleToggleAutoTrading(account, checked)}
-                              />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                onClick={() => handleExport(account)}
-                                variant="outline"
-                                size="sm"
-                                title={t('traderData.export')}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => handleImportClick(account)}
-                                variant="outline"
-                                size="sm"
-                                title={t('traderData.import')}
-                              >
-                                <Upload className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => startEdit(account)}
-                                variant="outline"
-                                size="sm"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => handleDeleteTrader(account)}
-                                variant="outline"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                title={t('trader.deleteTrader')}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Exchange Wallets Panel */}
-                        <ExchangeWalletsPanel
-                          accountId={account.id}
-                          accountName={account.name}
-                          onWalletConfigured={loadAccounts}
-                        />
-                      </>
-                    )}
-                  </div>
+                  <TraderAccountCard
+                    key={account.id}
+                    account={account}
+                    isEditing={editingId === account.id}
+                    editAccount={editAccount}
+                    onEditAccountChange={setEditAccount}
+                    onSaveEdit={handleUpdateAccount}
+                    onCancelEdit={cancelEdit}
+                    loading={loading}
+                    testing={testing}
+                    testResult={testResult}
+                    toggleLoadingId={toggleLoadingId}
+                    onToggleAutoTrading={handleToggleAutoTrading}
+                    onExport={handleExport}
+                    onImportClick={handleImportClick}
+                    onStartEdit={startEdit}
+                    onDeleteTrader={handleDeleteTrader}
+                    onWalletConfigured={loadAccounts}
+                  />
                 ))}
               </div>
             )}

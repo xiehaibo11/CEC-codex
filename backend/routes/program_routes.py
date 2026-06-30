@@ -403,7 +403,7 @@ def _get_available_apis() -> Dict[str, Any]:
         "MarketData_properties": {
             "data.trigger_symbol": "Symbol that triggered this evaluation",
             "data.trigger_type": "Trigger type: 'signal' or 'scheduled'",
-            "data.signal_source_type": "Optional signal source subtype: 'wallet_tracking' for Hyper Insight wallet signals, None for market signals",
+            "data.signal_source_type": "Optional signal source subtype: 'wallet_tracking' for CoinGlass wallet signals, None for market signals",
             "data.wallet_event": "Optional wallet signal payload (dict). Present when signal_source_type='wallet_tracking'. Structure: {source, source_type, address, event_type, event_level, tier, summary, detail, event_timestamp}",
             "data.wallet_event.detail (position_change common)": "{action, direction, start_position, end_position, old_value, new_value, notional_value, entry_price, leverage, unrealized_pnl, liquidation_price}",
             "data.wallet_event.detail (realtime extras)": "{fills_count, total_size, average_price, closed_pnl, fills[]}",

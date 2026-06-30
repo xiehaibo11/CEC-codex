@@ -20,30 +20,31 @@ Architecture:
 - Memories auto-injected into system prompt alongside user profile
 - user_info category (from onboarding) is excluded from dedup/eviction
 """
-import json
 import logging
-import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import requests
 from sqlalchemy.orm import Session
 
 from database.models import HyperAiMemory
+from services.hyper_ai_memory.constants import MAX_MEMORIES, MEMORY_CATEGORIES
+from services.hyper_ai_memory.llm import call_memory_llm
+from services.hyper_ai_memory.parsing import (
+    parse_dedup_actions,
+    parse_extracted_memories,
+)
+from services.hyper_ai_memory.prompts import (
+    BATCH_DEDUP_PROMPT,
+    EXTRACT_MEMORIES_PROMPT,
+)
+from services.hyper_ai_memory.serialization import (
+    format_existing_memories,
+    format_new_memories,
+    memory_to_dict,
+    valid_memory_candidates,
+)
 
 logger = logging.getLogger(__name__)
-
-# Memory capacity limit
-MAX_MEMORIES = 50
-
-# Memory categories
-MEMORY_CATEGORIES = [
-    "preference",  # Trading preferences
-    "decision",    # Important decisions
-    "lesson",      # Lessons learned
-    "insight",     # Market insights
-    "context",     # General context
-]
 
 
 def get_memories(
@@ -78,17 +79,7 @@ def get_memories(
         HyperAiMemory.created_at.desc()
     ).limit(limit).all()
 
-    return [
-        {
-            "id": m.id,
-            "category": m.category,
-            "content": m.content,
-            "source": m.source,
-            "importance": m.importance,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-        }
-        for m in memories
-    ]
+    return [memory_to_dict(memory) for memory in memories]
 
 
 def add_memory(
@@ -161,30 +152,6 @@ def delete_memory(db: Session, memory_id: int) -> bool:
     return True
 
 
-# Batch deduplication prompt - handles all new memories in a single LLM call
-BATCH_DEDUP_PROMPT = """You are a memory deduplication assistant for a crypto trading AI.
-
-## Existing Memories (already stored):
-{existing_memories}
-
-## New Memories (candidates to add):
-{new_memories}
-
-For EACH new memory, decide ONE action by comparing against ALL existing memories:
-- ADD: New memory is different and valuable, add it
-- UPDATE: New memory refines/updates an existing one. Provide existing_id and merged content
-- DELETE: New memory contradicts/replaces an existing one. Provide existing_id to delete, then add new
-- NONE: New memory is redundant/duplicate of existing, discard it
-
-Respond in JSON only:
-{{"actions": [
-  {{"new_index": 0, "action": "ADD"}},
-  {{"new_index": 1, "action": "UPDATE", "existing_id": 4, "merged": "merged content here"}},
-  {{"new_index": 2, "action": "NONE"}},
-  {{"new_index": 3, "action": "DELETE", "existing_id": 8}}
-]}}"""
-
-
 def batch_dedup_memories(
     db: Session,
     new_memories: List[Dict[str, Any]],
@@ -213,28 +180,17 @@ def batch_dedup_memories(
     # If no existing memories, just add all
     if not existing:
         count = 0
-        for mem in new_memories:
+        for mem in valid_memory_candidates(new_memories):
             cat = mem.get("category", "context")
-            if cat not in MEMORY_CATEGORIES or not mem.get("content"):
-                continue
             add_memory(db, cat, mem["content"], source, mem.get("importance", 0.5))
             count += 1
         enforce_memory_limit(db)
         return count
 
     # Build prompt with existing and new memories
-    existing_text = "\n".join(
-        f"[ID:{m['id']}] ({m['category']}) {m['content']}"
-        for m in existing
-    )
-    new_text = "\n".join(
-        f"[{i}] ({m.get('category','context')}) {m.get('content','')}"
-        for i, m in enumerate(new_memories)
-    )
-
     prompt = BATCH_DEDUP_PROMPT.format(
-        existing_memories=existing_text,
-        new_memories=new_text
+        existing_memories=format_existing_memories(existing),
+        new_memories=format_new_memories(new_memories)
     )
 
     # Single LLM call for all dedup decisions
@@ -243,10 +199,8 @@ def batch_dedup_memories(
         # LLM failed, fallback: add all as new
         logger.warning("[Memory] Batch dedup LLM failed, adding all as new")
         count = 0
-        for mem in new_memories:
+        for mem in valid_memory_candidates(new_memories):
             cat = mem.get("category", "context")
-            if cat not in MEMORY_CATEGORIES or not mem.get("content"):
-                continue
             add_memory(db, cat, mem["content"], source, mem.get("importance", 0.5))
             count += 1
         enforce_memory_limit(db)
@@ -300,72 +254,27 @@ def _call_llm_for_dedup(
     """
     Single LLM call for batch deduplication. Returns list of action dicts or None on failure.
     """
-    base_url = api_config.get("base_url", "")
-    api_key = api_config.get("api_key", "")
-    model = api_config.get("model", "")
-    api_format = api_config.get("api_format", "openai")
-
-    if not all([base_url, api_key, model]):
-        logger.warning("[Memory] Incomplete API config for dedup")
+    text = call_memory_llm(
+        prompt,
+        api_config,
+        max_tokens=800,
+        purpose="Dedup",
+        log_incomplete_config=True,
+    )
+    if text is None:
         return None
 
     try:
-        from services.ai_decision_service import (
-            build_chat_completion_endpoints, build_llm_payload, build_llm_headers
-        )
-        endpoints = build_chat_completion_endpoints(base_url, model)
-        if api_format == "anthropic":
-            endpoint = endpoints[0] if endpoints else f"{base_url.rstrip('/')}/messages"
-        else:
-            endpoint = endpoints[0] if endpoints else f"{base_url}/chat/completions"
+        actions = parse_dedup_actions(text)
+    except ValueError as e:
+        logger.warning(f"[Memory] Dedup response JSON parse error: {e}")
+        return None
 
-        headers = build_llm_headers(api_format, api_key, base_url)
-        body = build_llm_payload(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            api_format=api_format,
-            max_tokens=800,
-            temperature=None,
-        )
-
-        response = requests.post(endpoint, headers=headers, json=body, timeout=60)
-
-        if response.status_code != 200:
-            logger.warning(
-                f"[Memory] Dedup API error: status={response.status_code}, "
-                f"body={response.text[:500]}"
-            )
-            return None
-
-        data = response.json()
-
-        if api_format == "anthropic":
-            content = data.get("content", [])
-            text = content[0].get("text", "") if content else ""
-        else:
-            choices = data.get("choices", [])
-            text = choices[0].get("message", {}).get("content", "") if choices else ""
-
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-            return result.get("actions", [])
-
+    if actions is None:
         logger.warning(f"[Memory] Dedup response not valid JSON: {text[:200]}")
         return None
 
-    except requests.exceptions.Timeout:
-        logger.warning("[Memory] Dedup API timeout (60s)")
-        return None
-    except requests.exceptions.ConnectionError as e:
-        logger.warning(f"[Memory] Dedup API connection error: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.warning(f"[Memory] Dedup response JSON parse error: {e}")
-        return None
-    except Exception as e:
-        logger.warning(f"[Memory] Dedup unexpected error: {type(e).__name__}: {e}")
-        return None
+    return actions
 
 
 def enforce_memory_limit(db: Session) -> int:
@@ -401,45 +310,6 @@ def enforce_memory_limit(db: Session) -> int:
     return len(to_evict)
 
 
-# Memory extraction prompt for compression
-EXTRACT_MEMORIES_PROMPT = """You are a memory extraction assistant for a crypto trading AI platform.
-Analyze this conversation and extract key user insights worth remembering long-term.
-
-Conversation:
-{conversation}
-
-## Categories and what to extract:
-
-**preference** (importance 0.7-0.9):
-- Trading style (scalping, swing, intraday), risk tolerance, leverage preferences
-- Preferred coins/pairs, timeframes, position sizing rules
-- Daily routines (e.g. close all positions before UTC 23:30)
-
-**decision** (importance 0.6-0.8):
-- Strategy parameters chosen (e.g. EMA periods, RSI thresholds, TP/SL percentages)
-- Specific trading rules or conditions the user confirmed
-- Configuration changes (e.g. switched model, changed leverage from 5x to 3x)
-
-**lesson** (importance 0.7-0.9):
-- Losses or mistakes and what the user learned
-- What worked well and why
-- Market behavior patterns the user identified
-
-**insight** (importance 0.5-0.7):
-- Market observations (e.g. "BTC tends to dump after funding rate > 0.1%")
-- Correlations or patterns discussed
-- Backtesting results and conclusions
-
-## Rules:
-- Each memory should be specific and self-contained (readable without context)
-- Include concrete numbers/parameters when available
-- Max 5 memories per extraction, only truly important ones
-- If nothing significant, return empty list
-
-Respond in JSON:
-{{"memories": [{{"category": "...", "content": "...", "importance": 0.8}}]}}"""
-
-
 def extract_memories_from_conversation(
     conversation_text: str,
     api_config: Dict[str, Any]
@@ -453,68 +323,19 @@ def extract_memories_from_conversation(
     prompt = EXTRACT_MEMORIES_PROMPT.format(
         conversation=conversation_text[:6000]
     )
-
-    base_url = api_config.get("base_url", "")
-    api_key = api_config.get("api_key", "")
-    model = api_config.get("model", "")
-    api_format = api_config.get("api_format", "openai")
-
-    if not all([base_url, api_key, model]):
+    text = call_memory_llm(
+        prompt,
+        api_config,
+        max_tokens=500,
+        purpose="Extraction",
+    )
+    if text is None:
         return []
 
     try:
-        from services.ai_decision_service import build_chat_completion_endpoints, build_llm_payload, build_llm_headers
-
-        endpoints = build_chat_completion_endpoints(base_url, model)
-        if api_format == "anthropic":
-            endpoint = endpoints[0] if endpoints else f"{base_url.rstrip('/')}/messages"
-        else:
-            endpoint = endpoints[0] if endpoints else f"{base_url}/chat/completions"
-
-        # Use unified headers/payload builders (see build_llm_payload in ai_decision_service)
-        headers = build_llm_headers(api_format, api_key, base_url)
-        body = build_llm_payload(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            api_format=api_format,
-            max_tokens=500,
-            temperature=None,
-        )
-
-        response = requests.post(endpoint, headers=headers, json=body, timeout=60)
-
-        if response.status_code != 200:
-            logger.warning(
-                f"[Memory] Extraction API error: status={response.status_code}, "
-                f"body={response.text[:500]}"
-            )
-            return []
-
-        data = response.json()
-
-        # Extract response text
-        if api_format == "anthropic":
-            content = data.get("content", [])
-            text = content[0].get("text", "") if content else ""
-        else:
-            choices = data.get("choices", [])
-            text = choices[0].get("message", {}).get("content", "") if choices else ""
-
-        # Parse JSON response
-        import re
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-            return result.get("memories", [])
-
-    except requests.exceptions.Timeout:
-        logger.warning("[Memory] Extraction API timeout (60s)")
-    except requests.exceptions.ConnectionError as e:
-        logger.warning(f"[Memory] Extraction API connection error: {e}")
-    except json.JSONDecodeError as e:
+        return parse_extracted_memories(text)
+    except ValueError as e:
         logger.warning(f"[Memory] Extraction response JSON parse error: {e}")
-    except Exception as e:
-        logger.warning(f"[Memory] Extraction unexpected error: {type(e).__name__}: {e}")
 
     return []
 
@@ -537,10 +358,7 @@ def process_compression_memories(
         return 0
 
     # Filter valid memories
-    valid = [
-        m for m in memories
-        if m.get("content") and m.get("category", "context") in MEMORY_CATEGORIES
-    ]
+    valid = valid_memory_candidates(memories)
 
     if not valid:
         return 0

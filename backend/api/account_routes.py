@@ -43,6 +43,15 @@ def get_db():
         db.close()
 
 
+def _mask_api_key(key: Optional[str]) -> str:
+    """Return a masked version of an API key for safe transmission to clients."""
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "***"
+    return key[:3] + "***" + key[-4:]
+
+
 def _normalize_bool(value, default=True) -> bool:
     if value is None:
         return default
@@ -222,7 +231,7 @@ def list_all_accounts(
                 "frozen_cash": frozen_cash,
                 "model": account.model,
                 "base_url": account.base_url,
-                "api_key": account.api_key,
+                "api_key": _mask_api_key(account.api_key),
                 "is_active": account.is_active == "true",
                 "auto_trading_enabled": account.auto_trading_enabled == "true",
                 "wallet_address": wallet_address,
@@ -520,7 +529,7 @@ def create_new_account(
             "frozen_cash": float(new_account.frozen_cash),
             "model": new_account.model,
             "base_url": new_account.base_url,
-            "api_key": new_account.api_key,
+            "api_key": _mask_api_key(new_account.api_key),
             "is_active": new_account.is_active == "true",
             "auto_trading_enabled": new_account.auto_trading_enabled == "true",
             "avatar_preset_id": new_account.avatar_preset_id
@@ -600,7 +609,7 @@ def update_account_settings(
             "frozen_cash": float(account.frozen_cash),
             "model": account.model,
             "base_url": account.base_url,
-            "api_key": account.api_key,
+            "api_key": _mask_api_key(account.api_key),
             "is_active": account.is_active == "true",
             "auto_trading_enabled": account.auto_trading_enabled == "true"
         }
@@ -851,10 +860,10 @@ def test_llm_connection(payload: dict):
         api_key = payload.get("api_key", "")
 
         if not api_key:
-            return {"success": False, "message": "API key is required"}
+            return {"success": False, "message": "API密钥不能为空"}
 
         if not base_url:
-            return {"success": False, "message": "Base URL is required"}
+            return {"success": False, "message": "Base URL不能为空"}
 
         # Clean up base_url - ensure it doesn't end with slash
         if base_url.endswith('/'):
@@ -936,13 +945,13 @@ def test_llm_connection(payload: dict):
                         verify=False
                     )
                 except requests.ConnectionError:
-                    last_failure_message = f"Failed to connect to {ep}. Please check the base URL."
+                    last_failure_message = f"无法连接到 {ep}，请检查Base URL是否正确。"
                     continue
                 except requests.Timeout:
-                    last_failure_message = "Request timed out. The LLM service may be unavailable."
+                    last_failure_message = "请求超时，LLM服务可能不可用。"
                     continue
                 except requests.RequestException as req_err:
-                    last_failure_message = f"Connection test failed: {str(req_err)}"
+                    last_failure_message = f"连接测试失败：{str(req_err)}"
                     continue
 
                 # Check response status
@@ -961,11 +970,11 @@ def test_llm_connection(payload: dict):
                             logger.info(f"LLM test successful for model {model} at {ep} (Anthropic format)")
                             return {
                                 "success": True,
-                                "message": f"Connection successful! Model {model} responded correctly (Anthropic API).",
+                                "message": f"连接成功！模型 {model} 响应正常（Anthropic API）。",
                                 "response": content
                             }
                         else:
-                            return {"success": False, "message": "Anthropic API responded but with empty content."}
+                            return {"success": False, "message": "Anthropic API已响应但内容为空。"}
                     else:
                         # OpenAI-compatible response format
                         if "choices" in result and len(result["choices"]) > 0:
@@ -983,51 +992,51 @@ def test_llm_connection(payload: dict):
                                     snippet = reasoning[:100] + "..." if len(reasoning) > 100 else reasoning
                                     return {
                                         "success": True,
-                                        "message": f"Connection successful! Model {model} (reasoning model) responded correctly.",
-                                        "response": f"[Reasoning: {snippet}]"
+                                        "message": f"连接成功！推理模型 {model} 响应正常。",
+                                        "response": f"[推理过程: {snippet}]"
                                     }
 
                             if content:
                                 logger.info(f"LLM test successful for model {model} at {ep}")
                                 return {
                                     "success": True,
-                                    "message": f"Connection successful! Model {model} responded correctly.",
+                                    "message": f"连接成功！模型 {model} 响应正常。",
                                     "response": content
                                 }
 
                             logger.warning(f"LLM response has empty content. finish_reason={finish_reason}, full_message={message}")
                             return {
                                 "success": False,
-                                "message": f"LLM responded but with empty content (finish_reason: {finish_reason}). Try increasing token limit or using a different model."
+                                "message": f"LLM已响应但内容为空（finish_reason: {finish_reason}），请尝试增加token限制或更换模型。"
                             }
                         else:
-                            return {"success": False, "message": "Unexpected response format from LLM"}
+                            return {"success": False, "message": "LLM返回了意外的响应格式"}
                 elif response.status_code == 401:
-                    return {"success": False, "message": "Authentication failed. Please check your API key."}
+                    return {"success": False, "message": "API密钥认证失败，请检查您的API密钥是否正确。"}
                 elif response.status_code == 403:
-                    return {"success": False, "message": "Permission denied. Your API key may not have access to this model."}
+                    return {"success": False, "message": "权限不足，您的API密钥可能无权访问该模型。"}
                 elif response.status_code == 429:
-                    return {"success": False, "message": "Rate limit exceeded. Please try again later."}
+                    return {"success": False, "message": "请求频率超限，请稍后再试。"}
                 elif response.status_code == 404:
-                    last_failure_message = f"Model '{model}' not found or endpoint not available."
+                    last_failure_message = f"模型 '{model}' 未找到或接口不可用。"
                     if idx < len(endpoints_to_try) - 1:
                         logger.info(f"Endpoint {ep} returned 404, trying alternative path")
                         continue
                     return {"success": False, "message": last_failure_message}
                 else:
-                    return {"success": False, "message": f"API returned status {response.status_code}: {response.text}"}
+                    return {"success": False, "message": f"API返回状态码 {response.status_code}：{response.text}"}
 
             return {"success": False, "message": last_failure_message}
-                
+
         except requests.ConnectionError:
-            return {"success": False, "message": f"Failed to connect to {base_url}. Please check the base URL."}
+            return {"success": False, "message": f"无法连接到 {base_url}，请检查Base URL是否正确。"}
         except requests.Timeout:
-            return {"success": False, "message": "Request timed out. The LLM service may be unavailable."}
+            return {"success": False, "message": "请求超时，LLM服务可能不可用。"}
         except json.JSONDecodeError:
-            return {"success": False, "message": "Invalid JSON response from LLM service."}
+            return {"success": False, "message": "LLM服务返回了无效的JSON响应。"}
         except requests.RequestException as e:
             logger.error(f"LLM test request failed: {e}", exc_info=True)
-            return {"success": False, "message": f"Connection test failed: {str(e)}"}
+            return {"success": False, "message": f"连接测试失败：{str(e)}"}
         except Exception as e:
             logger.error(f"LLM test failed: {e}", exc_info=True)
             return {"success": False, "message": f"Connection test failed: {str(e)}"}
@@ -1057,8 +1066,6 @@ def trigger_ai_trade(
         Trade execution result
     """
     try:
-        from services.trading_commands import place_ai_driven_crypto_order
-
         account = get_account_for_current_user(account_id, current_user, db, active_only=False)
 
         if account.is_active != "true":
@@ -1135,27 +1142,39 @@ def trigger_ai_trade(
             f"hyperliquid_environment={hyperliquid_environment}"
         )
 
-        # Trigger AI trading based on account configuration
+        # Route to the right execution path:
+        #   1. Hyperliquid env configured  -> Hyperliquid live (testnet/mainnet)
+        #   2. Active BinanceWallet exists -> Binance live (testnet/mainnet by wallet)
+        #   3. Otherwise                   -> local paper matcher (writes to DB)
+        from database.models import BinanceWallet
+        binance_wallet = db.query(BinanceWallet).filter(
+            BinanceWallet.account_id == account_id,
+            BinanceWallet.is_active == "true",
+        ).first()
+
         if hyperliquid_environment in ["testnet", "mainnet"]:
-            print(f"[DEBUG] ENTERING HYPERLIQUID BRANCH")
             try:
                 from services.trading_commands import place_ai_driven_hyperliquid_order
-                print(f"[DEBUG] Successfully imported place_ai_driven_hyperliquid_order")
-                print(f"[DEBUG] Calling place_ai_driven_hyperliquid_order for account {account_id}")
-                place_ai_driven_hyperliquid_order(
+                place_ai_driven_hyperliquid_order(account_id=account_id, bypass_auto_trading=True)
+            except Exception as hl_err:
+                logger.error(f"Error in Hyperliquid trading for account {account_id}: {hl_err}", exc_info=True)
+        elif binance_wallet:
+            try:
+                from services.trading_commands import place_ai_driven_binance_order
+                place_ai_driven_binance_order(
                     account_id=account_id,
                     bypass_auto_trading=True,
+                    samples=samples,
                 )
-                print(f"[DEBUG] place_ai_driven_hyperliquid_order completed for account {account_id}")
-            except Exception as hyperliquid_err:
-                print(f"[DEBUG] Error in Hyperliquid trading: {hyperliquid_err}")
-                logger.error(f"Error in Hyperliquid trading for account {account_id}: {hyperliquid_err}", exc_info=True)
+            except Exception as bn_err:
+                logger.error(f"Error in Binance trading for account {account_id}: {bn_err}", exc_info=True)
         else:
-            place_ai_driven_crypto_order(
-                max_ratio=0.2,
+            from services.paper_trading import place_ai_driven_paper_order
+            place_ai_driven_paper_order(
                 account_id=account_id,
                 symbol=symbol,
-                samples=samples
+                samples=samples,
+                bypass_auto_trading=True,
             )
 
         # Check for new trades
