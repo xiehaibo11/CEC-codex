@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   ArenaAccountMeta,
@@ -7,85 +7,18 @@ import {
   getArenaAnalytics,
 } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { getModelLogo } from './logoAssets'
-import { formatDateTime } from '@/lib/dateTime'
-
-interface ArenaAnalyticsFeedProps {
-  refreshKey?: number
-  autoRefreshInterval?: number
-  selectedAccount?: number | 'all'
-  onSelectedAccountChange?: (accountId: number | 'all') => void
-}
-
-type FeedTab = 'leaderboard' | 'summary' | 'advanced'
-
-const CACHE_STALE_MS = 45_000
-
-type CacheKey = string
-
-interface AnalyticsCacheEntry {
-  accounts: ArenaAnalyticsAccount[]
-  summary: ArenaAnalyticsSummary | null
-  generatedAt: string | null
-  accountsMeta: ArenaAccountMeta[]
-  lastFetched: number
-}
-
-const ANALYTICS_CACHE = new Map<CacheKey, AnalyticsCacheEntry>()
-
-function formatCurrency(value?: number | null, minimumFractionDigits = 2) {
-  if (value === undefined || value === null) return '—'
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits,
-    maximumFractionDigits: Math.max(minimumFractionDigits, 2),
-  })
-}
-
-function formatSignedCurrency(value?: number | null) {
-  if (value === undefined || value === null) return '—'
-  const absolute = formatCurrency(Math.abs(value))
-  const prefix = value >= 0 ? '+' : '-'
-  return `${prefix}$${absolute}`
-}
-
-function formatPercent(value?: number | null, fractionDigits = 2) {
-  if (value === undefined || value === null) return '—'
-  return `${(value * 100).toFixed(fractionDigits)}%`
-}
-
-function formatDecimal(value?: number | null, fractionDigits = 2) {
-  if (value === undefined || value === null) return '—'
-  return value.toFixed(fractionDigits)
-}
-
-// Use formatDateTime from @/lib/dateTime with 'short' style for compact display
-const formatDate = (value?: string | null) => formatDateTime(value, { style: 'short' })
-
-function getTrendColor(value?: number | null) {
-  if (value === undefined || value === null) return 'text-foreground'
-  if (value > 0) return 'text-emerald-500'
-  if (value < 0) return 'text-red-500'
-  return 'text-foreground'
-}
-
-function formatMinutes(value?: number | null) {
-  if (value === undefined || value === null) return '—'
-  if (value < 1) return '<1m'
-  const rounded = Math.round(value)
-  if (rounded < 60) return `${rounded}m`
-  const hours = Math.floor(rounded / 60)
-  const minutes = rounded % 60
-  if (minutes === 0) return `${hours}h`
-  return `${hours}h ${minutes}m`
-}
-
-function buildAccountsMeta(accounts: ArenaAnalyticsAccount[]): ArenaAccountMeta[] {
-  return accounts.map((account) => ({
-    account_id: account.account_id,
-    name: account.account_name,
-    model: account.model ?? null,
-  }))
-}
+import Leaderboard from './arena-analytics-feed/Leaderboard'
+import OverallStats from './arena-analytics-feed/OverallStats'
+import AdvancedAnalytics from './arena-analytics-feed/AdvancedAnalytics'
+import { buildAccountsMeta, formatDate } from './arena-analytics-feed/formatters'
+import {
+  ANALYTICS_CACHE,
+  AnalyticsCacheEntry,
+  ArenaAnalyticsFeedProps,
+  CACHE_STALE_MS,
+  CacheKey,
+  FeedTab,
+} from './arena-analytics-feed/types'
 
 export default function ArenaAnalyticsFeed({
   refreshKey,
@@ -292,234 +225,6 @@ export default function ArenaAnalyticsFeed({
 
   const accountsForDisplay = analyticsAccounts
 
-  const renderLeaderboard = () => {
-    if (loading && accountsForDisplay.length === 0) {
-      return <div className="text-xs text-muted-foreground">Loading leaderboard…</div>
-    }
-    if (!loading && accountsForDisplay.length === 0) {
-      return <div className="text-xs text-muted-foreground">No analytics available yet.</div>
-    }
-
-    return accountsForDisplay.map((account, index) => {
-      const rank = index + 1
-      const modelLogo = getModelLogo(account.account_name || account.model)
-      const pnlClass = getTrendColor(account.total_pnl)
-      const returnClass = getTrendColor(account.total_return_pct)
-      const sharpeClass = getTrendColor(account.sharpe_ratio)
-      const winRateClass = getTrendColor(account.win_rate)
-
-      return (
-        <div
-          key={account.account_id}
-          className="border border-border bg-muted/40 rounded-lg px-4 py-3 space-y-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-secondary-foreground">
-                #{rank}
-              </div>
-              <div className="flex items-center gap-3">
-                {modelLogo && (
-                  <img
-                    src={modelLogo.src}
-                    alt={modelLogo.alt}
-                    className="h-10 w-10 rounded-full object-contain bg-background"
-                    loading="lazy"
-                  />
-                )}
-                <div>
-                  <div className="text-sm font-semibold uppercase tracking-wide text-foreground">
-                    {account.account_name}
-                  </div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {account.model || 'MODEL UNKNOWN'}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-wide">
-              <div>
-                <span className="block text-[10px] text-muted-foreground">总盈亏</span>
-                <span className={`font-semibold ${pnlClass}`}>{formatSignedCurrency(account.total_pnl)}</span>
-                <span className={`block text-[10px] ${returnClass}`}>{formatPercent(account.total_return_pct)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-muted-foreground">总资产</span>
-                <span className="font-semibold text-foreground">${formatCurrency(account.total_assets)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-muted-foreground">已付手续费</span>
-                <span className="font-semibold text-foreground">${formatCurrency(account.total_fees)}</span>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide">最大盈利</span>
-              <span className="font-semibold text-foreground">{formatSignedCurrency(account.biggest_gain)}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide">最大亏损</span>
-              <span className="font-semibold text-foreground">{formatSignedCurrency(account.biggest_loss)}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide">夏普</span>
-              <span className={`font-semibold ${sharpeClass}`}>{formatDecimal(account.sharpe_ratio, 3)}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] uppercase tracking-wide">胜率</span>
-              <span className={`font-semibold ${winRateClass}`}>{formatPercent(account.win_rate, 1)}</span>
-            </div>
-          </div>
-        </div>
-      )
-    })
-  }
-
-  const renderSummary = () => {
-    if (loading && !summary) {
-      return <div className="text-xs text-muted-foreground">加载整体统计...</div>
-    }
-    if (!summary) {
-      return <div className="text-xs text-muted-foreground">暂无汇总数据</div>
-    }
-
-    const ratioClass = getTrendColor(summary.total_return_pct)
-    const sharpeClass = getTrendColor(summary.average_sharpe_ratio)
-
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="border border-border rounded-lg bg-muted/40 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">总资产</div>
-            <div className="text-lg font-semibold text-foreground">${formatCurrency(summary.total_assets)}</div>
-          </div>
-          <div className="border border-border rounded-lg bg-muted/40 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">综合盈亏</div>
-            <div className={`text-lg font-semibold ${getTrendColor(summary.total_pnl)}`}>
-              {formatSignedCurrency(summary.total_pnl)}
-            </div>
-            <div className={`text-[11px] ${ratioClass}`}>{formatPercent(summary.total_return_pct)}</div>
-          </div>
-          <div className="border border-border rounded-lg bg-muted/40 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Fees</div>
-            <div className="text-lg font-semibold text-foreground">${formatCurrency(summary.total_fees)}</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="border border-border rounded-lg bg-muted/30 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Volume</div>
-            <div className="text-lg font-semibold text-foreground">${formatCurrency(summary.total_volume)}</div>
-          </div>
-          <div className="border border-border rounded-lg bg-muted/30 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Average Sharpe</div>
-            <div className={`text-lg font-semibold ${sharpeClass}`}>
-              {formatDecimal(summary.average_sharpe_ratio, 3)}
-            </div>
-          </div>
-          <div className="border border-border rounded-lg bg-muted/30 p-4">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Models Tracked</div>
-            <div className="text-lg font-semibold text-foreground">{accountOptions.length}</div>
-          </div>
-        </div>
-
-        <div className="border border-border rounded-lg bg-muted/20 p-4 space-y-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Activity Snapshot</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs uppercase tracking-wide text-muted-foreground">
-            <div>
-              <span className="block text-[10px]">Total Trades</span>
-              <span className="text-sm font-semibold text-foreground">{memoisedAggregates.tradeCount.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="block text-[10px]">AI Decisions</span>
-              <span className="text-sm font-semibold text-foreground">{memoisedAggregates.decisionCount.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="block text-[10px]">Executed Decisions</span>
-              <span className="text-sm font-semibold text-foreground">{memoisedAggregates.executedDecisions.toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const renderAdvancedAnalytics = () => {
-    if (loading && accountsForDisplay.length === 0) {
-      return <div className="text-xs text-muted-foreground">Loading advanced analytics…</div>
-    }
-    if (!loading && accountsForDisplay.length === 0) {
-      return <div className="text-xs text-muted-foreground">No advanced analytics available.</div>
-    }
-
-    return accountsForDisplay.map((account) => {
-      const modelLogo = getModelLogo(account.account_name || account.model)
-      const executionClass = getTrendColor(account.decision_execution_rate)
-
-      return (
-        <div key={`advanced-${account.account_id}`} className="border border-border rounded-lg bg-muted/30 p-4 space-y-4">
-          <div className="flex items-center gap-3">
-            {modelLogo && (
-              <img
-                src={modelLogo.src}
-                alt={modelLogo.alt}
-                className="h-10 w-10 rounded-full object-contain bg-background"
-                loading="lazy"
-              />
-            )}
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-wide text-foreground">
-                {account.account_name}
-              </div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {account.model || 'MODEL UNKNOWN'}
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-muted-foreground uppercase tracking-wide">
-            <div className="border border-border rounded-md bg-background/40 p-3 space-y-1">
-              <span className="text-[10px]">Decision Cadence</span>
-              <div className="text-sm font-semibold text-foreground">
-                {formatMinutes(account.avg_decision_interval_minutes)}
-              </div>
-              <div className="text-[10px] text-muted-foreground/80">
-                First trade: {formatDate(account.first_trade_time)}
-              </div>
-              <div className="text-[10px] text-muted-foreground/80">
-                Last trade: {formatDate(account.last_trade_time)}
-              </div>
-            </div>
-            <div className="border border-border rounded-md bg-background/40 p-3 space-y-1">
-              <span className="text-[10px]">AI Execution</span>
-              <div className="text-sm font-semibold text-foreground">
-                Decisions: {account.decision_count.toLocaleString()}
-              </div>
-              <div className={`text-[10px] font-semibold ${executionClass}`}>
-                Executed: {account.executed_decisions.toLocaleString()} ({formatPercent(account.decision_execution_rate, 1)})
-              </div>
-              <div className="text-[10px] text-muted-foreground/80">
-                Avg Target: {formatPercent(account.avg_target_portion, 1)}
-              </div>
-            </div>
-            <div className="border border-border rounded-md bg-background/40 p-3 space-y-1">
-              <span className="text-[10px]">Risk Snapshot</span>
-              <div className="text-sm font-semibold text-foreground">
-                Balance σ: ${formatCurrency(account.balance_volatility)}
-              </div>
-              <div className="text-[10px] text-muted-foreground/80">
-                Biggest Win: {formatSignedCurrency(account.biggest_gain)}
-              </div>
-              <div className="text-[10px] text-muted-foreground/80">
-                Biggest Loss: {formatSignedCurrency(account.biggest_loss)}
-              </div>
-            </div>
-          </div>
-        </div>
-      )
-    })
-  }
-
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -592,15 +297,20 @@ export default function ArenaAnalyticsFeed({
           {!error && (
             <>
               <TabsContent value="leaderboard" className="flex-1 overflow-y-auto min-h-0 mt-0 p-4 space-y-4">
-                {renderLeaderboard()}
+                <Leaderboard accounts={accountsForDisplay} loading={loading} />
               </TabsContent>
 
               <TabsContent value="summary" className="flex-1 overflow-y-auto min-h-0 mt-0 p-4">
-                {renderSummary()}
+                <OverallStats
+                  summary={summary}
+                  loading={loading}
+                  modelsTracked={accountOptions.length}
+                  aggregates={memoisedAggregates}
+                />
               </TabsContent>
 
               <TabsContent value="advanced" className="flex-1 overflow-y-auto min-h-0 mt-0 p-4 space-y-4">
-                {renderAdvancedAnalytics()}
+                <AdvancedAnalytics accounts={accountsForDisplay} loading={loading} />
               </TabsContent>
             </>
           )}
