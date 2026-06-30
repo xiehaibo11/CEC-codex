@@ -1,5 +1,3 @@
-import { useMemo, useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,261 +9,55 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AlertTriangle, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import {
-  estimateLiquidationPrice,
-  calculateRequiredMargin,
-} from '@/lib/hyperliquidApi';
-import type { HyperliquidBalance, HyperliquidPosition } from '@/lib/types/hyperliquid';
 import { useTranslation } from 'react-i18next';
-import type { ExchangeType } from './WalletSelector';
-import { getManualTradingExchangeConfig } from './manualTradingExchanges';
-import { getManualTradingAdapter } from './manualTradingApi';
+import type { OrderFormProps, TimeInForce } from './order-form/types';
+import { useOrderForm } from './order-form/useOrderForm';
+import { TakeProfitStopLossSection } from './order-form/TakeProfitStopLossSection';
+import { OrderRiskSummary } from './order-form/OrderRiskSummary';
+import { ClosePositionSummary } from './order-form/ClosePositionSummary';
 
-interface OrderFormProps {
-  accountId: number;
-  environment: 'testnet' | 'mainnet';
-  exchange: ExchangeType;
-  availableSymbols: string[];
-  symbolsLoading?: boolean;
-  maxLeverage: number;
-  defaultLeverage: number;
-  onOrderPlaced?: () => void;
-}
-
-type OrderSide = 'long' | 'short' | 'close';
-type TimeInForce = 'Ioc' | 'Gtc' | 'Alo';
-
-export default function OrderForm({
-  accountId,
-  environment,
-  exchange,
-  availableSymbols,
-  symbolsLoading = false,
-  maxLeverage,
-  defaultLeverage,
-  onOrderPlaced,
-}: OrderFormProps) {
+export default function OrderForm(props: OrderFormProps) {
   const { t } = useTranslation();
-  const exchangeConfig = getManualTradingExchangeConfig(exchange);
-  const exchangeAdapter = getManualTradingAdapter(exchange);
-  const symbolOptions = useMemo(
-    () => (availableSymbols.length > 0 ? availableSymbols : exchangeConfig.defaultSymbols),
-    [availableSymbols, exchangeConfig]
-  );
-  const [symbol, setSymbol] = useState(symbolOptions[0] || 'BTC');
-  const [side, setSide] = useState<OrderSide>('long');
-  const [timeInForce, setTimeInForce] = useState<TimeInForce>('Ioc');
-  const [size, setSize] = useState('');
-  const [price, setPrice] = useState('');
-  const [leverage, setLeverage] = useState(defaultLeverage);
-  const [takeProfitPrice, setTakeProfitPrice] = useState('');
-  const [stopLossPrice, setStopLossPrice] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [balance, setBalance] = useState<HyperliquidBalance | null>(null);
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [positions, setPositions] = useState<HyperliquidPosition[]>([]);
-
-  useEffect(() => {
-    loadBalance();
-    loadPositions();
-  }, [accountId, environment, exchange]);
-
-  useEffect(() => {
-    if (symbolOptions.length > 0 && !symbolOptions.includes(symbol)) {
-      setSymbol(symbolOptions[0]);
-    }
-  }, [symbolOptions, symbol]);
-
-  useEffect(() => {
-    setLeverage(defaultLeverage);
-  }, [defaultLeverage]);
-
-  useEffect(() => {
-    setPrice('');
-    loadCurrentPrice();
-  }, [symbol, exchange]);
-
-  useEffect(() => {
-    if (currentPrice > 0 && !price) {
-      const adjustedPrice = side === 'long' ? currentPrice * 1.001 : currentPrice * 0.999;
-      setPrice(adjustedPrice.toFixed(2));
-    }
-  }, [currentPrice, side, price]);
-
-  const loadBalance = async () => {
-    try {
-      const data = await exchangeAdapter.getBalance(accountId, environment);
-      setBalance(data);
-    } catch (error) {
-      console.error('Failed to load balance:', error);
-    }
-  };
-
-  const loadCurrentPrice = async () => {
-    try {
-      const priceValue = await exchangeAdapter.getPrice(symbol);
-      setCurrentPrice(priceValue);
-    } catch (error) {
-      console.error('Failed to load current price:', error);
-    }
-  };
-
-  const loadPositions = async () => {
-    try {
-      const data = await exchangeAdapter.getPositions(accountId, environment);
-      setPositions(data.positions || []);
-    } catch (error) {
-      console.error('Failed to load positions:', error);
-    }
-  };
-
-  const calculateMaxSize = () => {
-    if (!balance || balance.availableBalance <= 0) return 0;
-    const priceToUse = price ? parseFloat(price) : currentPrice;
-    if (!priceToUse || priceToUse <= 0) return 0;
-    return (balance.availableBalance * leverage) / priceToUse;
-  };
-
-  const getCurrentPosition = () => {
-    return positions.find(pos => pos.coin === symbol);
-  };
-
-  const handleMaxSize = () => {
-    const maxSize = calculateMaxSize();
-    if (maxSize > 0) {
-      setSize(maxSize.toFixed(4));
-    }
-  };
-
-  const handleClosePosition = () => {
-    const position = getCurrentPosition();
-    if (position) {
-      // For close position, always use absolute value of position size
-      const positionSize = Math.abs(position.szi);
-      setSize(positionSize.toString());
-    }
-  };
-
-  const handleAutoFillTakeProfit = () => {
-    const priceToUse = price ? parseFloat(price) : currentPrice;
-    if (priceToUse > 0) {
-      // 10% profit for long, 10% profit for short
-      const tpPrice = side === 'long'
-        ? priceToUse * 1.1
-        : priceToUse * 0.9;
-      setTakeProfitPrice(tpPrice.toFixed(2));
-    }
-  };
-
-  const handleAutoFillStopLoss = () => {
-    const priceToUse = price ? parseFloat(price) : currentPrice;
-    if (priceToUse > 0) {
-      // 5% loss for long, 5% loss for short
-      const slPrice = side === 'long'
-        ? priceToUse * 0.95
-        : priceToUse * 1.05;
-      setStopLossPrice(slPrice.toFixed(2));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!size || parseFloat(size) <= 0) {
-      toast.error('Please enter a valid size');
-      return;
-    }
-
-    if (!price || parseFloat(price) <= 0) {
-      toast.error('Please enter a valid price');
-      return;
-    }
-
-    if (side !== 'close' && leverage > maxLeverage) {
-      toast.error(`Leverage cannot exceed ${maxLeverage}x`);
-      return;
-    }
-
-    if (side === 'close' && !getCurrentPosition()) {
-      toast.error(`No position found for ${symbol}`);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // For close position, determine correct direction based on current position
-      let isBuy = side === 'long';
-      if (side === 'close') {
-        const position = getCurrentPosition();
-        if (position) {
-          isBuy = position.szi < 0;
-        }
-      }
-
-      const result = await exchangeAdapter.placeOrder({
-        accountId,
-        environment,
-        symbol,
-        isBuy,
-        size: parseFloat(size),
-        price: parseFloat(price),
-        timeInForce,
-        reduceOnly: side === 'close',
-        leverage: side !== 'close' ? leverage : 1,
-        takeProfitPrice: takeProfitPrice && parseFloat(takeProfitPrice) > 0 ? parseFloat(takeProfitPrice) : undefined,
-        stopLossPrice: stopLossPrice && parseFloat(stopLossPrice) > 0 ? parseFloat(stopLossPrice) : undefined,
-      });
-
-      const priceText = result.averagePrice ? ` @ $${Number(result.averagePrice).toFixed(2)}` : '';
-      if (result.status === 'filled') {
-        toast.success(`Order Filled! ${side.toUpperCase()} ${size} ${symbol}${priceText}`);
-      } else if (result.status === 'resting') {
-        toast.success(`Order Placed! ${side.toUpperCase()} ${size} ${symbol}${priceText} (waiting to fill)`);
-      } else {
-        toast.error(`Order failed: ${result.error || result.status || 'Unknown error'}`);
-      }
-
-      // Reset form
-      setSize('');
-      setPrice('');
-      setLeverage(defaultLeverage);
-      setTakeProfitPrice('');
-      setStopLossPrice('');
-      setTimeInForce('Ioc');
-
-      // Reload balance, positions and notify parent
-      await loadBalance();
-      await loadPositions();
-      if (onOrderPlaced) {
-        onOrderPlaced();
-      }
-    } catch (error: any) {
-      console.error('Failed to place order:', error);
-      toast.error(error.message || 'Failed to place order');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const estimatedLiqPrice =
-    side !== 'close' && size && parseFloat(size) > 0
-      ? estimateLiquidationPrice(
-          parseFloat(price || '0'),
-          leverage,
-          side === 'long'
-        )
-      : 0;
-
-  const requiredMargin =
-    side !== 'close' && size && parseFloat(size) > 0 && price
-      ? calculateRequiredMargin(parseFloat(size), parseFloat(price), leverage)
-      : 0;
-
-  const canAfford = balance
-    ? requiredMargin <= balance.availableBalance
-    : true;
-
-  const showLeverageWarning = leverage > 5;
+  const {
+    symbolsLoading = false,
+    maxLeverage,
+    defaultLeverage,
+  } = props;
+  const {
+    exchangeConfig,
+    symbolOptions,
+    symbol,
+    setSymbol,
+    side,
+    setSide,
+    timeInForce,
+    setTimeInForce,
+    size,
+    setSize,
+    price,
+    setPrice,
+    leverage,
+    setLeverage,
+    takeProfitPrice,
+    setTakeProfitPrice,
+    stopLossPrice,
+    setStopLossPrice,
+    loading,
+    balance,
+    currentPrice,
+    calculateMaxSize,
+    getCurrentPosition,
+    handleMaxSize,
+    handleClosePosition,
+    handleAutoFillTakeProfit,
+    handleAutoFillStopLoss,
+    handleSubmit,
+    resetForm,
+    estimatedLiqPrice,
+    requiredMargin,
+    canAfford,
+    showLeverageWarning,
+  } = useOrderForm(props);
 
   return (
     <Card className="p-6">
@@ -483,145 +275,30 @@ export default function OrderForm({
 
         {/* Take Profit / Stop Loss (only for open positions) */}
         {side !== 'close' && (
-          <div className="space-y-4">
-            {/* Take Profit */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label htmlFor="takeProfit" className="block text-sm font-medium">
-                  {t('order.takeProfitOptional', 'Take Profit Price (Optional)')}
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAutoFillTakeProfit}
-                  disabled={!price && !currentPrice}
-                >
-                  {t('order.autoFill', 'Auto Fill')}
-                </Button>
-              </div>
-              <div className="relative">
-                <Input
-                  id="takeProfit"
-                  type="number"
-                  step="0.01"
-                  value={takeProfitPrice}
-                  onChange={(e) => setTakeProfitPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="pr-16"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                  USDC
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                {t('order.takeProfitHint', 'Auto-fill sets +10% profit target from entry price')}
-              </p>
-            </div>
-
-            {/* Stop Loss */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label htmlFor="stopLoss" className="block text-sm font-medium">
-                  {t('order.stopLossOptional', 'Stop Loss Price (Optional)')}
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAutoFillStopLoss}
-                  disabled={!price && !currentPrice}
-                >
-                  {t('order.autoFill', 'Auto Fill')}
-                </Button>
-              </div>
-              <div className="relative">
-                <Input
-                  id="stopLoss"
-                  type="number"
-                  step="0.01"
-                  value={stopLossPrice}
-                  onChange={(e) => setStopLossPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="pr-16"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                  USDC
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                {t('order.stopLossHint', 'Auto-fill sets -5% stop loss from entry price')}
-              </p>
-            </div>
-          </div>
+          <TakeProfitStopLossSection
+            takeProfitPrice={takeProfitPrice}
+            setTakeProfitPrice={setTakeProfitPrice}
+            stopLossPrice={stopLossPrice}
+            setStopLossPrice={setStopLossPrice}
+            onAutoFillTakeProfit={handleAutoFillTakeProfit}
+            onAutoFillStopLoss={handleAutoFillStopLoss}
+            autoFillDisabled={!price && !currentPrice}
+          />
         )}
 
         {/* Risk Information */}
         {side !== 'close' && size && parseFloat(size) > 0 && (
-          <div className="p-4 bg-gray-50 rounded-lg space-y-2">
-            {estimatedLiqPrice > 0 && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center text-gray-700">
-                  <AlertTriangle className="w-4 h-4 mr-1 text-yellow-600" />
-                  {t('order.estimatedLiquidation', 'Estimated Liquidation')}
-                </span>
-                <span className="font-medium">${estimatedLiqPrice.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-700">{t('order.requiredMargin', 'Required Margin')}</span>
-              <span className={`font-medium ${canAfford ? 'text-green-600' : 'text-red-600'}`}>
-                ${requiredMargin.toFixed(2)}
-              </span>
-            </div>
-
-            {balance && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-700">{t('order.availableBalance', 'Available Balance')}</span>
-                <span className="font-medium">${balance.availableBalance.toFixed(2)}</span>
-              </div>
-            )}
-
-            {!canAfford && (
-              <div className="flex items-center space-x-2 text-red-600 text-sm pt-2">
-                <AlertTriangle className="w-4 h-4" />
-                <span>{t('order.insufficientBalance', 'Insufficient balance for this order')}</span>
-              </div>
-            )}
-          </div>
+          <OrderRiskSummary
+            estimatedLiqPrice={estimatedLiqPrice}
+            requiredMargin={requiredMargin}
+            canAfford={canAfford}
+            balance={balance}
+          />
         )}
 
         {/* Position Information (for close orders) */}
         {side === 'close' && (
-          <div className="p-4 bg-blue-50 rounded-lg space-y-2">
-            {getCurrentPosition() ? (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700">{t('order.currentPosition', 'Current Position')}</span>
-                  <span className="font-medium">
-                    {Math.abs(getCurrentPosition()!.szi)} {symbol}
-                    ({getCurrentPosition()!.szi > 0 ? 'LONG' : 'SHORT'})
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700">{t('order.entryPrice', 'Entry Price')}</span>
-                  <span className="font-medium">${getCurrentPosition()!.entryPx.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700">{t('order.unrealizedPnl', 'Unrealized PnL')}</span>
-                  <span className={`font-medium ${getCurrentPosition()!.unrealizedPnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ${getCurrentPosition()!.unrealizedPnl.toFixed(2)}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center space-x-2 text-yellow-600 text-sm">
-                <AlertTriangle className="w-4 h-4" />
-                <span>{t('order.noPositionFound', 'No {{symbol}} position found', { symbol })}</span>
-              </div>
-            )}
-          </div>
+          <ClosePositionSummary position={getCurrentPosition()} symbol={symbol} />
         )}
 
         {/* Action Buttons */}
@@ -630,14 +307,7 @@ export default function OrderForm({
             type="button"
             variant="outline"
             className="flex-1"
-            onClick={() => {
-              setSize('');
-              setPrice('');
-              setLeverage(defaultLeverage);
-              setTakeProfitPrice('');
-              setStopLossPrice('');
-              setTimeInForce('Ioc');
-            }}
+            onClick={resetForm}
           >
             {t('common.cancel', 'Cancel')}
           </Button>
