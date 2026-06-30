@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 from database.connection import SessionLocal
 from database.models import Account
 from services.market_data import get_last_price
-from services.ai_decision_service import call_ai_for_decision
+from services.ai_decision_service import call_ai_for_decision, save_ai_decision
 from services.binance_symbol_service import (
     get_selected_symbols as get_binance_selected_symbols,
 )
 
 from .binance_execution import _execute_binance_decision
+from .helpers import _check_binance_daily_quota
 
 
 logger = logging.getLogger(__name__)
