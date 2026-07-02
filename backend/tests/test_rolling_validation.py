@@ -317,6 +317,54 @@ def test_launch_phase_resumes_from_latest_validation_log_window_end(session, mon
     assert counters["launched"] == 0
 
 
+def test_launch_phase_guards_against_duplicate_pending_launch(session, monkeypatch):
+    """Pending row still unresolved and older than 12h → launch phase does
+    NOT create a new task/log row."""
+    fingerprint = "fp-launch-duplicate-guard"
+    _make_trader(session, fingerprint)
+    source_run = _make_backtest_run(
+        session,
+        fingerprint,
+        end_time=NOW - timedelta(hours=20),  # source run ended 20h ago
+    )
+    # A pending validation log with old window_end (>12h ago, so a new window
+    # WOULD normally be due). But since status='pending', we must NOT launch.
+    _make_validation_log(
+        session,
+        fingerprint,
+        window_start=_naive(NOW - timedelta(hours=24)),
+        window_end=_naive(NOW - timedelta(hours=14)),  # ended 14h ago, past 12h threshold
+        status="pending",
+        task_id=None,  # or could be set to some task_id
+    )
+
+    created_calls = []
+    started_calls = []
+
+    def fake_create(db, *, config, user_id=None, name=None):
+        created_calls.append(config)
+        return {"task_id": 9999}
+
+    def fake_start(task_id):
+        started_calls.append(task_id)
+
+    monkeypatch.setattr(rolling_validation, "create_event_backtest_task", fake_create)
+    monkeypatch.setattr(rolling_validation, "start_event_backtest_task_thread", fake_start)
+
+    counters = run_rolling_validation_cycle(now_ts=NOW_TS, db=session)
+
+    # Must NOT launch a new task
+    assert counters["launched"] == 0
+    assert created_calls == []
+    assert started_calls == []
+
+    # Still exactly one log row for this fingerprint, unchanged
+    logs = session.query(EventContractValidationLog).filter_by(strategy_fingerprint=fingerprint).all()
+    assert len(logs) == 1
+    assert logs[0].status == "pending"
+    assert logs[0].task_id is None
+
+
 # ---------------------------------------------------------------------------
 # (c) record phase
 # ---------------------------------------------------------------------------

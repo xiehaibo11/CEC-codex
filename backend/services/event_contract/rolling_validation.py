@@ -209,6 +209,26 @@ def _launch_one(session: Session, fingerprint: str, now_ts: int) -> bool:
         # replay with frozen parameters.
         return False
 
+    # Guard against duplicate-launch: if a prior validation task is still
+    # pending (long-running), skip launching another for this fingerprint.
+    pending_row = session.execute(
+        text(
+            """
+            SELECT id FROM event_contract_validation_log
+            WHERE strategy_fingerprint = :fingerprint AND status = 'pending'
+            LIMIT 1
+            """
+        ),
+        {"fingerprint": fingerprint},
+    ).first()
+    if pending_row is not None:
+        logger.debug(
+            "[RollingValidation] skipping launch for fingerprint %s: "
+            "prior validation task still pending",
+            fingerprint,
+        )
+        return False
+
     last_end_ts = _latest_validation_window_end(session, fingerprint)
     if last_end_ts is None:
         last_end_ts = _epoch(source_run["end_time"])
