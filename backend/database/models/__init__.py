@@ -96,6 +96,8 @@ from .event_contract import (
     EventContractBacktestRun,
     EventContractTradeLog,
     EventContractBacktestTask,
+    EventContractPaperTrader,
+    EventContractPaperBet,
 )
 from .hyper_ai import (
     HyperAiProfile,
@@ -178,6 +180,8 @@ __all__ = [
     "EventContractBacktestRun",
     "EventContractTradeLog",
     "EventContractBacktestTask",
+    "EventContractPaperTrader",
+    "EventContractPaperBet",
     "HyperAiProfile",
     "HyperAiMemory",
     "HyperAiConversation",

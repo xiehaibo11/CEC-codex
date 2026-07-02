@@ -101,3 +101,51 @@ class EventContractBacktestTask(Base):
     finished_at = Column(TIMESTAMP, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class EventContractPaperTrader(Base):
+    """Forward-testing paper trader: continuously bets on live 1m bars for one strategy config."""
+    __tablename__ = "event_contract_paper_traders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, unique=True, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    symbol = Column(String(20), nullable=False, default="BTC", index=True)
+    exchange = Column(String(20), nullable=False, default="binance", index=True)
+    environment = Column(String(20), nullable=False, default="mainnet", index=True)
+    config = Column(Text, nullable=True)  # full strategy config JSON (allowed_utc_hours/platform/...)
+    stake_amount = Column(Float, nullable=False, default=100)
+    initial_balance = Column(Float, nullable=False, default=10000)
+    current_balance = Column(Float, nullable=False, default=10000)
+    strategy_fingerprint = Column(String(32), nullable=True, index=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    bets = relationship("EventContractPaperBet", back_populates="trader", cascade="all, delete-orphan")
+
+
+class EventContractPaperBet(Base):
+    """A single forward-tested bet placed by a paper trader on live market data."""
+    __tablename__ = "event_contract_paper_bets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trader_id = Column(Integer, ForeignKey("event_contract_paper_traders.id", ondelete="CASCADE"), nullable=False, index=True)
+    direction = Column(String(10), nullable=False)
+    status = Column(String(20), nullable=False, default="pending_entry", index=True)  # pending_entry|open|settled
+    decision_time = Column(TIMESTAMP, nullable=False, index=True)
+    entry_time = Column(TIMESTAMP, nullable=True)
+    entry_price = Column(Float, nullable=True)
+    expiry_time = Column(TIMESTAMP, nullable=True, index=True)
+    expiry_price = Column(Float, nullable=True)
+    result = Column(String(10), nullable=True)  # win|loss|draw|NULL
+    pnl = Column(Float, nullable=True)
+    stake = Column(Float, nullable=False)
+    payout_ratio = Column(Float, nullable=False)
+    market_state = Column(String(50), nullable=True)
+    signal_strength = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)
+    analysis_snapshot = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    trader = relationship("EventContractPaperTrader", back_populates="bets")
