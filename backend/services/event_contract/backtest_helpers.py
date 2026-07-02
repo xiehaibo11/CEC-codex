@@ -191,7 +191,7 @@ class EventContractBacktestHelperMixin:
 
     def _settle_event_contract(self, direction: str, entry: float, expiry: float, draw_result: str) -> str:
         if expiry == entry:
-            return "draw" if draw_result == "draw" else "loss"
+            return "draw" if draw_result in ("draw", "refund") else "loss"
         if direction == "long":
             return "win" if expiry > entry else "loss"
         if direction == "short":

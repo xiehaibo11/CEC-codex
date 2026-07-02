@@ -77,11 +77,12 @@ class BacktestRequest(PredictRequest):
     end_time: str
     initial_balance: float = Field(default=10000, gt=0)
     stake_amount: float = Field(default=100, gt=0)
-    win_payout_ratio: float = Field(default=0.8, ge=0)
-    fee_rate: float = Field(default=0, ge=0)
+    platform: str = Field(default="custom", pattern="^(hibt|binance_event|custom)$")
+    win_payout_ratio: Optional[float] = Field(default=None, ge=0)
+    fee_rate: Optional[float] = Field(default=None, ge=0)
     slippage_bps: float = Field(default=0, ge=0)
     delay_seconds: int = Field(default=3, ge=0)
-    draw_result: str = "loss"
+    draw_result: Optional[str] = Field(default=None, pattern="^(loss|draw|refund)$")
     max_bars: int = Field(default=50000, ge=100, le=200000)
     max_ai_evaluations: int = Field(default=20, ge=1, le=200)
 

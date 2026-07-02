@@ -23,6 +23,8 @@ def _number(config: Dict[str, Any], key: str, default: float) -> float:
 
 class EventContractConfigMixin:
     def _normalize_config(self, config: Dict[str, Any], prediction: bool) -> Dict[str, Any]:
+        from services.event_contract.platforms import apply_platform_preset
+        config = apply_platform_preset(config)
         now = datetime.now(timezone.utc)
         end_time = self._parse_datetime(config.get("end_time")) if config.get("end_time") else now
         start_time = self._parse_datetime(config.get("start_time")) if config.get("start_time") else end_time - timedelta(days=1)
@@ -106,6 +108,10 @@ class EventContractConfigMixin:
             "enable_volume_filter": bool(config.get("enable_volume_filter", True)),
             "enable_cvd_filter": bool(config.get("enable_cvd_filter", False)),
             "draw_result": str(config.get("draw_result") or "loss"),
+            "platform": config["platform"],
+            "min_stake": float(config.get("min_stake") or 1.0),
+            "min_seconds_between_trades": int(config.get("min_seconds_between_trades") or 0),
+            "daily_loss_cap": float(config["daily_loss_cap"]) if config.get("daily_loss_cap") is not None else None,
             "reviewer_weights_mode": str(config.get("reviewer_weights_mode") or "pre_window").lower(),
             "warmup_bars": int(config.get("warmup_bars") or 80),
             "max_bars": int(config.get("max_bars") or 50000),
@@ -146,4 +152,10 @@ class EventContractConfigMixin:
         cfg["stake_amount"] = max(cfg["stake_amount"], 1)
         cfg["initial_balance"] = max(cfg["initial_balance"], cfg["stake_amount"])
         cfg["return_trade_limit"] = min(max(cfg["return_trade_limit"], 1), 1000)
+        if cfg["draw_result"] not in {"loss", "draw", "refund"}:
+            raise ValueError(f"Unsupported draw_result: {cfg['draw_result']}")
+        if cfg["stake_amount"] < cfg["min_stake"]:
+            raise ValueError(
+                f"stake_amount {cfg['stake_amount']} is below the {cfg['platform']} minimum {cfg['min_stake']}"
+            )
         return cfg
