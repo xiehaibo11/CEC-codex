@@ -45,21 +45,25 @@ def settlement_sensitivity(
     """% of decided trades whose outcome flips if the venue settlement print
     differs from our kline source by +/- N bps."""
     decided = [t for t in trades if t.get("result") in ("win", "loss")]
-    report: Dict[str, Any] = {"trades_evaluated": len(decided)}
-
-    # If trades lack entry/expiry prices, return zeros for all bps levels
-    if decided and "entry_price" not in decided[0]:
-        for bps in bps_levels:
-            report[f"bps_{bps}"] = 0.0
-        return report
+    evaluable = [
+        t
+        for t in decided
+        if t.get("entry_price") is not None
+        and t.get("expiry_price") is not None
+        and t.get("direction") is not None
+    ]
+    report: Dict[str, Any] = {
+        "trades_evaluated": len(evaluable),
+        "trades_skipped": len(decided) - len(evaluable),
+    }
 
     for bps in bps_levels:
-        if not decided:
+        if not evaluable:
             report[f"bps_{bps}"] = 0.0
             continue
         flips = 0
         shift = bps / 10000.0
-        for trade in decided:
+        for trade in evaluable:
             entry = float(trade["entry_price"])
             expiry = float(trade["expiry_price"])
             direction = str(trade["direction"])
@@ -69,5 +73,5 @@ def settlement_sensitivity(
                 if outcome is None or outcome != base:
                     flips += 1
                     break
-        report[f"bps_{bps}"] = round(flips / len(decided) * 100, 2)
+        report[f"bps_{bps}"] = round(flips / len(evaluable) * 100, 2)
     return report

@@ -46,13 +46,14 @@ def build_backtest_quality_gate(
             recommendations.append(recommendation)
 
     total_trades = len(trades)
+    decided_trades = int(summary.get("decided_trades", total_trades))
     target_min_trades = int(_value_or_default(summary, cfg, "target_min_trades", 10))
-    if total_trades < target_min_trades:
+    if decided_trades < target_min_trades:
         add_check(
             "sample_size",
             "Minimum sample size",
             "fail",
-            f"Only {total_trades} settled trades; target requires at least {target_min_trades}.",
+            f"Only {decided_trades} decided trades; target requires at least {target_min_trades}.",
             25,
             "Increase the backtest window or loosen filters until the sample size reaches the target.",
         )
@@ -61,7 +62,7 @@ def build_backtest_quality_gate(
             "sample_size",
             "Minimum sample size",
             "pass",
-            f"{total_trades} settled trades meets the target of {target_min_trades}.",
+            f"{decided_trades} decided trades meets the target of {target_min_trades}.",
         )
 
     if summary.get("partial"):
@@ -151,7 +152,16 @@ def build_backtest_quality_gate(
             "pass",
             f"Win rate {win_rate:.2f}% meets target {target_win_rate:.2f}% with a complete audit.",
         )
-    elif total_trades < target_min_trades or summary.get("partial"):
+    elif decided_trades < target_min_trades:
+        add_check(
+            "target_edge",
+            "Target edge",
+            "warning",
+            f"Only {decided_trades} decided trades; target requires at least {target_min_trades} "
+            "to evaluate win rate against target.",
+            5,
+        )
+    elif summary.get("partial"):
         add_check(
             "target_edge",
             "Target edge",

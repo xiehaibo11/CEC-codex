@@ -1036,6 +1036,86 @@ def test_summary_quality_gate_preserves_zero_target_win_rate_message():
     assert target_edge["status"] == "fail"
 
 
+def test_summary_quality_gate_uses_decided_trades_for_draw_heavy_sample():
+    # Draw-heavy run: 4W/1L/15D with target_min_trades=10. Only 5 trades are
+    # decided, well below the target, even though total_trades (20) clears
+    # it. The quality gate must key sample sufficiency off decided trades so
+    # it doesn't contradict summary["target_win_rate_status"] ==
+    # "insufficient_sample" by reporting a complete sample and a misleading
+    # "win rate below target" message.
+    service = EventContractService()
+    cfg = _base_cfg(target_min_trades=10, fee_rate=0.0004, slippage_bps=5)
+    win_trade = {
+        "result": "win",
+        "profit_loss": 80,
+        "direction": "long",
+        "signal_strength": 90,
+        "trap_risk": 10,
+        "market_state": "trend_up",
+    }
+    loss_trade = {
+        "result": "loss",
+        "profit_loss": -100,
+        "direction": "long",
+        "signal_strength": 85,
+        "trap_risk": 10,
+        "market_state": "trend_up",
+    }
+    draw_trade = {
+        "result": "draw",
+        "profit_loss": 0,
+        "direction": "long",
+        "signal_strength": 80,
+        "trap_risk": 10,
+        "market_state": "trend_up",
+    }
+    trades = [win_trade] * 4 + [loss_trade] * 1 + [draw_trade] * 15
+    summary = service._build_summary(
+        cfg,
+        trades,
+        final_equity=cfg["initial_balance"] + 4 * 80 - 100,
+        max_drawdown=0,
+        skipped={
+            "fake_breakout_filtered_count": 0,
+            "trap_filtered_count": 0,
+            "edge_quality_filtered_count": 0,
+            "no_trade_filtered_count": 0,
+            "rule_prefiltered_count": 0,
+            "ai_evaluated_count": 20,
+            "llm_evaluated_count": 0,
+            "ai_rejected_count": 0,
+            "ai_skipped_cap_count": 0,
+            "missing_expiry_count": 0,
+            "expiry_lag_skipped_count": 0,
+            "entry_delay_skipped_count": 0,
+            "decision_bars_count": 20,
+            "candidate_signals_count": 20,
+        },
+        data_quality={"warnings": []},
+    )
+
+    assert summary["total_trades"] == 20
+    assert summary["decided_trades"] == 5
+    assert summary["target_win_rate_status"] == "insufficient_sample"
+
+    quality_gate = summary["quality_gate"]
+    checks = {check["id"]: check for check in quality_gate["checks"]}
+
+    # Sample-size check must key off decided trades (5), not total (20), so
+    # it no longer falsely reports a "complete"/"pass" sample.
+    assert checks["sample_size"]["status"] == "fail"
+    assert "5 decided trades" in checks["sample_size"]["message"]
+
+    # Target-edge check must surface the insufficient decided sample instead
+    # of a misleading "win rate below target" verdict.
+    target_edge = checks["target_edge"]
+    assert target_edge["status"] == "warning"
+    assert "decided trades" in target_edge["message"]
+    assert "below target" not in target_edge["message"]
+
+    assert quality_gate["status"] == "fail"
+
+
 def test_large_stake_fee_summary_matches_event_contract_pnl_formula():
     service = EventContractService()
     cfg = _base_cfg(
