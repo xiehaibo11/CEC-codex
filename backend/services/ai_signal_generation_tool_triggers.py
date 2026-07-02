@@ -14,7 +14,11 @@ def _find_factor_signal_triggers(
     from sqlalchemy import text
     from services.factor_resolver import compute_factor_series
 
-    metric = sig.get("indicator", "")
+    # Accept both the AI tool-call schema key ("indicator") and the canonical
+    # trigger_condition key used by persisted signal_definitions rows /
+    # signal_detection_service ("metric"), so predictions against real
+    # seeded signals work the same as ad-hoc AI tool calls.
+    metric = sig.get("metric") or sig.get("indicator") or ""
     factor_name = metric.split(":", 1)[1] if ":" in metric else metric
     operator = sig.get("operator")
     threshold = sig.get("threshold")

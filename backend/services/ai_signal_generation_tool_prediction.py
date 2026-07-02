@@ -18,6 +18,20 @@ from services.signal_backtest_service import signal_backtest_service
 
 logger = logging.getLogger(__name__)
 
+
+def _signal_metric(sig: Dict) -> Any:
+    """Resolve a signal's metric name.
+
+    Accepts both the AI tool-call schema key ("indicator", per the
+    predict_signal_combination tool definition) and the canonical
+    trigger_condition key used by persisted signal_definitions rows and
+    signal_detection_service ("metric"), so predictions against real seeded
+    signals (which use "metric") work the same as ad-hoc AI tool calls
+    (which use "indicator").
+    """
+    return sig.get("metric") or sig.get("indicator")
+
+
 def _combine_signals_with_pool_edge_detection(
     db: Session, symbol: str, signals: List[Dict],
     preloaded_data: Dict[str, List] = None,
@@ -53,7 +67,7 @@ def _combine_signals_with_pool_edge_detection(
         metrics_data = {}
         metrics_indexes = {}
         for sig in signals:
-            metric = sig.get("indicator")
+            metric = _signal_metric(sig)
             if metric:
                 # taker_volume uses taker_ratio data
                 if metric == "taker_volume":
@@ -85,7 +99,7 @@ def _combine_signals_with_pool_edge_detection(
         all_met = True
 
         for sig in signals:
-            metric = sig.get("indicator")
+            metric = _signal_metric(sig)
 
             # Handle taker_volume composite signal
             if metric == "taker_volume":
@@ -185,7 +199,7 @@ def _tool_predict_signal_combination(
     required_metrics = set()
 
     for sig in signals:
-        metric = sig.get("indicator")
+        metric = _signal_metric(sig)
         if metric:
             # Factor and taker_volume handled separately
             if metric.startswith("factor:") or metric == "taker_volume":
@@ -214,7 +228,7 @@ def _tool_predict_signal_combination(
     individual_samples = {}
 
     for i, sig in enumerate(signals):
-        metric = sig.get("indicator")
+        metric = _signal_metric(sig)
 
         # Handle factor signal
         if metric and metric.startswith("factor:"):
