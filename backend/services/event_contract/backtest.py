@@ -265,6 +265,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             "entry_delay_skipped_count": 0,
             "decision_bars_count": 0,
             "candidate_signals_count": 0,
+            "session_filtered_count": 0,
             "overlap_skipped_count": 0,
             "frequency_skipped_count": 0,
             "daily_cap_skipped_count": 0,
@@ -299,6 +300,9 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                         "message": f"Scanned {skipped['decision_bars_count']}/{total_decision_bars} decision bars",
                     }
                 )
+            if not self._session_allows(decision_ts, cfg["allowed_utc_hours"]):
+                skipped["session_filtered_count"] += 1
+                continue
             entry_idx, entry_delay_lag = self._resolve_entry_bar(
                 klines, decision_ts, cfg["delay_seconds"], interval, cfg["max_entry_lag_seconds"]
             )

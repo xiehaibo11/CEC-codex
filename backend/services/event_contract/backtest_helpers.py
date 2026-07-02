@@ -233,6 +233,14 @@ class EventContractBacktestHelperMixin:
         multiplier = bps / 10000
         return price * (1 + multiplier) if direction == "long" else price * (1 - multiplier)
 
+    def _session_allows(self, timestamp_s: int, allowed_hours: Optional[List[int]]) -> bool:
+        """True when the decision timestamp falls inside the UTC-hour whitelist."""
+        if not allowed_hours:
+            return True
+        from datetime import datetime, timezone
+
+        return datetime.fromtimestamp(int(timestamp_s), tz=timezone.utc).hour in allowed_hours
+
     def _resolve_entry_bar(
         self,
         klines: List[Dict[str, Any]],

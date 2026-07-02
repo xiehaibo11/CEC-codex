@@ -21,6 +21,20 @@ def _number(config: Dict[str, Any], key: str, default: float) -> float:
     return float(value) if value is not None else float(default)
 
 
+def _normalize_utc_hours(value: Any) -> Any:
+    """Normalize a trading-session hour whitelist: sorted, deduped, 0-23.
+
+    None / empty means no session restriction (trade all hours).
+    """
+    if not value:
+        return None
+    hours = sorted({int(h) for h in value})
+    for hour in hours:
+        if hour < 0 or hour > 23:
+            raise ValueError(f"allowed_utc_hours values must be within 0-23, got {hour}")
+    return hours
+
+
 class EventContractConfigMixin:
     def _normalize_config(self, config: Dict[str, Any], prediction: bool) -> Dict[str, Any]:
         from services.event_contract.platforms import apply_platform_preset
@@ -113,6 +127,7 @@ class EventContractConfigMixin:
             "min_seconds_between_trades": int(config.get("min_seconds_between_trades") or 0),
             "daily_loss_cap": float(config["daily_loss_cap"]) if config.get("daily_loss_cap") is not None else None,
             "non_overlapping_only": bool(config.get("non_overlapping_only", True)),
+            "allowed_utc_hours": _normalize_utc_hours(config.get("allowed_utc_hours")),
             "reviewer_weights_mode": str(config.get("reviewer_weights_mode") or "pre_window").lower(),
             "warmup_bars": int(config.get("warmup_bars") or 80),
             "max_bars": int(config.get("max_bars") or 50000),
