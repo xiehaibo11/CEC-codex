@@ -1375,7 +1375,24 @@
     "tabs": {
       "dimensions": "Dimension Analysis",
       "trades": "Trade Details",
-      "backtest": "Prompt Backtest"
+      "backtest": "Prompt Backtest",
+      "eventContract": "Event Contract"
+    },
+    "eventContract": {
+      "settled": "Settled",
+      "decidedWinRate": "Decided Win Rate",
+      "ci": "95% CI",
+      "record": "Wins / Losses / Draws",
+      "totalPnl": "Total PnL",
+      "byDirection": "By Direction",
+      "direction": "Direction",
+      "byMarketState": "By Market State",
+      "marketState": "Market State",
+      "byHourBucket": "By Hour Bucket",
+      "hourBucket": "Hour (UTC)",
+      "n": "N",
+      "pnl": "PnL",
+      "noData": "No settled event contract bets yet"
     },
     "tags": {
       "all": "All",

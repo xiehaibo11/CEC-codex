@@ -74,3 +74,29 @@ export interface TradesResponse {
   account_equity: number
   loss_threshold: number
 }
+
+export interface EventContractOverview {
+  n: number
+  wins: number
+  losses: number
+  draws: number
+  decided: number
+  decided_win_rate: number
+  win_rate_ci_low: number
+  win_rate_ci_high: number
+  total_pnl: number
+}
+
+export interface EventContractDimensionRow {
+  key: string
+  n: number
+  win_rate: number
+  pnl: number
+}
+
+export interface EventContractAttributionResponse {
+  overview: EventContractOverview
+  by_direction: EventContractDimensionRow[]
+  by_market_state: EventContractDimensionRow[]
+  by_hour_bucket: EventContractDimensionRow[]
+}

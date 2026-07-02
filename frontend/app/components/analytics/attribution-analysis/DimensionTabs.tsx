@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import PromptBacktest from '../PromptBacktest'
+import EventContractTab from './EventContractTab'
 import TradesTable from './TradesTable'
 import type { DimensionItem, DimensionResponse, TradeDetail } from './types'
 
@@ -61,10 +62,11 @@ export default function DimensionTabs({
   return (
     <Tabs value={activeTab} onValueChange={onActiveTabChange} className="w-full">
       <div className="flex items-center gap-4 flex-wrap">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+        <TabsList className="grid w-full grid-cols-4 max-w-xl">
           <TabsTrigger value="dimensions">{t('attribution.tabs.dimensions', 'Dimension Analysis')}</TabsTrigger>
           <TabsTrigger value="trades">{t('attribution.tabs.trades', 'Trade Details')}</TabsTrigger>
           <TabsTrigger value="backtest">{t('attribution.tabs.backtest', 'Prompt Backtest')}</TabsTrigger>
+          <TabsTrigger value="eventContract">{t('attribution.tabs.eventContract', 'Event Contract')}</TabsTrigger>
         </TabsList>
         {activeTab === 'backtest' && (
           <p className="text-xs text-muted-foreground">
@@ -179,6 +181,10 @@ export default function DimensionTabs({
 
       <TabsContent value="backtest" className="mt-4">
         <PromptBacktest accountId={accountId} exchange={exchange} />
+      </TabsContent>
+
+      <TabsContent value="eventContract" className="mt-4">
+        <EventContractTab />
       </TabsContent>
     </Tabs>
   )

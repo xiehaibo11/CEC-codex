@@ -1,5 +1,11 @@
 import { apiRequest } from '@/lib/api'
-import type { Account, DimensionResponse, SummaryResponse, TradesResponse } from './types'
+import type {
+  Account,
+  DimensionResponse,
+  EventContractAttributionResponse,
+  SummaryResponse,
+  TradesResponse,
+} from './types'
 
 const API_BASE = '/api/analytics'
 
@@ -36,5 +42,20 @@ export async function fetchAccounts(): Promise<Account[]> {
 export async function fetchTrades(params: URLSearchParams): Promise<TradesResponse> {
   const res = await fetch(`${API_BASE}/trades?${params}`)
   if (!res.ok) throw new Error('Failed to fetch trades')
+  return res.json()
+}
+
+export async function getEventContractAttribution(params?: {
+  trader_id?: number
+  start_date?: string
+  end_date?: string
+}): Promise<EventContractAttributionResponse> {
+  const query = new URLSearchParams()
+  if (params?.trader_id !== undefined) query.set('trader_id', String(params.trader_id))
+  if (params?.start_date) query.set('start_date', params.start_date)
+  if (params?.end_date) query.set('end_date', params.end_date)
+  const qs = query.toString()
+  const res = await fetch(`${API_BASE}/event-contract${qs ? `?${qs}` : ''}`)
+  if (!res.ok) throw new Error('Failed to fetch event contract attribution')
   return res.json()
 }

@@ -1395,7 +1395,24 @@
     "tabs": {
       "dimensions": "维度分析",
       "trades": "交易明细",
-      "backtest": "提示词回测"
+      "backtest": "提示词回测",
+      "eventContract": "事件合约"
+    },
+    "eventContract": {
+      "settled": "已结算",
+      "decidedWinRate": "已决胜率",
+      "ci": "95% 置信区间",
+      "record": "胜 / 负 / 平",
+      "totalPnl": "总盈亏",
+      "byDirection": "按方向",
+      "direction": "方向",
+      "byMarketState": "按市场状态",
+      "marketState": "市场状态",
+      "byHourBucket": "按时段",
+      "hourBucket": "时段 (UTC)",
+      "n": "样本数",
+      "pnl": "盈亏",
+      "noData": "暂无已结算的事件合约纸面交易"
     },
     "tags": {
       "all": "全部",
