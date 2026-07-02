@@ -46,6 +46,26 @@ _INTERVAL = PERIOD_SECONDS[_PERIOD]
 # single "latest closed bar" lookup those phases need.
 _DEFAULT_LOOKBACK_SECONDS = 3600
 
+# Bet ids we've already logged a "no expiry bar past tolerance" warning for. The spec
+# calls for warning once per stuck bet rather than every 60s cycle forever. Bounded so
+# a long-running process doesn't accumulate this set unboundedly.
+_WARNED_BET_IDS: set[int] = set()
+_WARNED_BET_IDS_MAX = 1000
+
+
+def _rollback_safely(session: Session) -> None:
+    """Roll back the shared session without letting rollback itself raise.
+
+    On Postgres a failed statement aborts the transaction; every subsequent
+    statement on that connection (including for the next trader in this cycle)
+    fails with InFailedSqlTransaction until a rollback happens. Call this at the
+    top of every except block that might follow a failed DB statement.
+    """
+    try:
+        session.rollback()
+    except Exception:
+        logger.exception("[EventPaperTrader] session.rollback() itself failed")
+
 
 def run_live_paper_cycle(now_ts: Optional[int] = None, db: Optional[Session] = None) -> Dict[str, int]:
     """One cycle over all enabled paper traders.
@@ -68,6 +88,7 @@ def run_live_paper_cycle(now_ts: Optional[int] = None, db: Optional[Session] = N
             try:
                 _run_trader_cycle(session, trader, resolved_now, counters)
             except Exception:
+                _rollback_safely(session)
                 counters["errors"] += 1
                 logger.exception(
                     "[EventPaperTrader] cycle failed for trader %s (%s)", trader.id, trader.name
@@ -132,12 +153,15 @@ def _settle_due_bets(
         idx, _lag = event_contract_service._resolve_expiry_index(klines, ts_to_index, expiry_ts, cfg)
         if idx is None:
             elapsed = now_ts - expiry_ts
-            if elapsed > cfg["max_expiry_lag_seconds"]:
+            if elapsed > cfg["max_expiry_lag_seconds"] and bet.id not in _WARNED_BET_IDS:
                 logger.warning(
                     "[EventPaperTrader] trader %s bet %s: no expiry bar for expiry_ts=%s "
                     "after %ss (tolerance %ss) - leaving bet open",
                     trader.id, bet.id, expiry_ts, elapsed, cfg["max_expiry_lag_seconds"],
                 )
+                if len(_WARNED_BET_IDS) > _WARNED_BET_IDS_MAX:
+                    _WARNED_BET_IDS.clear()
+                _WARNED_BET_IDS.add(bet.id)
             continue
 
         expiry_price = klines[idx]["open"]
@@ -173,7 +197,9 @@ def _fill_pending_entries(
         if idx is None:
             continue
         bar = klines[idx]
-        bet.entry_price = bar["open"]
+        raw_entry_price = bar["open"]
+        slippage_bps = float(cfg.get("slippage_bps") or 0)
+        bet.entry_price = event_contract_service._apply_slippage(raw_entry_price, bet.direction, slippage_bps)
         bet.entry_time = _naive_utc(bar["timestamp"])
         bet.expiry_time = _naive_utc(bar["timestamp"] + cfg["expiry_minutes"] * 60)
         bet.status = "open"
@@ -210,6 +236,7 @@ def _maybe_decide(
     try:
         result = event_contract_service.predict(session, dict(base_config))
     except Exception as exc:  # noqa: BLE001 - one trader's failure must not stall the fleet
+        _rollback_safely(session)
         counters["errors"] += 1
         logger.error(
             "[EventPaperTrader] predict failed for trader %s (%s): %s", trader.id, trader.name, exc
