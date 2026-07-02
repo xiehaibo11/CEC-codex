@@ -80,7 +80,7 @@ class BacktestRequest(PredictRequest):
     win_payout_ratio: float = Field(default=0.8, ge=0)
     fee_rate: float = Field(default=0, ge=0)
     slippage_bps: float = Field(default=0, ge=0)
-    delay_seconds: int = Field(default=0, ge=0)
+    delay_seconds: int = Field(default=3, ge=0)
     draw_result: str = "loss"
     max_bars: int = Field(default=50000, ge=100, le=200000)
     max_ai_evaluations: int = Field(default=20, ge=1, le=200)

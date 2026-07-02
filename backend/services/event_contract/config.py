@@ -15,6 +15,12 @@ from services.event_contract.constants import (
 )
 
 
+def _number(config: Dict[str, Any], key: str, default: float) -> float:
+    """Extract numeric value from config, respecting explicit zero."""
+    value = config.get(key)
+    return float(value) if value is not None else float(default)
+
+
 class EventContractConfigMixin:
     def _normalize_config(self, config: Dict[str, Any], prediction: bool) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
@@ -55,10 +61,10 @@ class EventContractConfigMixin:
             "expiry_bars": max(1, math.ceil(expiry_minutes * 60 / PERIOD_SECONDS[period])),
             "initial_balance": float(config.get("initial_balance") or 10000),
             "stake_amount": float(config.get("stake_amount") or 100),
-            "win_payout_ratio": float(config.get("win_payout_ratio") or 0.8),
-            "fee_rate": float(config.get("fee_rate") or 0),
-            "slippage_bps": float(config.get("slippage_bps") or 0),
-            "delay_seconds": int(config.get("delay_seconds") or 0),
+            "win_payout_ratio": _number(config, "win_payout_ratio", 0.8),
+            "fee_rate": _number(config, "fee_rate", 0),
+            "slippage_bps": _number(config, "slippage_bps", 0),
+            "delay_seconds": int(_number(config, "delay_seconds", 3)),
             "max_entry_lag_seconds": int(config.get("max_entry_lag_seconds") or PERIOD_SECONDS[period]),
             "max_expiry_lag_seconds": int(config.get("max_expiry_lag_seconds") or PERIOD_SECONDS[period]),
             "min_data_coverage_pct": float(config.get("min_data_coverage_pct") or 95),
