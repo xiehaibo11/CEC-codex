@@ -14,13 +14,15 @@ import StatsSummary from './event-paper-trader/StatsSummary'
 import TraderSelector from './event-paper-trader/TraderSelector'
 
 const POLL_MS = 5000
+const TRADER_LIST_POLL_MS = 60000
 const BETS_LIMIT = 20
 const BETS_DISPLAY_COUNT = 10
 
 /** Live "follow the trader" dashboard card for the event-contract paper
  * traders running server-side (spec module 3). Polls bets + stats for the
- * selected trader every 5s; the trader list itself is refreshed on the same
- * cadence so newly created/enabled traders show up without a page reload. */
+ * selected trader every 5s; the trader list itself is fetched once on mount
+ * and refreshed every 60s so newly created/enabled traders show up without
+ * a page reload. */
 export default function EventPaperTraderCard() {
   const { t } = useTranslation()
   const [traders, setTraders] = useState<EventPaperTrader[]>([])
@@ -30,7 +32,8 @@ export default function EventPaperTraderCard() {
   const [stats, setStats] = useState<EventPaperTraderStats | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
-  // Trader list - polled continuously so the selector reflects new traders.
+  // Trader list - fetched once on mount, then refreshed every 60s so the
+  // selector reflects new traders without polling as aggressively as bets/stats.
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -44,7 +47,7 @@ export default function EventPaperTraderCard() {
       }
     }
     load()
-    const intervalId = setInterval(load, POLL_MS)
+    const intervalId = setInterval(load, TRADER_LIST_POLL_MS)
     return () => {
       cancelled = true
       clearInterval(intervalId)

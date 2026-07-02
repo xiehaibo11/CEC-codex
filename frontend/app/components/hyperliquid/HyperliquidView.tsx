@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { useTradingMode } from '@/contexts/TradingModeContext'
 import { getArenaPositions, getArenaTrades, getAccounts, ArenaTrade, TradingAccount } from '@/lib/api'
 import AlphaArenaFeed from '@/components/portfolio/AlphaArenaFeed'
+import EventPaperTraderCard from '@/components/portfolio/EventPaperTraderCard'
 import HyperliquidMultiAccountSummary from '@/components/portfolio/HyperliquidMultiAccountSummary'
 import HyperliquidAssetChart, { TradeMarker } from './HyperliquidAssetChart'
 import ArenaView from '@/components/arena/ArenaView'
@@ -135,97 +136,100 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
   }
 
   return (
-    <div className="flex flex-col md:grid md:gap-6 md:grid-cols-[minmax(0,1fr)_minmax(320px,600px)] h-full min-h-0 gap-4 pb-16 md:pb-0 overflow-y-auto md:overflow-hidden">
-      {/* Left Panel - Arena or Chart & Account Summary */}
-      <div className="min-w-0 flex flex-col gap-4 min-h-0">
-        {/* View mode toggle */}
-        <div className="flex items-center justify-between">
-          <ViewToggle mode={viewMode} onChange={setViewMode} />
-        </div>
-
-        {viewMode === 'arena' ? (
-          /* Arena Mode — pixel trading floor */
-          <div className="flex-1 min-h-[280px]">
-            <ArenaView
-              accounts={accounts.map(acc => {
-                const full = fullAccounts.find(f => f.id === acc.account_id)
-                return {
-                  account_id: acc.account_id,
-                  account_name: acc.account_name,
-                  exchange: acc.exchange,
-                  auto_trading_enabled: full?.auto_trading_enabled,
-                  avatar_preset_id: full?.avatar_preset_id,
-                }
-              })}
-              positions={allPositions}
-              accountBalances={accounts.map(acc => {
-                const posAcc = positionsData?.accounts?.find(
-                  (a: any) => a.account_id === acc.account_id &&
-                    (a.exchange || 'hyperliquid') === (acc.exchange || 'hyperliquid')
-                )
-                return {
-                  accountId: acc.account_id,
-                  accountName: acc.account_name,
-                  exchange: acc.exchange || 'hyperliquid',
-                  balance: posAcc ? {
-                    totalEquity: posAcc.total_assets || 0,
-                    marginUsagePercent: posAcc.margin_usage_percent || 0,
-                  } : null,
-                  error: null,
-                }
-              })}
-              environment={environment || 'testnet'}
-              activitySignals={activitySignals}
-            />
+    <div className="flex flex-col h-full min-h-0 gap-4">
+      <EventPaperTraderCard />
+      <div className="flex-1 min-h-0 flex flex-col md:grid md:gap-6 md:grid-cols-[minmax(0,1fr)_minmax(320px,600px)] gap-4 pb-16 md:pb-0 overflow-y-auto md:overflow-hidden">
+        {/* Left Panel - Arena or Chart & Account Summary */}
+        <div className="min-w-0 flex flex-col gap-4 min-h-0">
+          {/* View mode toggle */}
+          <div className="flex items-center justify-between">
+            <ViewToggle mode={viewMode} onChange={setViewMode} />
           </div>
-        ) : viewMode === 'chart' ? (
-          /* Chart Mode — existing chart + account summary */
-          <>
-            <div className="flex-1 min-h-[250px] md:min-h-[320px]">
-              {positionsData?.accounts?.length > 0 ? (
-                <HyperliquidAssetChart
-                  accountId={firstAccountId}
-                  refreshTrigger={chartRefreshKey}
-                  environment={environment}
-                  selectedAccount={selectedAccount}
-                  trades={tradeMarkers}
-                  selectedSymbol={selectedSymbol}
-                  selectedExchange={selectedExchange}
-                />
-              ) : (
-                <div className="bg-card border border-border rounded-lg h-full flex items-center justify-center">
-                  <div className="text-muted-foreground">{t('dashboard.noAccountConfigured', 'No Hyperliquid account configured')}</div>
-                </div>
-              )}
-            </div>
-            <div className="rounded-xl border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
-              <HyperliquidMultiAccountSummary
-                accounts={accounts}
-                refreshKey={refreshKey + chartRefreshKey}
-                selectedAccount={selectedAccount}
+
+          {viewMode === 'arena' ? (
+            /* Arena Mode — pixel trading floor */
+            <div className="flex-1 min-h-[280px]">
+              <ArenaView
+                accounts={accounts.map(acc => {
+                  const full = fullAccounts.find(f => f.id === acc.account_id)
+                  return {
+                    account_id: acc.account_id,
+                    account_name: acc.account_name,
+                    exchange: acc.exchange,
+                    auto_trading_enabled: full?.auto_trading_enabled,
+                    avatar_preset_id: full?.avatar_preset_id,
+                  }
+                })}
                 positions={allPositions}
+                accountBalances={accounts.map(acc => {
+                  const posAcc = positionsData?.accounts?.find(
+                    (a: any) => a.account_id === acc.account_id &&
+                      (a.exchange || 'hyperliquid') === (acc.exchange || 'hyperliquid')
+                  )
+                  return {
+                    accountId: acc.account_id,
+                    accountName: acc.account_name,
+                    exchange: acc.exchange || 'hyperliquid',
+                    balance: posAcc ? {
+                      totalEquity: posAcc.total_assets || 0,
+                      marginUsagePercent: posAcc.margin_usage_percent || 0,
+                    } : null,
+                    error: null,
+                  }
+                })}
+                environment={environment || 'testnet'}
+                activitySignals={activitySignals}
               />
             </div>
-          </>
-        ) : (
-          <div className="flex-1 min-h-[320px]">
-            <DashboardInsightView />
-          </div>
-        )}
-      </div>
+          ) : viewMode === 'chart' ? (
+            /* Chart Mode — existing chart + account summary */
+            <>
+              <div className="flex-1 min-h-[250px] md:min-h-[320px]">
+                {positionsData?.accounts?.length > 0 ? (
+                  <HyperliquidAssetChart
+                    accountId={firstAccountId}
+                    refreshTrigger={chartRefreshKey}
+                    environment={environment}
+                    selectedAccount={selectedAccount}
+                    trades={tradeMarkers}
+                    selectedSymbol={selectedSymbol}
+                    selectedExchange={selectedExchange}
+                  />
+                ) : (
+                  <div className="bg-card border border-border rounded-lg h-full flex items-center justify-center">
+                    <div className="text-muted-foreground">{t('dashboard.noAccountConfigured', 'No Hyperliquid account configured')}</div>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-xl border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
+                <HyperliquidMultiAccountSummary
+                  accounts={accounts}
+                  refreshKey={refreshKey + chartRefreshKey}
+                  selectedAccount={selectedAccount}
+                  positions={allPositions}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 min-h-[320px]">
+              <DashboardInsightView />
+            </div>
+          )}
+        </div>
 
-      {/* Right Panel - Feed (hidden on mobile) */}
-      <div className="hidden md:flex flex-col min-h-0 w-full max-w-[600px] justify-self-end">
-        <div className="flex-1 min-h-0 w-full border border-border rounded-lg bg-card shadow-sm px-4 py-3 flex flex-col">
-          <AlphaArenaFeed
-            wsRef={wsRef}
-            selectedAccount={selectedAccount}
-            onSelectedAccountChange={setSelectedAccount}
-            onSelectedSymbolChange={setSelectedSymbol}
-            onSelectedExchangeChange={setSelectedExchange}
-            onPageChange={onPageChange}
-            onArenaActivity={handleArenaActivity}
-          />
+        {/* Right Panel - Feed (hidden on mobile) */}
+        <div className="hidden md:flex flex-col min-h-0 w-full max-w-[600px] justify-self-end">
+          <div className="flex-1 min-h-0 w-full border border-border rounded-lg bg-card shadow-sm px-4 py-3 flex flex-col">
+            <AlphaArenaFeed
+              wsRef={wsRef}
+              selectedAccount={selectedAccount}
+              onSelectedAccountChange={setSelectedAccount}
+              onSelectedSymbolChange={setSelectedSymbol}
+              onSelectedExchangeChange={setSelectedExchange}
+              onPageChange={onPageChange}
+              onArenaActivity={handleArenaActivity}
+            />
+          </div>
         </div>
       </div>
     </div>
