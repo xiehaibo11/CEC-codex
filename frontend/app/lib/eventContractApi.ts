@@ -59,6 +59,8 @@ export interface EventContractBacktestConfig extends EventContractConfig {
   delay_seconds: number
   draw_result: string
   max_bars?: number
+  platform?: 'hibt' | 'binance_event' | 'custom'
+  non_overlapping_only?: boolean
 }
 
 export interface EventAiDecision {
@@ -530,6 +532,26 @@ export interface EventBacktestSummary {
   decision_bars_count?: number
   candidate_signals_count?: number
   execution_time_ms: number
+  decided_trades?: number
+  decided_win_rate?: number
+  win_rate_ci_low?: number
+  win_rate_ci_high?: number
+  p_value_vs_breakeven?: number
+  significant_vs_breakeven?: boolean
+  target_win_rate_status?: 'met' | 'not_met' | 'insufficient_sample'
+  settlement_sensitivity?: { trades_evaluated: number; bps_2: number; bps_5: number; bps_10: number }
+  calibration_report?: {
+    status: 'ok' | 'insufficient_sample'
+    n: number
+    brier_score?: number
+    buckets?: { range: string; n: number; predicted_avg: number; actual_win_rate: number }[]
+  }
+  strategy_fingerprint?: string
+  platform?: string
+  non_overlapping_only?: boolean
+  overlap_skipped_count?: number
+  frequency_skipped_count?: number
+  daily_cap_skipped_count?: number
 }
 
 export interface EventBacktestResponse {
@@ -678,5 +700,16 @@ export async function getCoinGlassEventContractCapability(params: {
     period: params.period,
   })
   const response = await apiRequest(`/coinglass/event-contract-capability?${query.toString()}`)
+  return response.json()
+}
+
+export async function createEventContractHoldoutTask(
+  runId: number,
+  window: { start_time: string; end_time: string },
+): Promise<EventBacktestTaskStatus & { source_run_id?: number; strategy_fingerprint?: string }> {
+  const response = await apiRequest(`/event-contract/backtest/${runId}/holdout`, {
+    method: 'POST',
+    body: JSON.stringify(window),
+  })
   return response.json()
 }

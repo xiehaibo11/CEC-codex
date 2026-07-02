@@ -35,6 +35,14 @@ export type FormState = {
   min_coinglass_coverage_pct: number
   strict_coinglass_quality: boolean
   coinglass_no_future_leakage: boolean
+  platform: 'hibt' | 'binance_event' | 'custom'
+  non_overlapping_only: boolean
+}
+
+export const PLATFORM_FORM_PRESETS: Record<string, Partial<FormState>> = {
+  hibt: { win_payout_ratio: 0.8, fee_rate: 0, draw_result: 'loss' },
+  binance_event: { win_payout_ratio: 0.8, fee_rate: 0, draw_result: 'refund' },
+  custom: {},
 }
 
 export const PERIOD_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h']

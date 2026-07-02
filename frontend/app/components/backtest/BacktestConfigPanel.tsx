@@ -221,6 +221,24 @@ export function BacktestConfigPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1 col-span-2">
+            <Label className="text-xs">{t('backtestTool.platform', 'Target Platform')}</Label>
+            <Select value={form.platform} onValueChange={value => updateForm('platform', value as FormState['platform'])}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">{t('backtestTool.platformCustom', 'Custom rules')}</SelectItem>
+                <SelectItem value="hibt">{t('backtestTool.platformHibt', 'HIBT event contract')}</SelectItem>
+                <SelectItem value="binance_event">{t('backtestTool.platformBinance', 'Binance Event Contracts')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              {form.platform === 'binance_event'
+                ? t('backtestTool.platformBinanceHint', 'Payout 0.8, draw refunds stake, min 5 USDT, 10k daily loss cap.')
+                : form.platform === 'hibt'
+                  ? t('backtestTool.platformHibtHint', 'Payout 0.8, no fee, min 3 USDT, one entry per minute.')
+                  : t('backtestTool.platformCustomHint', 'All economics editable below.')}
+            </p>
+          </div>
           <div className="space-y-1">
             <Label className="text-xs">{t('backtestTool.initialBalance', 'Initial Balance')}</Label>
             <Input type="number" value={form.initial_balance} onChange={event => updateForm('initial_balance', Number(event.target.value))} />
@@ -274,6 +292,7 @@ export function BacktestConfigPanel({
         </div>
 
         <div className="grid gap-2">
+          <ToggleRow label={t('backtestTool.nonOverlapping', 'One bet at a time (independent samples)')} checked={form.non_overlapping_only} onChange={value => updateForm('non_overlapping_only', value)} />
           <ToggleRow label={t('backtestTool.edgeQualityGate', '75% edge quality gate')} checked={form.enable_edge_quality_gate} onChange={value => updateForm('enable_edge_quality_gate', value)} />
           <ToggleRow
             label={t('backtestTool.allowPullbackTrades', 'Allow pullback trades')}

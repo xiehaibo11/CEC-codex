@@ -37,7 +37,7 @@ import { BacktestConfigPanel } from './BacktestConfigPanel'
 import { BacktestResultsPanel } from './BacktestResultsPanel'
 import { PredictionPanel } from './PredictionPanel'
 import { formatTime, fromLocalInputValue, toLocalInputValue } from './shared'
-import { PERIOD_OPTIONS, PERIOD_SECONDS, type FormState } from './types'
+import { PERIOD_OPTIONS, PERIOD_SECONDS, PLATFORM_FORM_PRESETS, type FormState } from './types'
 
 const BACKTEST_CONFIG_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:config:v1'
 const BACKTEST_TASK_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:active-task:v1'
@@ -61,7 +61,7 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     win_payout_ratio: 0.8,
     fee_rate: 0,
     slippage_bps: 0,
-    delay_seconds: 0,
+    delay_seconds: 3,
     consensus_threshold: 5,
     reviewer_panel_size: 25,
     target_win_rate: 75,
@@ -82,6 +82,8 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     min_coinglass_coverage_pct: 96,
     strict_coinglass_quality: true,
     coinglass_no_future_leakage: true,
+    platform: 'custom' as const,
+    non_overlapping_only: true,
   }
 }
 
@@ -94,6 +96,12 @@ function loadSavedForm(defaultForm: FormState): FormState {
     const merged = { ...defaultForm, ...parsed }
     if (!parsed.decision_policy) {
       merged.decision_policy = defaultForm.decision_policy
+    }
+    if (!parsed.platform) {
+      merged.platform = defaultForm.platform
+    }
+    if (parsed.non_overlapping_only === undefined) {
+      merged.non_overlapping_only = defaultForm.non_overlapping_only
     }
     if (!parsed.consensus_mode || merged.decision_policy === 'professional_v1') {
       merged.consensus_mode = defaultForm.consensus_mode
@@ -166,6 +174,9 @@ export default function BacktestTool() {
       }
       if (key === 'consensus_mode' && next.decision_policy === 'professional_v1') {
         next.consensus_mode = 'rule_only'
+      }
+      if (key === 'platform') {
+        Object.assign(next, PLATFORM_FORM_PRESETS[value as string] || {})
       }
       if (key === 'enable_coinglass_features' && value === true) {
         if (!coinGlassAvailable) {
@@ -273,6 +284,8 @@ export default function BacktestTool() {
     delay_seconds: Number(form.delay_seconds),
     draw_result: form.draw_result,
     max_bars: 50000,
+    platform: form.platform,
+    non_overlapping_only: form.non_overlapping_only,
   })
 
   const refreshPrediction = useCallback(async () => {
