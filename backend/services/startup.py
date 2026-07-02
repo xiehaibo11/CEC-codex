@@ -196,6 +196,19 @@ def initialize_services():
         )
         logger.info("News AI classifier scheduled (30-min interval)")
 
+        # Start the event-contract live paper trading cycle (settle -> fill entry ->
+        # decide) for every enabled forward-testing trader (every 60 seconds)
+        from services.event_contract.live_paper_trader import (
+            run_live_paper_cycle,
+            EVENT_PAPER_TRADER_JOB_ID,
+        )
+        task_scheduler.add_interval_task(
+            task_func=run_live_paper_cycle,
+            interval_seconds=60,
+            task_id=EVENT_PAPER_TRADER_JOB_ID,
+        )
+        logger.info("Event-contract live paper trading cycle scheduled (60s interval)")
+
         logger.info("All services initialized successfully")
 
     except Exception as e:
