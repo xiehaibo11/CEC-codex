@@ -203,3 +203,33 @@ class EventContractBacktestHelperMixin:
             return price
         multiplier = bps / 10000
         return price * (1 + multiplier) if direction == "long" else price * (1 - multiplier)
+
+    def _resolve_entry_bar(
+        self,
+        klines: List[Dict[str, Any]],
+        decision_ts: int,
+        delay_seconds: int,
+        interval: int,
+        max_entry_lag_seconds: int,
+    ) -> "tuple[Optional[int], int]":
+        """First observable strike bar at/after the decision.
+
+        The strike is the OPEN of the bar containing decision_ts + delay.
+        Returns (entry_idx, lag_seconds); lag is how much later than
+        decision_ts the strike bar opens (0 for a contiguous series).
+        """
+        target_ts = decision_ts + max(0, int(delay_seconds))
+        entry_idx = self._first_index_at_or_after(klines, decision_ts)
+        if entry_idx is None:
+            return None, 0
+        while (
+            entry_idx + 1 < len(klines)
+            and klines[entry_idx]["timestamp"] + interval <= target_ts
+        ):
+            entry_idx += 1
+        if entry_idx >= len(klines):
+            return None, 0
+        lag = int(klines[entry_idx]["timestamp"] - decision_ts)
+        if lag > max_entry_lag_seconds:
+            return None, lag
+        return entry_idx, lag

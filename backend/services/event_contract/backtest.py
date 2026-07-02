@@ -290,19 +290,12 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                         "message": f"Scanned {skipped['decision_bars_count']}/{total_decision_bars} decision bars",
                     }
                 )
-            entry_idx = idx
-            entry_delay_lag = 0
-            if cfg["delay_seconds"] > 0:
-                target_entry_ts = self._decision_timestamp(candle, cfg) + cfg["delay_seconds"]
-                target_entry_open_ts = target_entry_ts - interval
-                entry_idx = self._first_index_at_or_after(klines, target_entry_open_ts)
-                if entry_idx is None or entry_idx >= len(klines):
-                    skipped["entry_delay_skipped_count"] += 1
-                    continue
-                entry_delay_lag = int(self._decision_timestamp(klines[entry_idx], cfg) - target_entry_ts)
-                if entry_delay_lag > cfg["max_entry_lag_seconds"]:
-                    skipped["entry_delay_skipped_count"] += 1
-                    continue
+            entry_idx, entry_delay_lag = self._resolve_entry_bar(
+                klines, decision_ts, cfg["delay_seconds"], interval, cfg["max_entry_lag_seconds"]
+            )
+            if entry_idx is None:
+                skipped["entry_delay_skipped_count"] += 1
+                continue
 
             settlement_entry_ts = klines[entry_idx]["timestamp"]
             expiry_ts = settlement_entry_ts + cfg["expiry_minutes"] * 60
@@ -325,10 +318,10 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 cfg=cfg,
                 decisions=team_decisions,
                 signal_time=self._to_iso(self._decision_timestamp(candle, cfg)),
-                entry_time=self._to_iso(self._decision_timestamp(klines[entry_idx], cfg)),
-                expiry_time=self._to_iso(self._decision_timestamp(klines[expiry_idx], cfg)),
-                entry_price=klines[entry_idx]["close"],
-                expiry_price=klines[expiry_idx]["close"],
+                entry_time=self._to_iso(klines[entry_idx]["timestamp"]),
+                expiry_time=self._to_iso(klines[expiry_idx]["timestamp"]),
+                entry_price=klines[entry_idx]["open"],
+                expiry_price=klines[expiry_idx]["open"],
                 market_state=str(team_features.get("market_state") or "unknown"),
             )
             analysis = self._analyze_snapshot(history, cfg, source="system_panel")
@@ -406,8 +399,8 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 skipped["no_trade_filtered_count"] += 1
                 continue
 
-            raw_entry_price = klines[entry_idx]["close"]
-            raw_expiry_price = klines[expiry_idx]["close"]
+            raw_entry_price = klines[entry_idx]["open"]
+            raw_expiry_price = klines[expiry_idx]["open"]
             entry_price = self._apply_slippage(raw_entry_price, direction, cfg["slippage_bps"])
             expiry_price = raw_expiry_price
             result = self._settle_event_contract(direction, entry_price, expiry_price, cfg["draw_result"])
@@ -431,9 +424,9 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 "symbol": cfg["symbol"],
                 "signal_time": self._to_iso(self._decision_timestamp(candle, cfg)),
                 "direction": direction,
-                "entry_time": self._to_iso(self._decision_timestamp(klines[entry_idx], cfg)),
+                "entry_time": self._to_iso(klines[entry_idx]["timestamp"]),
                 "entry_price": round(entry_price, 6),
-                "expiry_time": self._to_iso(self._decision_timestamp(klines[expiry_idx], cfg)),
+                "expiry_time": self._to_iso(klines[expiry_idx]["timestamp"]),
                 "expiry_price": round(expiry_price, 6),
                 "entry_delay_lag_seconds": entry_delay_lag,
                 "expiry_lag_seconds": expiry_lag or 0,
