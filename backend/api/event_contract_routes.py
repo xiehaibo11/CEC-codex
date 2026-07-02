@@ -12,6 +12,7 @@ from api.auth_dependencies import get_current_user
 from database.connection import SessionLocal
 from database.models import CoinGlassUserKey
 from services.event_contract_service import event_contract_service
+from services.event_contract import paper_trader_api
 from services.event_contract.tasks import (
     create_event_backtest_task,
     find_latest_event_backtest_task,
@@ -186,6 +187,17 @@ class HoldoutRequest(BaseModel):
     end_time: str
 
 
+class PaperTraderCreateRequest(BaseModel):
+    name: str
+    config: Dict[str, Any]
+    stake_amount: float = Field(default=100, gt=0)
+    initial_balance: float = Field(default=10000, gt=0)
+
+
+class PaperTraderUpdateRequest(BaseModel):
+    enabled: bool
+
+
 @router.post("/backtest/{run_id}/holdout")
 def create_holdout_task(run_id: int, payload: HoldoutRequest, request: Request, db: Session = Depends(get_db)):
     """Re-run a stored config on a fresh window (frozen-parameter OOS check)."""
@@ -279,5 +291,68 @@ def get_reviewer_team_stats(db: Session = Depends(get_db)):
             "expertise": {name: payload for name, payload in REVIEWER_EXPERTISE.items()},
             "lookback_trades": 1500,
         }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/paper-traders")
+def create_paper_trader(payload: PaperTraderCreateRequest, db: Session = Depends(get_db)):
+    try:
+        return paper_trader_api.create_paper_trader(
+            db,
+            name=payload.name,
+            config=payload.config,
+            stake_amount=payload.stake_amount,
+            initial_balance=payload.initial_balance,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create paper trader: {exc}")
+
+
+@router.get("/paper-traders")
+def list_paper_traders(db: Session = Depends(get_db)):
+    try:
+        return paper_trader_api.list_paper_traders(db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/paper-traders/{trader_id}")
+def update_paper_trader(trader_id: int, payload: PaperTraderUpdateRequest, db: Session = Depends(get_db)):
+    try:
+        return paper_trader_api.set_paper_trader_enabled(db, trader_id, payload.enabled)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/paper-traders/{trader_id}/bets")
+def get_paper_trader_bets(
+    trader_id: int,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        return paper_trader_api.get_paper_trader_bets(db, trader_id, limit=limit, offset=offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/paper-traders/{trader_id}/stats")
+def get_paper_trader_stats(trader_id: int, db: Session = Depends(get_db)):
+    try:
+        return paper_trader_api.get_paper_trader_stats(db, trader_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
