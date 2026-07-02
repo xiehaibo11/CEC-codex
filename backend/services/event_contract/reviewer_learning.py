@@ -148,16 +148,14 @@ class ReviewerStats:
 # ---------------------------------------------------------------------------
 
 _CACHE_LOCK = threading.Lock()
-_CACHE: Dict[str, Any] = {"weights": None, "stats": None, "version": 0}
-_LOOKBACK_TRADES = 1500    # last N event-contract trades to fit posteriors
+_CACHE: Dict[Any, Dict[str, Any]] = {}
+_LOOKBACK_TRADES = 1500
 
 
 def clear_reviewer_cache() -> None:
-    """Force a refit on next access. Call after each backtest run completes."""
+    """Force a refit on next access."""
     with _CACHE_LOCK:
-        _CACHE["weights"] = None
-        _CACHE["stats"] = None
-        _CACHE["version"] += 1
+        _CACHE.clear()
 
 
 def _winning_direction(entry_price: float, expiry_price: float) -> Optional[str]:
@@ -170,22 +168,44 @@ def _winning_direction(entry_price: float, expiry_price: float) -> Optional[str]
     return None  # draw - skip
 
 
-def fit_reviewer_stats(db: Session, *, lookback: int = _LOOKBACK_TRADES) -> Dict[str, ReviewerStats]:
-    """Build per-reviewer posterior stats from the most recent settled trades."""
+def fit_reviewer_stats(
+    db: Session, *, lookback: int = _LOOKBACK_TRADES, before_ts: Optional[Any] = None
+) -> Dict[str, ReviewerStats]:
+    """Build per-reviewer posterior stats from settled trades.
+
+    before_ts: only trades with entry_time strictly before this datetime are
+    used. Pass the backtest window start to prevent in-window leakage.
+    """
     stats = {name: ReviewerStats(name=name) for name in EVENT_AI_NAMES}
     try:
-        rows = db.execute(
-            text(
-                """
-                SELECT entry_price, expiry_price, ai_decision_snapshot
-                FROM event_contract_trade_logs
-                WHERE ai_decision_snapshot IS NOT NULL
-                ORDER BY id DESC
-                LIMIT :limit
-                """
-            ),
-            {"limit": int(lookback)},
-        ).fetchall()
+        if before_ts is not None:
+            cutoff = before_ts.replace(tzinfo=None) if getattr(before_ts, "tzinfo", None) else before_ts
+            rows = db.execute(
+                text(
+                    """
+                    SELECT entry_price, expiry_price, ai_decision_snapshot
+                    FROM event_contract_trade_logs
+                    WHERE ai_decision_snapshot IS NOT NULL
+                      AND entry_time < :cutoff
+                    ORDER BY entry_time DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"cutoff": cutoff, "limit": int(lookback)},
+            ).fetchall()
+        else:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT entry_price, expiry_price, ai_decision_snapshot
+                    FROM event_contract_trade_logs
+                    WHERE ai_decision_snapshot IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": int(lookback)},
+            ).fetchall()
     except Exception as exc:  # noqa: BLE001 - cold DB shouldn't crash predict()
         logger.warning("reviewer_learning: trade log scan failed (%s) - using priors only", exc)
         return stats
@@ -233,18 +253,19 @@ def _shrinkage_k(samples: int) -> float:
     return min(2.5, math.log1p(samples) / math.log1p(LEARN_RATE_CAP_SAMPLES) * 2.5)
 
 
-def compute_reviewer_weights(db: Session) -> Dict[str, float]:
+def compute_reviewer_weights(db: Session, before_ts: Optional[Any] = None) -> Dict[str, float]:
     """Return {ai_name: weight} folding base expertise weight with learning.
 
-    Cached for the lifetime of a backtest/predict call; clear with
-    `clear_reviewer_cache()` to force a refit after writing new trades.
+    before_ts: only trades before this datetime are used to compute weights.
+    Cached per before_ts value; clear with `clear_reviewer_cache()` to force a refit.
     """
+    cache_key = before_ts.isoformat() if before_ts is not None else "__latest__"
     with _CACHE_LOCK:
-        cached = _CACHE.get("weights")
+        cached = _CACHE.get(cache_key)
         if cached is not None:
-            return dict(cached)
+            return dict(cached["weights"])
 
-    stats = fit_reviewer_stats(db)
+    stats = fit_reviewer_stats(db, before_ts=before_ts)
     weights: Dict[str, float] = {}
     for name in EVENT_AI_NAMES:
         stat = stats[name]
@@ -261,8 +282,7 @@ def compute_reviewer_weights(db: Session) -> Dict[str, float]:
             weights[name] = max(WEIGHT_FLOOR, weights[name] * 0.5)
 
     with _CACHE_LOCK:
-        _CACHE["weights"] = dict(weights)
-        _CACHE["stats"] = stats
+        _CACHE[cache_key] = {"weights": dict(weights), "stats": stats}
     return weights
 
 

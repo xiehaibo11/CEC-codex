@@ -100,6 +100,7 @@ class EventContractConfigMixin:
             "enable_volume_filter": bool(config.get("enable_volume_filter", True)),
             "enable_cvd_filter": bool(config.get("enable_cvd_filter", False)),
             "draw_result": str(config.get("draw_result") or "loss"),
+            "reviewer_weights_mode": str(config.get("reviewer_weights_mode") or "pre_window").lower(),
             "warmup_bars": int(config.get("warmup_bars") or 80),
             "max_bars": int(config.get("max_bars") or 50000),
             "return_trade_limit": int(config.get("return_trade_limit") or 300),
@@ -108,6 +109,8 @@ class EventContractConfigMixin:
             raise ValueError(f"Unsupported consensus_mode: {cfg['consensus_mode']}")
         if cfg["decision_policy"] not in {"professional_v1", "legacy_vote"}:
             raise ValueError(f"Unsupported decision_policy: {cfg['decision_policy']}")
+        if cfg["reviewer_weights_mode"] not in {"pre_window", "static", "unsafe_legacy"}:
+            raise ValueError(f"Unsupported reviewer_weights_mode: {cfg['reviewer_weights_mode']}")
         if cfg["decision_policy"] == "professional_v1":
             # Professional workflow is not a blocking LLM vote.  It uses the
             # deterministic desk policy plus the independent 30-trader research

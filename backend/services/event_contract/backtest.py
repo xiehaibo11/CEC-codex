@@ -23,15 +23,23 @@ logger = logging.getLogger(__name__)
 
 
 class EventContractBacktestMixin(EventContractBacktestHelperMixin):
-    def _load_reviewer_weights(self, db: Session) -> Dict[str, float]:
-        """Fetch learned Bayesian weights for the reviewer panel.
+    def _load_reviewer_weights(self, db: Session, cfg: Dict[str, Any]) -> Dict[str, float]:
+        """Reviewer weights with temporal isolation.
 
-        Weights are cached inside reviewer_learning; a bad DB call must not
-        crash predict/backtest, so we fall back to a uniform 1.0 mapping.
+        pre_window: fit only on trades before the window start (no leakage).
+        static: expertise base weights only (fully deterministic).
+        unsafe_legacy: old behavior (fits on ALL trade logs) - comparison only.
         """
+        mode = str(cfg.get("reviewer_weights_mode") or "pre_window")
         try:
+            if mode == "static":
+                from services.event_contract.reviewer_expertise import get_base_weight
+                from services.event_contract.constants import EVENT_AI_NAMES
+                return {name: get_base_weight(name) for name in EVENT_AI_NAMES}
             from services.event_contract.reviewer_learning import compute_reviewer_weights
-            return compute_reviewer_weights(db)
+            if mode == "unsafe_legacy":
+                return compute_reviewer_weights(db)
+            return compute_reviewer_weights(db, before_ts=cfg["start_time"])
         except Exception as exc:  # noqa: BLE001 - weights are optional
             logger.warning("reviewer_learning weight load failed (%s) - using neutral weights", exc)
             return {}
@@ -95,7 +103,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         history = klines[-cfg["warmup_bars"] :]
         # Load learned reviewer weights once per predict call - _analyze_snapshot
         # reads them out of cfg to apply weighted consensus without new plumbing.
-        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db)}
+        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db, cfg)}
         rule_analysis = self._analyze_snapshot(history, cfg, source="system_panel")
         analysis = rule_analysis
         if cfg["consensus_mode"] == "ai_confirmed":
@@ -236,7 +244,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         ts_to_index = {item["timestamp"]: idx for idx, item in enumerate(klines)}
         # Learned reviewer weights are computed once per backtest and reused for
         # every _analyze_snapshot call inside the loop (weights don't change mid-run).
-        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db)}
+        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db, cfg)}
         equity = cfg["initial_balance"]
         peak_equity = equity
         max_drawdown = 0.0
@@ -477,13 +485,6 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             }
         )
         run_id = self._persist_backtest(db, cfg, summary, trades, equity_curve)
-        # New trades just landed - drop the learning cache so the next predict/backtest
-        # call refits reviewer posteriors against the freshest outcomes.
-        try:
-            from services.event_contract.reviewer_learning import clear_reviewer_cache
-            clear_reviewer_cache()
-        except Exception as exc:  # noqa: BLE001 - cache reset is best-effort
-            logger.warning("reviewer_learning cache reset failed: %s", exc)
 
         return {
             "run_id": run_id,
