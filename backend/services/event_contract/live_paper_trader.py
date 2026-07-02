@@ -72,6 +72,13 @@ def run_live_paper_cycle(now_ts: Optional[int] = None, db: Optional[Session] = N
 
     Injectable ``now_ts``/``db`` for tests. ``db`` defaults to a fresh
     ``SessionLocal`` that is closed before returning.
+
+    Each trader commits (or rolls back) independently: a failure in one
+    trader's cycle must never wipe another trader's already-staged,
+    same-cycle work (settlements, fills, balance updates, opened bets) that
+    shares this session. Per-trader counters are only folded into the
+    returned totals after that trader's commit succeeds; a failed trader
+    only ever contributes to ``errors``.
     """
     resolved_now = int(now_ts) if now_ts is not None else int(datetime.now(timezone.utc).timestamp())
     counters = {"settled": 0, "entries_filled": 0, "decisions": 0, "bets_opened": 0, "errors": 0}
@@ -85,15 +92,18 @@ def run_live_paper_cycle(now_ts: Optional[int] = None, db: Optional[Session] = N
             .all()
         )
         for trader in traders:
+            trader_counters = {"settled": 0, "entries_filled": 0, "decisions": 0, "bets_opened": 0}
             try:
-                _run_trader_cycle(session, trader, resolved_now, counters)
+                _run_trader_cycle(session, trader, resolved_now, trader_counters)
+                session.commit()
+                for key, value in trader_counters.items():
+                    counters[key] += value
             except Exception:
                 _rollback_safely(session)
                 counters["errors"] += 1
                 logger.exception(
                     "[EventPaperTrader] cycle failed for trader %s (%s)", trader.id, trader.name
                 )
-        session.commit()
     finally:
         if owns_session:
             session.close()
@@ -236,12 +246,16 @@ def _maybe_decide(
     try:
         result = event_contract_service.predict(session, dict(base_config))
     except Exception as exc:  # noqa: BLE001 - one trader's failure must not stall the fleet
-        _rollback_safely(session)
-        counters["errors"] += 1
+        # Re-raise so the per-trader try/except in run_live_paper_cycle rolls back
+        # and counts the error exactly once. This trader's earlier staged phases
+        # (settle/fill from THIS trader, same cycle) are discarded along with it -
+        # single-trader atomicity - but since those increments only ever live in
+        # this trader's local counters dict (merged into the cycle totals after a
+        # successful commit), they are correctly never counted as persisted.
         logger.error(
             "[EventPaperTrader] predict failed for trader %s (%s): %s", trader.id, trader.name, exc
         )
-        return
+        raise
 
     counters["decisions"] += 1
 

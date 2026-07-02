@@ -261,6 +261,106 @@ def test_predict_exception_is_isolated_per_trader(monkeypatch, session):
     assert healthy_bets[0].status == "pending_entry"
 
 
+def test_healthy_first_broken_second_bet_survives(monkeypatch, session):
+    """Regression for the rollback-wipe bug: with a SHARED session and a single
+    end-of-loop commit, the healthy trader (processed first, lower id) staged its
+    pending_entry bet uncommitted; when the broken trader (processed second)
+    raised, session.rollback() wiped the healthy trader's staged work too even
+    though its counters had already been credited. Per-trader commit fixes this:
+    each trader's work is durable before the next trader's failure can roll it
+    back."""
+    healthy_trader = _make_trader(session, name="healthy-trader")  # id 1, processed first
+    broken_trader = _make_trader(
+        session, name="broken-trader", config=json.dumps({"_raise": True})
+    )  # id 2, processed second
+
+    klines = _closed_bars_up_to(BASE_TS - 60)
+    now_ts = BASE_TS + 15
+
+    def fake_predict(db_arg, cfg):
+        if cfg.get("_raise"):
+            raise RuntimeError("boom")
+        return _allow_long_result()
+
+    monkeypatch.setattr(event_contract_service, "_load_klines", lambda *a, **k: klines)
+    monkeypatch.setattr(event_contract_service, "predict", fake_predict)
+
+    counters = run_live_paper_cycle(now_ts=now_ts, db=session)
+
+    assert counters == {"settled": 0, "entries_filled": 0, "decisions": 1, "bets_opened": 1, "errors": 1}
+
+    healthy_bets = session.query(EventContractPaperBet).filter_by(trader_id=healthy_trader.id).all()
+    broken_bets = session.query(EventContractPaperBet).filter_by(trader_id=broken_trader.id).all()
+    # The healthy trader's decision/bet was credited in counters, so it must also
+    # be persisted. If a later trader's rollback wiped it, this fails.
+    assert len(healthy_bets) == 1, (
+        f"healthy trader's staged bet was discarded by the broken trader's rollback "
+        f"(counters={counters})"
+    )
+    assert healthy_bets[0].status == "pending_entry"
+    assert broken_bets == []
+
+
+def test_settlement_survives_later_trader_failure(monkeypatch, session):
+    """Trader 1 settles an open bet (balance updated), trader 2's predict raises
+    in the same cycle. The rollback triggered by trader 2's failure must not
+    un-settle trader 1's already-committed bet or revert its balance update."""
+    t1 = _make_trader(session, name="settling-trader")
+    expiry_ts = BASE_TS
+    bet = EventContractPaperBet(
+        trader_id=t1.id,
+        direction="long",
+        status="open",
+        decision_time=_naive_utc(expiry_ts - 5 * 60),
+        entry_time=_naive_utc(expiry_ts - 5 * 60),
+        entry_price=100.0,
+        expiry_time=_naive_utc(expiry_ts),
+        stake=100.0,
+        payout_ratio=0.8,
+    )
+    session.add(bet)
+    session.commit()
+    bet_id = bet.id
+
+    t2 = _make_trader(
+        session, name="broken-trader", symbol="ETH", config=json.dumps({"_raise": True})
+    )
+
+    expiry_bar = _bar(expiry_ts, 110.0)  # long, expiry open > entry -> win
+    t1_klines = [expiry_bar]
+    now_ts = expiry_ts  # expiry bar not yet closed -> decide phase for t1 can't fire
+    # t2 has no outstanding bets, so it needs its own closed bars for the decide
+    # phase to actually reach (and fail inside) predict.
+    t2_klines = _closed_bars_up_to(BASE_TS - 60)
+
+    def fake_load_klines(db_arg, exchange, symbol, period, start_ts, end_ts, environment):
+        return t2_klines if symbol == t2.symbol else t1_klines
+
+    def fake_predict(db_arg, cfg):
+        if cfg.get("_raise"):
+            raise RuntimeError("boom")
+        return _allow_long_result()
+
+    monkeypatch.setattr(event_contract_service, "_load_klines", fake_load_klines)
+    monkeypatch.setattr(event_contract_service, "predict", fake_predict)
+
+    counters = run_live_paper_cycle(now_ts=now_ts, db=session)
+
+    assert counters["settled"] == 1
+    assert counters["errors"] == 1
+
+    session.expire_all()
+    settled = session.get(EventContractPaperBet, bet_id)
+    t1_fresh = session.get(EventContractPaperTrader, t1.id)
+    assert settled.status == "settled", (
+        f"settlement was discarded by later trader's rollback (status={settled.status})"
+    )
+    assert settled.result == "win"
+    assert t1_fresh.current_balance == pytest.approx(10080.0), (
+        f"balance update lost: {t1_fresh.current_balance}"
+    )
+
+
 def test_predict_exception_rolls_back_session(monkeypatch, session):
     """Regression for the aborted-transaction bug: on Postgres a failed statement
     poisons the shared session for every subsequent trader in the cycle
