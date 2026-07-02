@@ -8,6 +8,7 @@ from services.event_contract.backtest_quality import build_backtest_quality_gate
 from services.event_contract.backtest_research import build_backtest_research_report
 from services.event_contract.backtest_stats import (
     binomial_p_value,
+    calibration_report,
     settlement_sensitivity,
     wilson_interval,
 )
@@ -107,6 +108,7 @@ class EventContractBacktestHelperMixin:
             "significant_vs_breakeven": bool(decided and p_value < 0.05),
             "target_win_rate_status": target_status,
             "settlement_sensitivity": settlement_sensitivity(trades),
+            "calibration_report": calibration_report(trades),
             "partial": partial,
             "audit_status": "partial" if partial else "complete",
             "total_trades": total,

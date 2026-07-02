@@ -75,3 +75,36 @@ def settlement_sensitivity(
                     break
         report[f"bps_{bps}"] = round(flips / len(evaluable) * 100, 2)
     return report
+
+
+CALIBRATION_BUCKETS = ((0, 55), (55, 65), (65, 75), (75, 85), (85, 101))
+
+
+def calibration_report(trades: List[Dict[str, Any]], min_samples: int = 50) -> Dict[str, Any]:
+    """Reliability table + Brier score of predicted expected_win_rate."""
+    samples = []
+    for trade in trades:
+        if trade.get("result") not in ("win", "loss"):
+            continue
+        predicted = ((trade.get("event_signal") or {}).get("expected_win_rate"))
+        if predicted is None:
+            continue
+        samples.append((float(predicted) / 100.0, 1.0 if trade["result"] == "win" else 0.0))
+    if len(samples) < min_samples:
+        return {"status": "insufficient_sample", "n": len(samples), "min_samples": min_samples}
+
+    brier = sum((p - y) ** 2 for p, y in samples) / len(samples)
+    buckets = []
+    for lo, hi in CALIBRATION_BUCKETS:
+        rows = [(p, y) for p, y in samples if lo <= p * 100 < hi]
+        if not rows:
+            continue
+        buckets.append(
+            {
+                "range": f"{lo}-{min(hi, 100)}",
+                "n": len(rows),
+                "predicted_avg": round(sum(p for p, _ in rows) / len(rows) * 100, 2),
+                "actual_win_rate": round(sum(y for _, y in rows) / len(rows) * 100, 2),
+            }
+        )
+    return {"status": "ok", "n": len(samples), "brier_score": round(brier, 4), "buckets": buckets}
