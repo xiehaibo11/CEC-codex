@@ -62,10 +62,18 @@ export default function EventContractTab() {
             <CardTitle className="text-sm">{t('attribution.eventContract.decidedWinRate', 'Decided Win Rate')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{overview.decided_win_rate.toFixed(1)}%</div>
-            <div className="text-xs text-muted-foreground">
-              {t('attribution.eventContract.ci', '95% CI')}: {overview.win_rate_ci_low.toFixed(1)}% – {overview.win_rate_ci_high.toFixed(1)}%
-            </div>
+            {overview.decided > 0 ? (
+              <>
+                <div className="text-2xl font-bold">{overview.decided_win_rate.toFixed(1)}%</div>
+                <div className="text-xs text-muted-foreground">
+                  {t('attribution.eventContract.ci', '95% CI')}: {overview.win_rate_ci_low.toFixed(1)}% – {overview.win_rate_ci_high.toFixed(1)}%
+                </div>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {t('attribution.eventContract.noDecided', 'No decided outcomes yet (all draws)')}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>

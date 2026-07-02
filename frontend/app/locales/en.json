@@ -1392,7 +1392,8 @@
       "hourBucket": "Hour (UTC)",
       "n": "N",
       "pnl": "PnL",
-      "noData": "No settled event contract bets yet"
+      "noData": "No settled event contract bets yet",
+      "noDecided": "No decided outcomes yet (all draws)"
     },
     "tags": {
       "all": "All",
