@@ -22,7 +22,7 @@ class TradeConstraintTracker:
         self._loss_day: Optional[int] = None
         self._loss_today = 0.0
 
-    def allow(self, decision_ts: int) -> Optional[str]:
+    def allow(self, decision_ts: int, entry_ts: int) -> Optional[str]:
         if self.non_overlapping and self._open_until is not None and decision_ts < self._open_until:
             return "overlap_skipped_count"
         if (
@@ -31,7 +31,11 @@ class TradeConstraintTracker:
             and decision_ts - self._last_entry_ts < self.min_spacing
         ):
             return "frequency_skipped_count"
-        if self.daily_loss_cap is not None and self._loss_day == decision_ts // 86400:
+        # Keyed by entry_ts (not decision_ts) to match record()'s day bucket - a
+        # trade whose entry resolves into the next UTC day must not dodge an
+        # already-breached cap from that entry day just because the decision
+        # itself was made shortly before midnight.
+        if self.daily_loss_cap is not None and self._loss_day == entry_ts // 86400:
             if self._loss_today >= self.daily_loss_cap:
                 return "daily_cap_skipped_count"
         return None

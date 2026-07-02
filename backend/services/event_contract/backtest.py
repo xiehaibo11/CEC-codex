@@ -408,7 +408,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 skipped["no_trade_filtered_count"] += 1
                 continue
 
-            constraint_reason = constraints.allow(decision_ts)
+            constraint_reason = constraints.allow(decision_ts, klines[entry_idx]["timestamp"])
             if constraint_reason:
                 skipped[constraint_reason] += 1
                 continue

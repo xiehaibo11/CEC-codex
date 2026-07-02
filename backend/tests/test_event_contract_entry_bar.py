@@ -137,3 +137,92 @@ def test_backtest_trade_prices_are_strike_and_expiry_bar_opens(monkeypatch):
     )
 
     assert result["equity_curve"][-1]["timestamp"] == klines[expiry_idx]["timestamp"] * 1000
+
+
+def _stub_service_for_multi_trade(monkeypatch, klines):
+    """Same stubbing pattern as test_backtest_trade_prices_are_strike_and_expiry_bar_opens,
+    factored out so multiple decision bars can be exercised across trade constraints."""
+    service = EventContractService()
+    monkeypatch.setattr(service, "_load_klines", lambda *args, **kwargs: klines)
+    monkeypatch.setattr(service, "_audit_kline_series", lambda *args, **kwargs: {"warnings": [], "coverage_pct": 100})
+    monkeypatch.setattr(service, "_validate_data_quality", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_load_coinglass_feature_bundle",
+        lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_l2_feature_bundle",
+        lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
+    )
+    monkeypatch.setattr(service, "_analyze_snapshot", lambda history, cfg, **kwargs: _long_allow_trade_analysis())
+    monkeypatch.setattr(service, "_persist_backtest", lambda *args, **kwargs: 1)
+    return service
+
+
+def _multi_trade_cfg(klines, *, warmup_bars, decision_bars, interval, **overrides):
+    # Window covers exactly `decision_bars` decision instants, one per bar from
+    # klines[warmup_bars] through klines[warmup_bars + decision_bars - 1].
+    decision_ts_start = klines[warmup_bars]["timestamp"] + interval
+    decision_ts_end = klines[warmup_bars + decision_bars - 1]["timestamp"] + interval
+    cfg = {
+        "symbol": "BTC",
+        "exchange": "binance",
+        "environment": "mainnet",
+        "period": "1m",
+        "expiry_minutes": 5,
+        "consensus_mode": "rule_only",
+        "delay_seconds": 0,
+        "warmup_bars": warmup_bars,
+        "max_bars": 50,
+        "start_time": datetime.fromtimestamp(decision_ts_start, tz=timezone.utc).isoformat(),
+        "end_time": datetime.fromtimestamp(decision_ts_end, tz=timezone.utc).isoformat(),
+    }
+    cfg.update(overrides)
+    return cfg
+
+
+def test_backtest_non_overlapping_only_spaces_trades_past_expiry(monkeypatch):
+    """Multi-trade coverage for the overlap constraint: with 10 decision bars (1m
+    period, 5m expiry) and every bar allowed long, non_overlapping_only=True must
+    skip decision bars whose entry would fire before the prior trade's expiry, and
+    every trade actually taken must start at/after the previous trade's expiry."""
+    base_ts = 1_700_000_000
+    interval = 60
+    klines = _klines(start=base_ts, interval=interval, count=40)
+    service = _stub_service_for_multi_trade(monkeypatch, klines)
+
+    cfg = _multi_trade_cfg(
+        klines, warmup_bars=5, decision_bars=10, interval=interval, non_overlapping_only=True
+    )
+    result = service.run_backtest(object(), cfg)
+
+    assert result["summary"]["overlap_skipped_count"] > 0
+    trades = result["trades"]
+    assert len(trades) >= 2
+    for prev_trade, next_trade in zip(trades, trades[1:]):
+        assert next_trade["entry_time"] >= prev_trade["expiry_time"]
+
+
+def test_backtest_overlap_disabled_produces_more_trades(monkeypatch):
+    """Same 10-bar window as the non-overlapping test above, but with
+    non_overlapping_only=False every allowed decision bar should convert into a
+    trade, so strictly more trades are produced than the constrained run."""
+    base_ts = 1_700_000_000
+    interval = 60
+    klines = _klines(start=base_ts, interval=interval, count=40)
+
+    overlap_service = _stub_service_for_multi_trade(monkeypatch, klines)
+    overlap_cfg = _multi_trade_cfg(
+        klines, warmup_bars=5, decision_bars=10, interval=interval, non_overlapping_only=True
+    )
+    overlap_result = overlap_service.run_backtest(object(), overlap_cfg)
+
+    no_overlap_service = _stub_service_for_multi_trade(monkeypatch, klines)
+    no_overlap_cfg = _multi_trade_cfg(
+        klines, warmup_bars=5, decision_bars=10, interval=interval, non_overlapping_only=False
+    )
+    no_overlap_result = no_overlap_service.run_backtest(object(), no_overlap_cfg)
+
+    assert len(no_overlap_result["trades"]) > len(overlap_result["trades"])
