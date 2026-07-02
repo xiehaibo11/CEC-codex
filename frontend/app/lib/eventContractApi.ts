@@ -713,3 +713,87 @@ export async function createEventContractHoldoutTask(
   })
   return response.json()
 }
+
+// -- Paper traders (live "follow the trader" - spec module 3) -----------------
+
+export interface EventPaperTraderStats {
+  trader_id: number
+  n_settled: number
+  decided: number
+  wins: number
+  losses: number
+  draws: number
+  decided_win_rate: number
+  win_rate_ci_low: number
+  win_rate_ci_high: number
+  p_value_vs_breakeven: number
+  break_even_win_rate: number
+  total_pnl: number
+  current_balance: number
+  stake_amount: number
+  open_bets: number
+  strategy_fingerprint: string | null
+}
+
+export interface EventPaperTrader extends EventPaperTraderStats {
+  id: number
+  name: string
+  enabled: boolean
+  symbol: string
+  exchange: string
+  environment: string
+  config: Record<string, unknown>
+  initial_balance: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface EventPaperTraderBet {
+  id: number
+  trader_id: number
+  direction: 'long' | 'short'
+  status: 'pending_entry' | 'open' | 'settled'
+  decision_time: string | null
+  entry_time: string | null
+  entry_price: number | null
+  expiry_time: string | null
+  expiry_price: number | null
+  result: 'win' | 'loss' | 'draw' | null
+  pnl: number | null
+  stake: number
+  payout_ratio: number | null
+  market_state: string | null
+  signal_strength: number | null
+  reason: string | null
+  analysis_snapshot: Record<string, unknown> | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface EventPaperTraderBetsResponse {
+  trader_id: number
+  total: number
+  limit: number
+  offset: number
+  bets: EventPaperTraderBet[]
+}
+
+export async function getEventPaperTraders(): Promise<EventPaperTrader[]> {
+  const response = await apiRequest('/event-contract/paper-traders')
+  return response.json()
+}
+
+export async function getEventPaperTraderBets(
+  traderId: number,
+  limit = 20,
+  offset = 0,
+): Promise<EventPaperTraderBetsResponse> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const response = await apiRequest(`/event-contract/paper-traders/${traderId}/bets?${query.toString()}`)
+  return response.json()
+}
+
+export async function getEventPaperTraderStats(traderId: number): Promise<EventPaperTraderStats> {
+  const response = await apiRequest(`/event-contract/paper-traders/${traderId}/stats`)
+  return response.json()
+}
