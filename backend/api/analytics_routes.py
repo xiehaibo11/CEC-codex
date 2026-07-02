@@ -16,6 +16,7 @@ from database.connection import SessionLocal
 from database.models import AIDecisionLog, Account, PromptTemplate, ProgramExecutionLog, TradingProgram
 from database.snapshot_connection import SnapshotSessionLocal
 from database.snapshot_models import HyperliquidTrade, HyperliquidAccountSnapshot
+from api.analytics_event_contract import build_event_contract_attribution
 import logging
 
 logger = logging.getLogger(__name__)
@@ -297,6 +298,13 @@ def get_analytics_summary(
     all_records = ai_records + prog_records
     overview = calculate_metrics(all_records)
 
+    # === Event contract paper bets (same period filter, no environment/exchange dims) ===
+    event_contract_start = datetime.combine(start_date, datetime.min.time()) if start_date else None
+    event_contract_end = datetime.combine(end_date, datetime.max.time()) if end_date else None
+    event_contract_overview = build_event_contract_attribution(
+        db, start=event_contract_start, end=event_contract_end
+    )["overview"]
+
     return {
         "period": {
             "start": start_date.isoformat() if start_date else None,
@@ -333,6 +341,10 @@ def get_analytics_summary(
             "program": {
                 "count": len(prog_records),
                 "net_pnl": round(sum(r["pnl"] - r["fee"] for r in prog_records), 2),
+            },
+            "event_contract": {
+                "count": event_contract_overview["n"],
+                "net_pnl": event_contract_overview["total_pnl"],
             },
         },
     }
@@ -2049,3 +2061,23 @@ def get_program_analytics_by_operation(
     items.sort(key=lambda x: x["metrics"]["trade_count"], reverse=True)
 
     return {"items": items}
+
+
+# ============== Event Contract Attribution ==============
+
+@router.get("/event-contract")
+def get_event_contract_analytics(
+    trader_id: Optional[int] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Attribution analytics for settled event-contract paper bets."""
+    try:
+        start = datetime.combine(start_date, datetime.min.time()) if start_date else None
+        end = datetime.combine(end_date, datetime.max.time()) if end_date else None
+        return build_event_contract_attribution(db, trader_id=trader_id, start=start, end=end)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
