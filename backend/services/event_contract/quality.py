@@ -116,3 +116,12 @@ class EventContractQualityMixin:
         public_cfg = self._public_config(cfg)
         payload = json.dumps(public_cfg, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    def _strategy_fingerprint(self, cfg: Dict[str, Any]) -> str:
+        """Config hash that ignores the tested window - two runs with the same
+        fingerprint on different windows form an honest out-of-sample pair."""
+        public_cfg = self._public_config(cfg)
+        for key in ("start_time", "end_time"):
+            public_cfg.pop(key, None)
+        payload = json.dumps(public_cfg, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

@@ -180,6 +180,41 @@ def pause_backtest_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+class HoldoutRequest(BaseModel):
+    start_time: str
+    end_time: str
+
+
+@router.post("/backtest/{run_id}/holdout")
+def create_holdout_task(run_id: int, payload: HoldoutRequest, request: Request, db: Session = Depends(get_db)):
+    """Re-run a stored config on a fresh window (frozen-parameter OOS check)."""
+    try:
+        import json as _json
+        from sqlalchemy import text as _text
+        row = db.execute(
+            _text("SELECT config, summary FROM event_contract_backtest_runs WHERE id = :id"),
+            {"id": run_id},
+        ).first()
+        if not row:
+            raise ValueError(f"Backtest run {run_id} not found")
+        config = _json.loads(row[0] or "{}")
+        config["start_time"] = payload.start_time
+        config["end_time"] = payload.end_time
+        config.pop("reviewer_weights", None)
+        task = create_event_backtest_task(db, config=config, user_id=_current_user_id(request, db))
+        start_event_backtest_task_thread(task["task_id"])
+        summary = _json.loads(row[1] or "{}")
+        task["source_run_id"] = run_id
+        task["strategy_fingerprint"] = summary.get("strategy_fingerprint")
+        return task
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Holdout task failed to start: {exc}")
+
+
 def _attach_user_coinglass_key(payload: Dict[str, Any], request: Request, db: Session) -> Dict[str, Any]:
     if not payload.get("enable_coinglass_features"):
         return payload

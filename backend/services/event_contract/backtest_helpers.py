@@ -87,6 +87,10 @@ class EventContractBacktestHelperMixin:
         summary = {
             "engine_version": ENGINE_VERSION,
             "config_hash": self._config_hash(cfg),
+            "strategy_fingerprint": self._strategy_fingerprint(cfg),
+            "platform": cfg.get("platform", "custom"),
+            "non_overlapping_only": cfg.get("non_overlapping_only", True),
+            "reviewer_weights_mode": cfg.get("reviewer_weights_mode", "pre_window"),
             "data_quality": data_quality,
             "consensus_mode": cfg["consensus_mode"],
             "decision_policy": cfg["decision_policy"],
