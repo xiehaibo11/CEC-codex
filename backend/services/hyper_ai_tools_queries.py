@@ -4,14 +4,16 @@ market data (klines/regime/flow), system logs, contact, trading environment, wat
 import json
 import logging
 import os
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone, timedelta
+from typing import List
 
-import requests
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import func
 
-from database.models import SystemConfig
+from services.hyper_ai_tools_market_queries import (
+    execute_get_klines,
+    execute_get_market_flow,
+    execute_get_market_regime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,6 @@ def execute_get_system_overview(db: Session) -> str:
     from database.models import (
         Account, HyperliquidWallet, BinanceWallet, PromptTemplate,
         TradingProgram, SignalPool, AccountPromptBinding, AccountProgramBinding,
-        HyperliquidPosition
     )
 
     try:
@@ -239,100 +240,6 @@ def execute_get_api_reference(doc_type: str, api_type: str = "all", lang: str = 
         return json.dumps({"error": str(e)})
 
 
-def execute_get_klines(db: Session, symbol: str, period: str = "1h", limit: int = 50, exchange: str = "hyperliquid") -> str:
-    """Get K-line data for a symbol."""
-    from database.models import CryptoKline
-
-    try:
-        limit = min(max(limit, 1), 200)
-
-        klines = db.query(CryptoKline).filter(
-            CryptoKline.exchange == exchange,
-            CryptoKline.symbol == symbol.upper(),
-            CryptoKline.period == period,
-            CryptoKline.environment == "mainnet"
-        ).order_by(CryptoKline.timestamp.desc()).limit(limit).all()
-
-        candles = []
-        for k in reversed(klines):
-            candles.append({
-                "time": datetime.utcfromtimestamp(k.timestamp).strftime("%Y-%m-%d %H:%M UTC"),
-                "open": float(k.open_price) if k.open_price else 0,
-                "high": float(k.high_price) if k.high_price else 0,
-                "low": float(k.low_price) if k.low_price else 0,
-                "close": float(k.close_price) if k.close_price else 0,
-                "volume": float(k.volume) if k.volume else 0
-            })
-
-        return json.dumps({
-            "symbol": symbol.upper(),
-            "period": period,
-            "exchange": exchange,
-            "candles": candles,
-            "count": len(candles)
-        }, indent=2)
-
-    except Exception as e:
-        logger.error(f"[get_klines] Error: {e}")
-        return json.dumps({"error": str(e)})
-
-
-def execute_get_market_regime(db: Session, symbol: str, period: str = "1h", exchange: str = "hyperliquid") -> str:
-    """Get market regime classification for a symbol."""
-    try:
-        from program_trader.data_provider import DataProvider
-
-        data_provider = DataProvider(db=db, account_id=0, environment="mainnet", exchange=exchange)
-        regime = data_provider.get_regime(symbol.upper(), period)
-
-        if regime:
-            return json.dumps({
-                "symbol": symbol.upper(),
-                "period": period,
-                "exchange": exchange,
-                "regime": regime.regime,
-                "confidence": regime.conf
-            }, indent=2)
-        else:
-            return json.dumps({
-                "symbol": symbol.upper(),
-                "period": period,
-                "exchange": exchange,
-                "regime": "unknown",
-                "confidence": 0,
-                "note": "Unable to determine market regime"
-            })
-
-    except Exception as e:
-        logger.error(f"[get_market_regime] Error: {e}")
-        return json.dumps({"error": str(e)})
-
-
-def execute_get_market_flow(db: Session, symbol: str, period: str = "1h", exchange: str = "hyperliquid") -> str:
-    """Get market flow data for a symbol."""
-    try:
-        from program_trader.data_provider import DataProvider
-
-        data_provider = DataProvider(db=db, account_id=0, environment="mainnet", exchange=exchange)
-
-        flow = {}
-        for metric in ["CVD", "OI", "OI_DELTA", "TAKER", "FUNDING"]:
-            result = data_provider.get_flow(symbol.upper(), metric, period)
-            if result:
-                flow[metric] = result
-
-        return json.dumps({
-            "symbol": symbol.upper(),
-            "period": period,
-            "exchange": exchange,
-            "flow": flow
-        }, indent=2)
-
-    except Exception as e:
-        logger.error(f"[get_market_flow] Error: {e}")
-        return json.dumps({"error": str(e)})
-
-
 def execute_get_system_logs(db: Session, level: str = "error", limit: int = 20, trader_id: int = None) -> str:
     """Get recent system logs enriched with error registry metadata."""
     from services.system_logger import system_logger
@@ -528,5 +435,4 @@ def execute_update_watchlist(db: Session, exchange: str, symbols: List[str]) -> 
     except Exception as e:
         logger.error(f"[update_watchlist] Error: {e}")
         return json.dumps({"error": str(e)})
-
 

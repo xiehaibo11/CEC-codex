@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from services.event_contract.localization import join_chinese_reasons, localize_direction
+
 
 class EventContractSignalMixin:
     def _build_event_signal(
@@ -36,7 +38,7 @@ class EventContractSignalMixin:
         entry_ts = self._decision_timestamp(latest, cfg)
         entry_time = self._to_iso(entry_ts)
         expiry_time = self._to_iso(entry_ts + cfg["expiry_minutes"] * 60)
-        avoid_condition = "; ".join(blocked_reasons) if blocked_reasons else ""
+        avoid_condition = join_chinese_reasons(blocked_reasons) if blocked_reasons else ""
 
         return {
             "signal_id": f"{cfg['symbol']}-{entry_ts}-{event_signal_type}",
@@ -50,6 +52,14 @@ class EventContractSignalMixin:
             "confidence": round(confidence, 2),
             "signal_strength": round(signal_strength, 2),
             "expected_win_rate": round(expected_win_rate, 2),
+            "decision_policy": ai_consensus.get("decision_policy"),
+            "edge_score": ai_consensus.get("edge_score"),
+            "risk_score": ai_consensus.get("risk_score"),
+            "execution_score": ai_consensus.get("execution_score"),
+            "decision_grade": ai_consensus.get("decision_grade"),
+            "trade_readiness": ai_consensus.get("trade_readiness"),
+            "veto_reasons": ai_consensus.get("veto_reasons") or [],
+            "decision_diagnostics": ai_consensus.get("decision_diagnostics") or {},
             "trap_risk": round(risks["trap"], 2),
             "fake_breakout_risk": round(risks["fake_breakout"], 2),
             "range_risk": round(risks["range"], 2),
@@ -81,7 +91,7 @@ class EventContractSignalMixin:
             return "BEAR_TRAP_WARNING"
         if risks["range"] > 70:
             return "RANGE_MIDDLE_WARNING"
-        if any("Critical" in reason for reason in blocked_reasons):
+        if any(self._is_critical_hold_reason(reason) for reason in blocked_reasons):
             return "NO_TRADE_ZONE"
         if signal_type == "watch_signal" and final_direction == "long":
             return "WATCH_LONG"
@@ -96,9 +106,27 @@ class EventContractSignalMixin:
         ai_consensus: Dict[str, Any],
     ) -> str:
         if not allow_trade:
-            return "No immediate entry. Event signal is not a trade signal."
+            return "暂无立即入场条件：事件信号不是交易信号。"
+        if ai_consensus.get("decision_policy") == "professional_v1":
+            return (
+                f"专业决策通过：优势 {ai_consensus.get('edge_score', 0):.2f}；"
+                f"风险 {ai_consensus.get('risk_score', 0):.2f}；"
+                f"执行 {ai_consensus.get('execution_score', 0):.2f}；"
+                f"等级 {ai_consensus.get('decision_grade', '-') }。"
+            )
+        votes = ai_consensus.get("top_votes", 0)
+        total = ai_consensus.get("reviewer_count", 0)
+        required = ai_consensus.get("required_votes", 0)
+        direction = localize_direction(final_direction)
         return (
-            f"30/30 AI consensus for {final_direction}; "
-            f"signal strength {ai_consensus['signal_strength']:.2f}; "
-            f"consensus rate {ai_consensus['consensus_rate']:.2f}%."
+            f"{votes}/{total} 票支持{direction}（要求 {required}/{total}）；"
+            f"信号强度 {ai_consensus['signal_strength']:.2f}；"
+            f"共识率 {ai_consensus['consensus_rate']:.2f}%。"
+        )
+
+    @staticmethod
+    def _is_critical_hold_reason(reason: str) -> bool:
+        return (
+            "Critical" in reason
+            or ("关键" in reason and "选择观望" in reason)
         )

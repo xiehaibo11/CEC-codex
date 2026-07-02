@@ -7,13 +7,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any
 
 from database.connection import SessionLocal
 from database.models import Account, AccountStrategyConfig, GlobalSamplingConfig
-from sqlalchemy import text
 from repositories.strategy_repo import (
     get_strategy_by_account,
     list_strategies,
@@ -24,90 +22,11 @@ from services.trading_commands import (
     place_ai_driven_crypto_order,
     place_ai_driven_hyperliquid_order,
 )
-from services.hyperliquid_symbol_service import get_selected_symbols as get_hyperliquid_selected_symbols
+from services.trading_strategy_state import StrategyState, as_aware_utc
 
 logger = logging.getLogger(__name__)
 
 STRATEGY_REFRESH_INTERVAL = 60.0  # seconds
-
-
-def _as_aware(dt: Optional[datetime]) -> Optional[datetime]:
-    """Ensure stored timestamps are timezone-aware UTC.
-
-    Note: Database stores UTC time in 'timestamp without time zone' columns.
-    The naive datetime from DB is already UTC, just missing the timezone marker.
-    """
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        # Database stores UTC time, so treat naive datetime as UTC
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
-@dataclass
-class StrategyState:
-    account_id: int
-    price_threshold: float  # Deprecated, kept for compatibility
-    trigger_interval: int   # Trigger interval (seconds) - scheduled trigger fallback
-    signal_pool_ids: List[int]  # Signal pool bindings for signal-based triggering (OR relationship)
-    enabled: bool
-    scheduled_trigger_enabled: bool  # Enable/disable scheduled trigger
-    last_trigger_at: Optional[datetime]
-    exchange: str = "hyperliquid"  # "hyperliquid" or "binance"
-    running: bool = False
-    lock: threading.Lock = field(default_factory=threading.Lock)
-
-    # Backward compatibility property
-    @property
-    def signal_pool_id(self) -> Optional[int]:
-        return self.signal_pool_ids[0] if self.signal_pool_ids else None
-
-    def should_trigger_scheduled(self, event_time: datetime) -> bool:
-        """Check if strategy should trigger based on scheduled time interval (fallback)"""
-        if not self.enabled:
-            return False
-
-        # Check if scheduled trigger is disabled
-        if not self.scheduled_trigger_enabled:
-            return False
-
-        # Quick check without lock to avoid unnecessary contention
-        if self.running:
-            return False
-
-        with self.lock:
-            # Double-check after acquiring lock
-            if self.running:
-                return False
-
-            now_ts = event_time.timestamp()
-            last_ts = self.last_trigger_at.timestamp() if self.last_trigger_at else 0
-            time_diff = now_ts - last_ts
-
-            # Check time interval trigger (scheduled fallback)
-            if time_diff >= self.trigger_interval:
-                self.last_trigger_at = event_time
-                self.running = True
-                logger.info(
-                    f"Strategy scheduled trigger for account {self.account_id}: "
-                    f"Time interval ({time_diff:.1f}s / {self.trigger_interval}s)"
-                )
-                return True
-
-            return False
-
-    def mark_triggered_by_signal(self, event_time: datetime) -> bool:
-        """Mark strategy as triggered by signal (called from signal callback)"""
-        if not self.enabled:
-            return False
-
-        with self.lock:
-            if self.running:
-                return False
-            self.last_trigger_at = event_time
-            self.running = True
-            return True
 
 
 class StrategyManager:
@@ -173,7 +92,7 @@ class StrategyManager:
                         signal_pool_ids=pool_ids,
                         enabled=strategy.enabled == "true",
                         scheduled_trigger_enabled=strategy.scheduled_trigger_enabled,
-                        last_trigger_at=_as_aware(strategy.last_trigger_at),
+                        last_trigger_at=as_aware_utc(strategy.last_trigger_at),
                         exchange=getattr(strategy, 'exchange', None) or "hyperliquid",
                     )
                     self.strategies[strategy.account_id] = state
@@ -427,7 +346,7 @@ class HyperliquidStrategyManager(StrategyManager):
                         signal_pool_ids=pool_ids,
                         enabled=strategy.enabled == "true",
                         scheduled_trigger_enabled=strategy.scheduled_trigger_enabled,
-                        last_trigger_at=_as_aware(strategy.last_trigger_at),
+                        last_trigger_at=as_aware_utc(strategy.last_trigger_at),
                         exchange=getattr(strategy, 'exchange', None) or "hyperliquid",
                     )
                     self.strategies[strategy.account_id] = state

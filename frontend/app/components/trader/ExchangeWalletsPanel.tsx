@@ -11,7 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useTranslation } from 'react-i18next'
 import BinanceWalletSection from './BinanceWalletSection'
+import HibtWalletSection from './HibtWalletSection'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
+import type { ExchangeId } from '@/lib/types/exchange'
 
 interface ExchangeWalletsPanelProps {
   accountId: number
@@ -21,6 +23,7 @@ interface ExchangeWalletsPanelProps {
 
 interface ExchangeStatus {
   binance: { testnet: boolean; mainnet: boolean }
+  hibt: { testnet: boolean; mainnet: boolean }
 }
 
 // Connected icon (green link)
@@ -45,7 +48,8 @@ export default function ExchangeWalletsPanel({
   const { t } = useTranslation()
   const [openSections, setOpenSections] = useState<string[]>([])
   const [status, setStatus] = useState<ExchangeStatus>({
-    binance: { testnet: false, mainnet: false }
+    binance: { testnet: false, mainnet: false },
+    hibt: { testnet: false, mainnet: false }
   })
 
   // Load all exchange statuses on mount
@@ -69,6 +73,22 @@ export default function ExchangeWalletsPanel({
       }
     } catch (error) {
       console.error('Failed to load Binance status:', error)
+    }
+
+    try {
+      const res = await fetch(`/api/hibt/accounts/${accountId}/config`)
+      if (res.ok) {
+        const data = await res.json()
+        setStatus(prev => ({
+          ...prev,
+          hibt: {
+            testnet: data.testnet_configured,
+            mainnet: data.mainnet_configured
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to load HiBT status:', error)
     }
   }
 
@@ -145,7 +165,7 @@ export default function ExchangeWalletsPanel({
               ) : (
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               )}
-              <ExchangeIcon exchangeId={exchangeKey as 'hyperliquid' | 'binance'} size={16} />
+              <ExchangeIcon exchangeId={exchangeKey as ExchangeId} size={16} />
               <span className="font-medium text-sm">{exchangeName}</span>
             </div>
             {renderStatusBadges(exchangeStatus)}
@@ -176,6 +196,7 @@ export default function ExchangeWalletsPanel({
 
       <div className="space-y-2">
         {renderExchangeSection('binance', 'Binance Futures', status.binance, BinanceWalletSection)}
+        {renderExchangeSection('hibt', 'HiBT Futures', status.hibt, HibtWalletSection)}
       </div>
     </div>
   )

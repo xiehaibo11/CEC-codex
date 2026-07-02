@@ -1,4 +1,4 @@
-export type ManualTradingExchangeId = 'hyperliquid' | 'binance'
+export type ManualTradingExchangeId = 'hyperliquid' | 'binance' | 'hibt'
 
 export interface ManualTradingWalletLike {
   wallet_address?: string
@@ -32,8 +32,20 @@ const BINANCE_MANUAL_TRADING_CONFIG: ManualTradingExchangeConfig = {
   formatWalletIdentifier: (wallet) => wallet.api_key_masked || '****',
 }
 
+const HIBT_MANUAL_TRADING_CONFIG: ManualTradingExchangeConfig = {
+  id: 'hibt',
+  label: 'HiBT Futures',
+  shortLabel: 'HiBT',
+  walletsEndpoint: '/api/hibt/wallets/all',
+  watchlistEndpoint: '/api/hibt/symbols/watchlist',
+  defaultSymbols: ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'],
+  supportsApiUsage: false,
+  formatWalletIdentifier: (wallet) => wallet.api_key_masked || '****',
+}
+
 export const MANUAL_TRADING_EXCHANGES: ManualTradingExchangeConfig[] = [
   BINANCE_MANUAL_TRADING_CONFIG,
+  HIBT_MANUAL_TRADING_CONFIG,
 ]
 
 export const DEFAULT_MANUAL_TRADING_EXCHANGE: ManualTradingExchangeId =

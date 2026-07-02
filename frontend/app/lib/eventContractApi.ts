@@ -17,9 +17,11 @@ export interface EventContractConfig {
   period: string
   expiry_minutes: number
   consensus_mode?: 'ai_confirmed' | 'rule_only'
+  decision_policy?: 'professional_v1' | 'legacy_vote'
   ai_trader_id?: number | null
   max_ai_evaluations?: number
   consensus_threshold: number
+  reviewer_panel_size: number
   target_win_rate?: number
   target_min_trades?: number
   enable_edge_quality_gate?: boolean
@@ -61,7 +63,7 @@ export interface EventContractBacktestConfig extends EventContractConfig {
 
 export interface EventAiDecision {
   ai_name: string
-  source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  source?: 'llm_ai' | 'system_panel' | 'main_logic' | 'rule_prefilter'
   model?: string
   account_name?: string
   direction: 'long' | 'short' | 'hold'
@@ -75,7 +77,7 @@ export interface EventAiDecision {
 
 export interface EventAiReviewerStatus {
   ai_name: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
   direction?: 'long' | 'short' | 'hold' | null
   confidence?: number | null
   reason?: string | null
@@ -99,14 +101,30 @@ export interface EventFactorSnapshot {
 export interface EventConsensus {
   final_direction: 'long' | 'short' | 'hold'
   consensus_mode?: 'ai_confirmed' | 'rule_only'
-  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  decision_policy?: 'professional_v1' | 'legacy_vote'
+  consensus_source?: 'llm_ai' | 'system_panel' | 'main_logic' | 'rule_prefilter'
   ai_participated?: boolean
+  main_logic_participated?: boolean
+  main_logic_direction?: 'long' | 'short' | 'hold' | null
   ai_model?: string | null
   ai_account_name?: string | null
   long_votes: number
   short_votes: number
   hold_votes: number
+  top_votes?: number
+  top_direction?: 'long' | 'short' | 'hold'
+  required_votes?: number
+  reviewer_count?: number
+  reviewer_panel_size?: number
+  weighted_consensus_rate?: number
   consensus_rate: number
+  edge_score?: number
+  risk_score?: number
+  execution_score?: number
+  decision_grade?: 'A' | 'B' | 'C' | 'D' | 'F'
+  trade_readiness?: 'tradable' | 'watch' | 'blocked'
+  veto_reasons?: string[]
+  decision_diagnostics?: EventDecisionDiagnostics
   allow_trade: boolean
   signal_type: string
   event_signal_type?: string
@@ -126,6 +144,14 @@ export interface EventSignal {
   confidence: number
   signal_strength: number
   expected_win_rate: number
+  decision_policy?: 'professional_v1' | 'legacy_vote'
+  edge_score?: number
+  risk_score?: number
+  execution_score?: number
+  decision_grade?: 'A' | 'B' | 'C' | 'D' | 'F'
+  trade_readiness?: 'tradable' | 'watch' | 'blocked'
+  veto_reasons?: string[]
+  decision_diagnostics?: EventDecisionDiagnostics
   trap_risk: number
   fake_breakout_risk: number
   range_risk: number
@@ -135,6 +161,21 @@ export interface EventSignal {
   reason: string
   related_factors: string[]
   ai_consensus: EventConsensus
+}
+
+export interface EventDecisionDiagnostics {
+  vote_rate?: number
+  top_direction?: 'long' | 'short' | 'hold'
+  trend_component?: number
+  volume_component?: number
+  avg_confidence?: number
+  risk_veto_count?: number
+  composite_score?: number
+  edge_threshold?: number
+  risk_threshold?: number
+  execution_threshold?: number
+  readiness_rule?: string
+  [key: string]: any
 }
 
 export interface EventDataQuality {
@@ -150,6 +191,7 @@ export interface EventDataQuality {
   duplicate_count: number
   non_monotonic_count: number
   gap_count: number
+  missing_bar_count?: number
   max_gap_seconds: number
   sample_gaps?: Array<any>
   warnings: string[]
@@ -170,6 +212,7 @@ export interface EventPrediction {
   exchange: string
   period: string
   consensus_mode?: 'ai_confirmed' | 'rule_only'
+  decision_policy?: 'professional_v1' | 'legacy_vote'
   ai_participated?: boolean
   ai_model?: string | null
   ai_account_name?: string | null
@@ -189,6 +232,13 @@ export interface EventPrediction {
   trap_risk: number
   fake_breakout_risk: number
   range_risk: number
+  edge_score?: number
+  risk_score?: number
+  execution_score?: number
+  decision_grade?: 'A' | 'B' | 'C' | 'D' | 'F'
+  trade_readiness?: 'tradable' | 'watch' | 'blocked'
+  veto_reasons?: string[]
+  decision_diagnostics?: EventDecisionDiagnostics
   reason: string
   entry_warning: string
   similar_patterns: Array<any>
@@ -217,7 +267,7 @@ export interface EventTradeLog {
   equity_after?: number
   signal_strength: number
   ai_consensus_rate: number
-  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  consensus_source?: 'llm_ai' | 'system_panel' | 'main_logic' | 'rule_prefilter'
   ai_participated?: boolean
   ai_model?: string | null
   ai_account_name?: string | null
@@ -234,12 +284,205 @@ export interface EventTradeLog {
   ai_decision_snapshot: EventAiDecision[]
 }
 
+export interface EventBacktestQualityCheck {
+  id: string
+  label: string
+  status: 'pass' | 'warning' | 'fail'
+  message: string
+  deduction?: number
+}
+
+export interface EventBacktestQualityGate {
+  score: number
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  status: 'pass' | 'warning' | 'fail'
+  warnings: string[]
+  checks: EventBacktestQualityCheck[]
+  recommendations: string[]
+}
+
+export interface EventBacktestValidationWindow {
+  window: number
+  start_trade_index: number
+  end_trade_index: number
+  trade_count: number
+  win_rate: number
+  pnl: number
+  max_drawdown: number
+  passed: boolean
+}
+
+export interface EventBacktestRegimeValidation {
+  regime: string
+  trade_count: number
+  win_rate: number
+  pnl: number
+  max_drawdown: number
+  unstable: boolean
+}
+
+export interface EventBacktestValidationReport {
+  version: string
+  verdict: 'pass' | 'warning' | 'fail'
+  warnings: string[]
+  walk_forward: {
+    window_count: number
+    pass_rate: number
+    stability_score: number
+    worst_window_win_rate: number
+    worst_window_pnl: number
+    windows: EventBacktestValidationWindow[]
+  }
+  monte_carlo: {
+    simulations: number
+    profitable_ratio: number
+    p5_pnl: number
+    p50_pnl: number
+    p95_pnl: number
+    max_drawdown_p95: number
+  }
+  regime_stability: {
+    regime_count: number
+    weakest_regime?: string | null
+    unstable_regime_count: number
+    by_regime: EventBacktestRegimeValidation[]
+  }
+  live_decay_estimate: {
+    expected_decay_pct: number
+    conservative_pnl: number
+    verdict: 'pass' | 'warning' | 'fail'
+    reasons: string[]
+  }
+}
+
+export interface EventBacktestResearchVerdict {
+  status: 'rejected' | 'watch' | 'paper_candidate'
+  label: string
+  best_candidate_id?: string | null
+  best_candidate_name?: string | null
+  reasons: string[]
+}
+
+export interface EventBacktestOosValidation {
+  method: string
+  train_trade_count: number
+  train_win_rate: number
+  train_pnl: number
+  oos_trade_count: number
+  oos_win_rate: number
+  oos_pnl: number
+  win_rate_gap: number
+  target_win_rate: number
+  break_even_win_rate: number
+  split_trade_index?: number
+  overfit_risk: 'none' | 'low' | 'medium' | 'high' | 'critical'
+  status: 'pass' | 'watch' | 'fail' | 'insufficient_oos' | 'no_trades'
+  summary: string
+}
+
+export interface EventBacktestStrategyCandidate {
+  candidate_id: string
+  name: string
+  description: string
+  trade_count: number
+  win_rate: number
+  pnl: number
+  train_trade_count: number
+  train_win_rate: number
+  oos_trade_count: number
+  oos_win_rate: number
+  oos_pnl: number
+  win_rate_gap: number
+  overfit_risk: 'none' | 'low' | 'medium' | 'high' | 'critical'
+  recommendation: string
+  recommendation_rank?: number
+}
+
+export interface EventBacktestFactorInsight {
+  factor_name: string
+  category: string
+  sample_count: number
+  win_mean: number
+  loss_mean: number
+  separation_score: number
+  direction: 'positive_edge' | 'negative_edge'
+  reliability: 'strong' | 'medium' | 'weak' | 'low_sample'
+  interpretation: string
+}
+
+export interface EventBacktestOverfitWarning {
+  severity: 'medium' | 'high' | 'critical'
+  message: string
+  evidence: string
+}
+
+export interface EventBacktestMissingDataRecommendation {
+  data_type: string
+  status: string
+  recommendation: string
+}
+
+export interface EventBacktestAiTrader {
+  trader_id: string
+  ai_name: string
+  name: string
+  strategy_type: string
+  factor_focus: string[]
+  evaluated_count: number
+  hold_count: number
+  missing_decision_count: number
+  trade_count: number
+  wins: number
+  losses: number
+  draws: number
+  win_rate: number
+  pnl: number
+  max_drawdown: number
+  train_trade_count: number
+  train_win_rate: number
+  train_pnl: number
+  oos_trade_count: number
+  oos_win_rate: number
+  oos_pnl: number
+  win_rate_gap: number
+  overfit_risk: 'none' | 'low' | 'medium' | 'high' | 'critical'
+  break_even_win_rate: number
+  target_win_rate: number
+  recommendation: string
+  recommendation_rank: number
+}
+
+export interface EventBacktestAiTraderTeam {
+  mode: 'independent_traders'
+  description: string
+  total_traders: number
+  total_team_trades: number
+  top_traders: EventBacktestAiTrader[]
+  paper_candidates: EventBacktestAiTrader[]
+  rejected_traders: EventBacktestAiTrader[]
+  traders: EventBacktestAiTrader[]
+}
+
+export interface EventBacktestResearchReport {
+  version: string
+  verdict: EventBacktestResearchVerdict
+  oos_validation: EventBacktestOosValidation
+  strategy_candidates: EventBacktestStrategyCandidate[]
+  factor_insights: EventBacktestFactorInsight[]
+  overfitting_warnings: EventBacktestOverfitWarning[]
+  missing_data_recommendations: EventBacktestMissingDataRecommendation[]
+  ai_trader_team?: EventBacktestAiTraderTeam
+}
+
 export interface EventBacktestSummary {
   engine_version?: string
   config_hash?: string
   data_quality?: EventDataQuality
+  quality_gate?: EventBacktestQualityGate
+  validation_report?: EventBacktestValidationReport
+  research_report?: EventBacktestResearchReport
   consensus_mode?: 'ai_confirmed' | 'rule_only'
-  consensus_source?: 'llm_ai' | 'system_30_ai' | 'rule_prefilter'
+  consensus_source?: 'llm_ai' | 'system_panel' | 'main_logic' | 'rule_prefilter'
   ai_confirmed?: boolean
   max_ai_evaluations?: number
   target_win_rate?: number
@@ -382,6 +625,11 @@ export async function createEventContractBacktestTask(
 
 export async function getEventContractBacktestTask(taskId: number): Promise<EventBacktestTaskStatus> {
   const response = await apiRequest(`/event-contract/backtest/tasks/${taskId}`)
+  return response.json()
+}
+
+export async function getLatestEventContractBacktestTask(): Promise<EventBacktestTaskStatus | null> {
+  const response = await apiRequest('/event-contract/backtest/tasks/latest')
   return response.json()
 }
 

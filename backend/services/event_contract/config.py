@@ -6,7 +6,13 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
-from services.event_contract.constants import CONSENSUS_MODES, PERIOD_SECONDS
+from services.event_contract.constants import (
+    CONSENSUS_MODES,
+    DEFAULT_CONSENSUS_THRESHOLD,
+    DEFAULT_REVIEWER_PANEL_SIZE,
+    MAX_REVIEWER_PANEL_SIZE,
+    PERIOD_SECONDS,
+)
 
 
 class EventContractConfigMixin:
@@ -36,7 +42,8 @@ class EventContractConfigMixin:
             "exchange": str(config.get("exchange") or "binance").lower(),
             "environment": str(config.get("environment") or "mainnet").lower(),
             "period": period,
-            "consensus_mode": str(config.get("consensus_mode") or "ai_confirmed").lower(),
+            "consensus_mode": str(config.get("consensus_mode") or "rule_only").lower(),
+            "decision_policy": str(config.get("decision_policy") or "professional_v1").lower(),
             "ai_trader_id": int(config["ai_trader_id"]) if config.get("ai_trader_id") else None,
             "max_ai_evaluations": int(config.get("max_ai_evaluations") or (1 if prediction else 20)),
             "ai_temperature": float(config.get("ai_temperature") or 0.2),
@@ -77,7 +84,8 @@ class EventContractConfigMixin:
             "max_coinglass_pages_per_metric": int(config.get("max_coinglass_pages_per_metric") or 80),
             "_coinglass_api_key": str(config.get("_coinglass_api_key") or "").strip(),
             "_coinglass_key_source": str(config.get("_coinglass_key_source") or "server"),
-            "consensus_threshold": int(config.get("consensus_threshold") or 30),
+            "reviewer_panel_size": int(config.get("reviewer_panel_size") or DEFAULT_REVIEWER_PANEL_SIZE),
+            "consensus_threshold": int(config.get("consensus_threshold") or DEFAULT_CONSENSUS_THRESHOLD),
             "target_win_rate": float(config["target_win_rate"] if config.get("target_win_rate") is not None else 75),
             "target_min_trades": int(config.get("target_min_trades") or 10),
             "enable_edge_quality_gate": bool(config.get("enable_edge_quality_gate", True)),
@@ -98,6 +106,15 @@ class EventContractConfigMixin:
         }
         if cfg["consensus_mode"] not in CONSENSUS_MODES:
             raise ValueError(f"Unsupported consensus_mode: {cfg['consensus_mode']}")
+        if cfg["decision_policy"] not in {"professional_v1", "legacy_vote"}:
+            raise ValueError(f"Unsupported decision_policy: {cfg['decision_policy']}")
+        if cfg["decision_policy"] == "professional_v1":
+            # Professional workflow is not a blocking LLM vote.  It uses the
+            # deterministic desk policy plus the independent 30-trader research
+            # report; keeping ai_confirmed here causes stale/slow consensus
+            # tasks and revives the wrong "all AIs must agree" mental model.
+            cfg["consensus_mode"] = "rule_only"
+            cfg["max_ai_evaluations"] = 1
         cfg["max_ai_evaluations"] = min(max(cfg["max_ai_evaluations"], 1), 200)
         cfg["llm_timeout_seconds"] = min(max(cfg["llm_timeout_seconds"], 30), 600)
         cfg["ai_max_retries"] = min(max(cfg["ai_max_retries"], 1), 5)
@@ -112,7 +129,8 @@ class EventContractConfigMixin:
         cg_lag_unit = PERIOD_SECONDS.get(str(cfg.get("coinglass_interval") or period), PERIOD_SECONDS[period])
         cfg["max_coinglass_lag_seconds"] = min(max(cfg["max_coinglass_lag_seconds"], 0), cg_lag_unit * 10)
         cfg["max_coinglass_pages_per_metric"] = min(max(cfg["max_coinglass_pages_per_metric"], 1), 500)
-        cfg["consensus_threshold"] = min(max(cfg["consensus_threshold"], 28), 30)
+        cfg["reviewer_panel_size"] = min(max(cfg["reviewer_panel_size"], 5), MAX_REVIEWER_PANEL_SIZE)
+        cfg["consensus_threshold"] = min(max(cfg["consensus_threshold"], 1), cfg["reviewer_panel_size"])
         cfg["target_win_rate"] = min(max(cfg["target_win_rate"], 0), 100)
         cfg["target_min_trades"] = min(max(cfg["target_min_trades"], 1), 10000)
         cfg["max_trade_range_risk"] = min(max(cfg["max_trade_range_risk"], 0), 100)

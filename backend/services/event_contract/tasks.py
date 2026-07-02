@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
-from services.event_contract.constants import EVENT_AI_NAMES
+from services.event_contract.constants import DEFAULT_REVIEWER_PANEL_SIZE, reviewer_names_for_panel
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,8 @@ TASK_STATUS_COMPLETED = "completed"
 TASK_STATUS_FAILED = "failed"
 
 DEFAULT_PROGRESS_WEIGHTS = {"data": 0.15, "bars": 0.65, "ai": 0.20}
+STALE_TASK_TIMEOUT_SECONDS = 10 * 60
+STALE_TASK_STATUSES = {TASK_STATUS_PENDING, TASK_STATUS_RUNNING, TASK_STATUS_PAUSE_REQUESTED}
 
 
 class EventBacktestPaused(Exception):
@@ -67,10 +69,12 @@ def build_ai_reviewer_statuses(
     *,
     status: str = "pending",
     active_name: str | None = None,
+    reviewer_names: Iterable[str] | None = None,
 ) -> List[Dict[str, Any]]:
     by_name = {str(item.get("ai_name", "")).strip(): dict(item) for item in decisions or []}
     result: List[Dict[str, Any]] = []
-    for name in EVENT_AI_NAMES:
+    names = list(reviewer_names or reviewer_names_for_panel(DEFAULT_REVIEWER_PANEL_SIZE))
+    for name in names:
         item = by_name.get(name)
         if item:
             result.append(
@@ -108,7 +112,8 @@ def create_event_backtest_task(
     user_id: int | None = None,
     name: str | None = None,
 ) -> Dict[str, Any]:
-    public_config = {key: value for key, value in config.items() if not key.startswith("_")}
+    public_config = _public_task_config(config)
+    reviewer_names = reviewer_names_for_panel(int(public_config.get("reviewer_panel_size") or DEFAULT_REVIEWER_PANEL_SIZE))
     # rule_only mode never calls the LLM reviewers, so seed each reviewer slot with
     # "skipped" instead of "pending" - keeps the UI honest about what's running.
     initial_reviewer_status = (
@@ -139,7 +144,9 @@ def create_event_backtest_task(
             "period": str(public_config.get("period") or "1m"),
             "config": json.dumps(public_config),
             "phase": "queued",
-            "ai_reviewer_statuses": json.dumps(build_ai_reviewer_statuses(status=initial_reviewer_status)),
+            "ai_reviewer_statuses": json.dumps(
+                build_ai_reviewer_statuses(status=initial_reviewer_status, reviewer_names=reviewer_names)
+            ),
         },
     )
     task_id = int(result.scalar_one())
@@ -147,8 +154,25 @@ def create_event_backtest_task(
     return get_event_backtest_task(db, task_id)
 
 
+def _public_task_config(config: Mapping[str, Any]) -> Dict[str, Any]:
+    public_config = {key: value for key, value in config.items() if not key.startswith("_")}
+    if str(public_config.get("decision_policy") or "professional_v1").lower() == "professional_v1":
+        public_config["decision_policy"] = "professional_v1"
+        public_config["consensus_mode"] = "rule_only"
+        public_config["max_ai_evaluations"] = 1
+    return public_config
+
+
 def get_event_backtest_task(db: Session, task_id: int) -> Dict[str, Any]:
-    row = db.execute(
+    row = _select_event_backtest_task_row(db, task_id)
+    if not row:
+        raise ValueError(f"Event backtest task {task_id} not found")
+    row = _expire_stale_task_if_needed(db, row)
+    return _row_to_task(row)
+
+
+def _select_event_backtest_task_row(db: Session, task_id: int) -> Mapping[str, Any] | None:
+    return db.execute(
         text(
             """
             SELECT id, user_id, run_id, name, status, symbol, exchange, environment,
@@ -162,9 +186,42 @@ def get_event_backtest_task(db: Session, task_id: int) -> Dict[str, Any]:
         ),
         {"task_id": task_id},
     ).mappings().first()
+
+
+def find_latest_event_backtest_task(db: Session, user_id: int | None = None) -> Dict[str, Any] | None:
+    if user_id is None:
+        where_clause = "user_id IS NULL"
+        params: Dict[str, Any] = {}
+    else:
+        where_clause = "user_id = :user_id"
+        params = {"user_id": user_id}
+    row = db.execute(
+        text(
+            f"""
+            SELECT id, user_id, run_id, name, status, symbol, exchange, environment,
+                   period, config, progress_pct, phase, processed_decision_bars,
+                   total_decision_bars, completed_ai_reviews, expected_ai_reviews,
+                   ai_reviewer_statuses, latest_message, error_message,
+                   started_at, finished_at, created_at, updated_at
+            FROM event_contract_backtest_tasks
+            WHERE {where_clause}
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """
+        ),
+        params,
+    ).mappings().first()
     if not row:
-        raise ValueError(f"Event backtest task {task_id} not found")
+        return None
+    row = _expire_stale_task_if_needed(db, row)
     return _row_to_task(row)
+
+
+def get_latest_event_backtest_task(db: Session, user_id: int | None = None) -> Dict[str, Any]:
+    task = find_latest_event_backtest_task(db, user_id=user_id)
+    if not task:
+        raise ValueError("No event backtest task found")
+    return task
 
 
 def request_event_backtest_pause(db: Session, task_id: int) -> Dict[str, Any]:
@@ -355,6 +412,55 @@ def _apply_progress_event(db: Session, task_id: int, event: Dict[str, Any]) -> N
     )
 
 
+def _expire_stale_task_if_needed(db: Session, row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Mark old active tasks as expired before presenting them to the UI.
+
+    Backtest tasks run in in-process daemon threads.  If the backend process is
+    restarted or a worker dies while a task is in ``ai_review``/``running``, the
+    persisted row can otherwise look alive forever.  Reads are the safest place
+    to reconcile that state because every UI restore and polling path comes
+    through here.
+    """
+
+    if str(row.get("status") or "") not in STALE_TASK_STATUSES:
+        return row
+    updated_at = _parse_dt(row.get("updated_at"))
+    if not updated_at:
+        return row
+    age_seconds = (utc_now() - updated_at).total_seconds()
+    if age_seconds <= STALE_TASK_TIMEOUT_SECONDS:
+        return row
+
+    db.execute(
+        text(
+            """
+            UPDATE event_contract_backtest_tasks
+            SET status = :status,
+                phase = :phase,
+                latest_message = :latest_message,
+                error_message = :error_message,
+                finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :task_id
+              AND status IN ('pending', 'running', 'pause_requested')
+            """
+        ),
+        {
+            "task_id": row["id"],
+            "status": TASK_STATUS_FAILED,
+            "phase": "expired",
+            "latest_message": "任务已过期，请重新运行回测",
+            "error_message": (
+                f"Stale event backtest task expired after {int(age_seconds)} seconds "
+                f"without progress update."
+            ),
+        },
+    )
+    db.commit()
+    refreshed = _select_event_backtest_task_row(db, int(row["id"]))
+    return refreshed or row
+
+
 def _row_to_task(row: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "task_id": row["id"],
@@ -403,3 +509,22 @@ def _dt_to_iso(value: Any) -> str | None:
             value = value.replace(tzinfo=timezone.utc)
         return value.isoformat()
     return str(value)
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        raw = raw.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

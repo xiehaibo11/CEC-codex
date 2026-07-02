@@ -3,7 +3,9 @@ Market data API routes
 Provides RESTful API interfaces for crypto market data
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import logging
@@ -76,7 +78,10 @@ async def get_crypto_price(symbol: str, market: str = "US"):
         Response containing latest price
     """
     try:
-        ticker_data = get_ticker_data(symbol, market)
+        # get_ticker_data makes blocking network calls to the exchange; run it
+        # off the event loop so one slow/timing-out request can't stall every
+        # other concurrent request on the server.
+        ticker_data = await run_in_threadpool(get_ticker_data, symbol, market)
 
         import time
         return PriceResponse(
@@ -113,29 +118,38 @@ async def get_multiple_prices(symbols: str, market: str = "hyperliquid"):
         if len(symbol_list) > 20:
             raise HTTPException(status_code=400, detail="Maximum 20 crypto symbols supported")
         
-        results = []
         import time
         current_timestamp = int(time.time() * 1000)
-        
-        for symbol in symbol_list:
+
+        # Fetch all symbols concurrently (each call is a blocking network
+        # request) instead of serially, and keep each off the event loop.
+        async def _fetch(symbol: str):
             try:
-                ticker_data = get_ticker_data(symbol, market)
-                results.append(PriceResponse(
-                    symbol=ticker_data['symbol'],
-                    market=market,
-                    price=ticker_data['price'],
-                    oracle_price=ticker_data.get('oracle_price', 0),
-                    change24h=ticker_data['change24h'],
-                    volume24h=ticker_data['volume24h'],
-                    percentage24h=ticker_data['percentage24h'],
-                    open_interest=ticker_data.get('open_interest', 0),
-                    funding_rate=ticker_data.get('funding_rate', 0),
-                    timestamp=current_timestamp
-                ))
+                return await run_in_threadpool(get_ticker_data, symbol, market)
             except Exception as e:
                 logger.warning(f"Failed to get {symbol} ticker data: {e}")
+                return None
+
+        ticker_results = await asyncio.gather(*(_fetch(symbol) for symbol in symbol_list))
+
+        results = []
+        for ticker_data in ticker_results:
+            if ticker_data is None:
                 # Continue processing other cryptos without interrupting the entire request
-                
+                continue
+            results.append(PriceResponse(
+                symbol=ticker_data['symbol'],
+                market=market,
+                price=ticker_data['price'],
+                oracle_price=ticker_data.get('oracle_price', 0),
+                change24h=ticker_data['change24h'],
+                volume24h=ticker_data['volume24h'],
+                percentage24h=ticker_data['percentage24h'],
+                open_interest=ticker_data.get('open_interest', 0),
+                funding_rate=ticker_data.get('funding_rate', 0),
+                timestamp=current_timestamp
+            ))
+
         return results
     except HTTPException:
         raise
@@ -173,9 +187,9 @@ async def get_crypto_kline(
         if count <= 0 or count > 500:
             raise HTTPException(status_code=400, detail="Data count must be between 1-500")
         
-        # Get K-line data
-        kline_data = get_kline_data(symbol, market, period, count)
-        
+        # Get K-line data (blocking network/DB call - keep off the event loop)
+        kline_data = await run_in_threadpool(get_kline_data, symbol, market, period, count)
+
         # Convert data format
         kline_items = []
         for item in kline_data:
@@ -226,8 +240,8 @@ async def get_crypto_market_status(symbol: str, market: str = "US"):
         Response containing market status
     """
     try:
-        status_data = get_market_status(symbol, market)
-        
+        status_data = await run_in_threadpool(get_market_status, symbol, market)
+
         return MarketStatusResponse(
             symbol=status_data.get('symbol', symbol),
             market=status_data.get('market', market),
@@ -250,8 +264,8 @@ async def market_data_health():
     """
     try:
         # Test getting a price to check if service is running normally
-        test_price = get_last_price("MSFT", "US")
-        
+        test_price = await run_in_threadpool(get_last_price, "MSFT", "US")
+
         import time
         return {
             "status": "healthy",
@@ -315,8 +329,8 @@ async def get_kline_with_indicators(
         if count <= 0 or count > 500:
             raise HTTPException(status_code=400, detail="数据数量必须在1-500之间")
 
-        # 获取K线数据
-        kline_data = get_kline_data(symbol, market, period, count)
+        # 获取K线数据（阻塞式网络/数据库调用，放到线程池执行，避免卡住事件循环）
+        kline_data = await run_in_threadpool(get_kline_data, symbol, market, period, count)
 
         # 转换K线数据格式
         kline_items = []

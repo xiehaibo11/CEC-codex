@@ -6,11 +6,17 @@ import { Bot, Loader2, Pause, Play, RefreshCw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  getAllBinanceWallets,
+  runBinanceTestnetOrderProbe,
+  type BinanceTestnetOrderProbeResponse,
+} from '@/lib/binanceFuturesApi'
+import {
   getEventContractSymbols,
   createEventContractBacktestTask,
   getCoinGlassEventContractCapability,
   getEventContractBacktestTask,
   getHyperAiProfile,
+  getLatestEventContractBacktestTask,
   isAuthenticated,
   pauseEventContractBacktestTask,
   predictEventContract,
@@ -35,6 +41,7 @@ import { PERIOD_OPTIONS, PERIOD_SECONDS, type FormState } from './types'
 
 const BACKTEST_CONFIG_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:config:v1'
 const BACKTEST_TASK_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:active-task:v1'
+const BACKTEST_LAST_TASK_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:last-task:v1'
 const ACTIVE_TASK_STATUSES = new Set(['pending', 'running', 'pause_requested'])
 
 function buildDefaultForm(start: Date, end: Date): FormState {
@@ -43,8 +50,9 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     exchange: 'binance',
     environment: 'mainnet',
     period: '1m',
-    consensus_mode: 'ai_confirmed',
-    max_ai_evaluations: 20,
+    consensus_mode: 'rule_only',
+    decision_policy: 'professional_v1',
+    max_ai_evaluations: 1,
     start_time: toLocalInputValue(start),
     end_time: toLocalInputValue(end),
     expiry_minutes: 5,
@@ -54,7 +62,8 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     fee_rate: 0,
     slippage_bps: 0,
     delay_seconds: 0,
-    consensus_threshold: 30,
+    consensus_threshold: 5,
+    reviewer_panel_size: 25,
     target_win_rate: 75,
     enable_edge_quality_gate: true,
     max_trade_range_risk: 45,
@@ -82,10 +91,43 @@ function loadSavedForm(defaultForm: FormState): FormState {
     const raw = window.localStorage.getItem(BACKTEST_CONFIG_STORAGE_KEY)
     if (!raw) return defaultForm
     const parsed = JSON.parse(raw) as Partial<FormState>
-    return { ...defaultForm, ...parsed }
+    const merged = { ...defaultForm, ...parsed }
+    if (!parsed.decision_policy) {
+      merged.decision_policy = defaultForm.decision_policy
+    }
+    if (!parsed.consensus_mode || merged.decision_policy === 'professional_v1') {
+      merged.consensus_mode = defaultForm.consensus_mode
+    }
+    if (merged.decision_policy === 'professional_v1') {
+      merged.max_ai_evaluations = 1
+    }
+    if (!parsed.reviewer_panel_size) {
+      merged.reviewer_panel_size = defaultForm.reviewer_panel_size
+    }
+    if (!parsed.consensus_threshold || parsed.consensus_threshold > merged.reviewer_panel_size) {
+      merged.consensus_threshold = defaultForm.consensus_threshold
+    }
+    if (merged.reviewer_panel_size === 25 && merged.consensus_threshold >= 28) {
+      merged.consensus_threshold = defaultForm.consensus_threshold
+    }
+    if (merged.decision_policy === 'professional_v1' && merged.consensus_threshold > 20) {
+      merged.consensus_threshold = 20
+    }
+    return merged
   } catch {
     return defaultForm
   }
+}
+
+function defaultBinanceProbeQuantity(symbol: string) {
+  const normalized = symbol.toUpperCase().replace('USDT', '')
+  if (normalized === 'BTC') return 0.001
+  if (normalized === 'ETH') return 0.01
+  if (normalized === 'BNB') return 0.05
+  if (normalized === 'SOL') return 0.1
+  if (normalized === 'XRP') return 10
+  if (normalized === 'DOGE') return 100
+  return 1
 }
 
 export default function BacktestTool() {
@@ -99,6 +141,8 @@ export default function BacktestTool() {
   const [loadingPrediction, setLoadingPrediction] = useState(false)
   const [startingBacktest, setStartingBacktest] = useState(false)
   const [pausingBacktest, setPausingBacktest] = useState(false)
+  const [runningBinanceProbe, setRunningBinanceProbe] = useState(false)
+  const [binanceProbeResult, setBinanceProbeResult] = useState<BinanceTestnetOrderProbeResponse | null>(null)
   const [taskStatus, setTaskStatus] = useState<EventBacktestTaskStatus | null>(null)
   const [prediction, setPrediction] = useState<EventPrediction | null>(null)
   const [backtest, setBacktest] = useState<EventBacktestResponse | null>(null)
@@ -112,6 +156,17 @@ export default function BacktestTool() {
   const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm(prev => {
       const next = { ...prev, [key]: value }
+      if (key === 'decision_policy') {
+        if (value === 'professional_v1') {
+          next.consensus_mode = 'rule_only'
+          next.max_ai_evaluations = 1
+        } else if (next.max_ai_evaluations <= 1) {
+          next.max_ai_evaluations = 20
+        }
+      }
+      if (key === 'consensus_mode' && next.decision_policy === 'professional_v1') {
+        next.consensus_mode = 'rule_only'
+      }
       if (key === 'enable_coinglass_features' && value === true) {
         if (!coinGlassAvailable) {
           toast.error(coinglassCapability?.reason || t('backtestTool.coinglassUnavailableShort', 'CoinGlass is not available for this period'))
@@ -182,9 +237,11 @@ export default function BacktestTool() {
     environment: form.environment,
     period: form.period,
     expiry_minutes: Number(form.expiry_minutes),
-    consensus_mode: form.consensus_mode,
-    max_ai_evaluations: Number(form.max_ai_evaluations),
+    consensus_mode: form.decision_policy === 'professional_v1' ? 'rule_only' : form.consensus_mode,
+    decision_policy: form.decision_policy,
+    max_ai_evaluations: form.decision_policy === 'professional_v1' ? 1 : Number(form.max_ai_evaluations),
     consensus_threshold: Number(form.consensus_threshold),
+    reviewer_panel_size: Number(form.reviewer_panel_size),
     target_win_rate: Number(form.target_win_rate),
     enable_edge_quality_gate: form.enable_edge_quality_gate,
     max_trade_range_risk: Number(form.max_trade_range_risk),
@@ -236,6 +293,7 @@ export default function BacktestTool() {
       setStartingBacktest(true)
       setSelectedTrade(null)
       setBacktest(null)
+      window.localStorage.removeItem(BACKTEST_LAST_TASK_STORAGE_KEY)
       const task = await createEventContractBacktestTask(buildBacktestPayload())
       window.localStorage.setItem(BACKTEST_TASK_STORAGE_KEY, String(task.task_id))
       setTaskStatus(task)
@@ -263,14 +321,47 @@ export default function BacktestTool() {
     }
   }
 
+  const runBinanceTestnetProbe = async () => {
+    try {
+      setRunningBinanceProbe(true)
+      setBinanceProbeResult(null)
+      const wallets = await getAllBinanceWallets()
+      const wallet = wallets.find(item => item.environment === 'testnet' && item.is_active)
+      if (!wallet) {
+        throw new Error(t('backtestTool.noBinanceTestnetWallet', 'No active Binance Testnet wallet found'))
+      }
+      const side = prediction?.best_action === 'long' ? 'BUY' : 'SELL'
+      const result = await runBinanceTestnetOrderProbe(wallet.account_id, {
+        symbol: form.symbol,
+        side,
+        quantity: defaultBinanceProbeQuantity(form.symbol),
+        leverage: 1,
+        priceOffsetPct: 5,
+      })
+      setBinanceProbeResult(result)
+      toast.success(t('backtestTool.binanceProbeSuccess', 'Binance Testnet order {{orderId}} was placed and cancelled', {
+        orderId: result.order_id,
+      }))
+    } catch (error: any) {
+      console.error('Binance testnet order probe failed:', error)
+      toast.error(error?.message || t('backtestTool.binanceProbeFailed', 'Binance Testnet order probe failed'))
+    } finally {
+      setRunningBinanceProbe(false)
+    }
+  }
+
   const applyTaskStatus = useCallback((task: EventBacktestTaskStatus) => {
     setTaskStatus(task)
     if (task.result) {
       setBacktest(task.result)
       setSelectedTrade(task.result.trades?.[0] || null)
+      window.localStorage.setItem(BACKTEST_LAST_TASK_STORAGE_KEY, String(task.task_id))
     }
     if (['completed', 'failed', 'paused'].includes(task.status)) {
       window.localStorage.removeItem(BACKTEST_TASK_STORAGE_KEY)
+      if (task.task_id) {
+        window.localStorage.setItem(BACKTEST_LAST_TASK_STORAGE_KEY, String(task.task_id))
+      }
     }
   }, [])
 
@@ -279,18 +370,25 @@ export default function BacktestTool() {
   }, [loadSymbols])
 
   useEffect(() => {
-    const rawTaskId = window.localStorage.getItem(BACKTEST_TASK_STORAGE_KEY)
+    const rawTaskId =
+      window.localStorage.getItem(BACKTEST_TASK_STORAGE_KEY) ||
+      window.localStorage.getItem(BACKTEST_LAST_TASK_STORAGE_KEY)
     const taskId = rawTaskId ? Number(rawTaskId) : 0
-    if (!taskId) return
     let cancelled = false
-    getEventContractBacktestTask(taskId)
-      .then(task => {
-        if (!cancelled) applyTaskStatus(task)
-      })
-      .catch(error => {
+    const restoreTask = async () => {
+      try {
+        const task = taskId
+          ? await getEventContractBacktestTask(taskId)
+          : await getLatestEventContractBacktestTask()
+        if (!cancelled && task) applyTaskStatus(task)
+      } catch (error) {
+        if (cancelled) return
         console.error('Failed to restore backtest task:', error)
         window.localStorage.removeItem(BACKTEST_TASK_STORAGE_KEY)
-      })
+        window.localStorage.removeItem(BACKTEST_LAST_TASK_STORAGE_KEY)
+      }
+    }
+    restoreTask()
     return () => {
       cancelled = true
     }
@@ -397,12 +495,31 @@ export default function BacktestTool() {
                 <Bot className="h-3 w-3" />
                 {t('backtestTool.eventContract', '5m Event Contract')}
               </Badge>
+              <Badge variant="outline">
+                {form.decision_policy === 'professional_v1'
+                  ? t('backtestTool.professionalPolicyBadge', 'Professional Decision')
+                  : t('backtestTool.consensusBadge', 'Consensus {{required}}/{{total}}', {
+                    required: form.consensus_threshold,
+                    total: form.reviewer_panel_size,
+                  })}
+              </Badge>
+              <Badge variant="outline">
+                {t('backtestTool.mainLogicBadge', 'Main Logic Vote')}
+              </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t('backtestTool.subtitle', '5-minute event contract prediction with rule prefiltering, real AI confirmation, and historical settlement backtest.')}
+              {t('backtestTool.subtitle', '5-minute event contract prediction with signal edge, risk veto, execution realism, and historical settlement backtest.')}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={runBinanceTestnetProbe}
+              disabled={runningBinanceProbe || form.exchange !== 'binance'}
+            >
+              {runningBinanceProbe && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t('backtestTool.binanceTestnetProbe', 'Binance Testnet Order')}
+            </Button>
             <Button variant="outline" onClick={saveConfig}>
               <Save className="h-4 w-4" />
               {t('backtestTool.saveConfig', 'Save Config')}
@@ -428,6 +545,17 @@ export default function BacktestTool() {
             )}
           </div>
         </div>
+        {binanceProbeResult && (
+          <div className="mt-3 rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+            {t('backtestTool.binanceProbeResult', 'Binance Testnet order {{orderId}}: placed={{placeStatus}}, queried={{queryStatus}}, cancelled={{cancelStatus}}, price={{price}}', {
+              orderId: binanceProbeResult.order_id,
+              placeStatus: binanceProbeResult.place_status,
+              queryStatus: binanceProbeResult.query_status,
+              cancelStatus: binanceProbeResult.cancel_status,
+              price: binanceProbeResult.limit_price,
+            })}
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pt-3 sm:pt-4">

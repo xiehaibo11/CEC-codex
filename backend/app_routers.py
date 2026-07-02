@@ -28,6 +28,7 @@ from api.trader_data_routes import router as trader_data_router
 from api.prompt_backtest_routes import router as prompt_backtest_router
 from api.system_routes import router as system_router
 from api.binance_routes import router as binance_router
+from api.hibt_routes import router as hibt_router
 from api.ai_stream_routes import router as ai_stream_router
 from api.hyper_ai_routes import router as hyper_ai_router
 from api.bot_routes import router as bot_router
@@ -66,6 +67,7 @@ def register_routers(app):
     app.include_router(program_router)
     app.include_router(system_router)
     app.include_router(binance_router)
+    app.include_router(hibt_router)
     app.include_router(ai_stream_router)
     app.include_router(hyper_ai_router)
     app.include_router(bot_router)

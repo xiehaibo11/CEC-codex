@@ -143,3 +143,53 @@ def clear_expired_prices() -> None:
 def get_price_cache_stats() -> Dict:
     """Get cache statistics for diagnostics."""
     return price_cache.get_cache_stats()
+
+
+class TickerCache:
+    """In-memory TTL cache for full ticker payloads (price + 24h stats).
+
+    Short TTL by design: it exists to collapse bursts of near-simultaneous
+    requests (dashboard polling, multiple symbols, AI context building) into
+    one upstream exchange call, not to serve stale trading data.
+    """
+
+    def __init__(self, ttl_seconds: float = 2.0):
+        # key: (symbol, market, environment), value: (ticker_dict, timestamp)
+        self.cache: Dict[Tuple[str, str, str], Tuple[Dict, float]] = {}
+        self.ttl_seconds = ttl_seconds
+        self.lock = Lock()
+
+    def get(self, symbol: str, market: str, environment: str = "mainnet") -> Optional[Dict]:
+        key = (symbol, market, environment)
+        current_time = time.time()
+
+        with self.lock:
+            entry = self.cache.get(key)
+            if not entry:
+                return None
+
+            ticker, timestamp = entry
+            if current_time - timestamp < self.ttl_seconds:
+                return ticker
+
+            del self.cache[key]
+            return None
+
+    def record(self, symbol: str, market: str, ticker: Dict, environment: str = "mainnet") -> None:
+        key = (symbol, market, environment)
+        with self.lock:
+            self.cache[key] = (ticker, time.time())
+
+
+# Global ticker cache instance
+ticker_cache = TickerCache(ttl_seconds=2.0)
+
+
+def get_cached_ticker(symbol: str, market: str = "CRYPTO", environment: str = "mainnet") -> Optional[Dict]:
+    """Get full ticker payload from cache if available and fresh."""
+    return ticker_cache.get(symbol, market, environment)
+
+
+def cache_ticker(symbol: str, market: str, ticker: Dict, environment: str = "mainnet") -> None:
+    """Record a freshly-fetched ticker payload into the cache."""
+    ticker_cache.record(symbol, market, ticker, environment)

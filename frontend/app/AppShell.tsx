@@ -1,27 +1,43 @@
+import { lazy, Suspense } from 'react'
 import type { MutableRefObject } from 'react'
 import Header from '@/components/layout/Header'
 import Sidebar from '@/components/layout/Sidebar'
-import ComprehensiveView from '@/components/portfolio/ComprehensiveView'
-import SystemLogs from '@/components/layout/SystemLogs'
-import PromptManager from '@/components/prompt/PromptManager'
-import SignalManager from '@/components/signal/SignalManager'
-import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
-import BacktestTool from '@/components/backtest/BacktestTool'
-import FactorLibrary from '@/components/factor/FactorLibrary'
-import TraderManagement from '@/components/trader/TraderManagement'
-import { HyperliquidPage } from '@/components/hyperliquid'
-import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
-import KlinesView from '@/components/klines/KlinesView'
-import CoinGlassView from '@/components/coinglass/CoinGlassView'
-import MobileModelChat from '@/components/mobile/MobileModelChat'
-import MobileDashboard from '@/components/mobile/MobileDashboard'
-import MobilePrograms from '@/components/mobile/MobilePrograms'
-import ProgramTrader from '@/components/program/ProgramTrader'
-import SettingsPage from '@/components/settings/SettingsPage'
-import { HyperAiPage } from '@/components/hyper-ai'
-import ArenaAssets from '@/components/arena/ArenaAssets'
 import type { AIDecision, UnauthorizedAccount } from '@/lib/api'
-import { AgentWalletUpgradeModal, AuthorizationModal } from '@/components/hyperliquid'
+// Kept eager: these two modals can appear right after login/account load,
+// gated only by an `isOpen` prop, so they shouldn't wait on a lazy-chunk fetch.
+import AgentWalletUpgradeModal from '@/components/hyperliquid/AgentWalletUpgradeModal'
+import AuthorizationModal from '@/components/hyperliquid/AuthorizationModal'
+
+// Every page-level view is lazy-loaded so the initial bundle only ships the
+// app shell; each view (and its heavy deps like chart libs/Monaco/ethers)
+// downloads on first navigation to that page instead of on first paint.
+const ComprehensiveView = lazy(() => import('@/components/portfolio/ComprehensiveView'))
+const SystemLogs = lazy(() => import('@/components/layout/SystemLogs'))
+const PromptManager = lazy(() => import('@/components/prompt/PromptManager'))
+const SignalManager = lazy(() => import('@/components/signal/SignalManager'))
+const AttributionAnalysis = lazy(() => import('@/components/analytics/AttributionAnalysis'))
+const BacktestTool = lazy(() => import('@/components/backtest/BacktestTool'))
+const FactorLibrary = lazy(() => import('@/components/factor/FactorLibrary'))
+const TraderManagement = lazy(() => import('@/components/trader/TraderManagement'))
+const HyperliquidPage = lazy(() => import('@/components/hyperliquid/HyperliquidPage'))
+const HyperliquidView = lazy(() => import('@/components/hyperliquid/HyperliquidView'))
+const KlinesView = lazy(() => import('@/components/klines/KlinesView'))
+const CoinGlassView = lazy(() => import('@/components/coinglass/CoinGlassView'))
+const MobileModelChat = lazy(() => import('@/components/mobile/MobileModelChat'))
+const MobileDashboard = lazy(() => import('@/components/mobile/MobileDashboard'))
+const MobilePrograms = lazy(() => import('@/components/mobile/MobilePrograms'))
+const ProgramTrader = lazy(() => import('@/components/program/ProgramTrader'))
+const SettingsPage = lazy(() => import('@/components/settings/SettingsPage'))
+const HyperAiPage = lazy(() => import('@/components/hyper-ai/HyperAiPage'))
+const ArenaAssets = lazy(() => import('@/components/arena/ArenaAssets'))
+
+function ViewLoadingFallback() {
+  return (
+    <div className="flex flex-1 items-center justify-center min-h-0">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
+    </div>
+  )
+}
 
 export interface AppUser {
   id: number
@@ -146,6 +162,7 @@ function MainContent({
 }: MainContentProps) {
   return (
     <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${currentPage === 'hyper-ai' ? '' : 'p-4'}`}>
+      <Suspense fallback={<ViewLoadingFallback />}>
       {currentPage === 'hyper-ai' && <HyperAiPage />}
 
       {currentPage === 'comprehensive' && (
@@ -209,6 +226,7 @@ function MainContent({
       {currentPage === 'model-chat' && <MobileModelChat />}
       {currentPage === 'settings' && <SettingsPage />}
       {currentPage === 'arena-assets' && <ArenaAssets />}
+      </Suspense>
     </main>
   )
 }

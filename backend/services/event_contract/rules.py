@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from services.event_contract.constants import EVENT_AI_NAMES
+from services.event_contract.constants import EVENT_AI_NAMES, event_ai_names_for_panel
 
 
 class EventContractRuleMixin:
     def _build_rule_decisions(self, f: Dict[str, Any], cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
         names = EVENT_AI_NAMES
+        selected_names = set(event_ai_names_for_panel(cfg.get("reviewer_panel_size", 25)))
         trend = self._dir_from_value(f["trend_score"], 0.025)
         momentum = self._dir_from_value(f["ret3"] + f["ret5"], 0.04)
         cvd = self._dir_from_value(f["cvd_proxy"], 0.06)
@@ -52,7 +53,7 @@ class EventContractRuleMixin:
             self._decision(names[28], self._entry_timing_dir(f, trend), 72, "Immediate entry quality check", f),
             self._decision(names[29], "hold" if max(f["trap_risk"], f["fake_breakout_risk"], f["range_risk"]) > 60 else trend, 86, "Final risk gate", f),
         ]
-        return decisions
+        return [item for item in decisions if item["ai_name"] in selected_names]
 
     def _decision(
         self,
@@ -78,7 +79,7 @@ class EventContractRuleMixin:
             invalid.append(reason)
         return {
             "ai_name": name,
-            "source": "system_30_ai",
+            "source": "system_panel",
             "direction": direction,
             "confidence": round(max(0, min(100, confidence)), 2),
             "reason": reason,
@@ -152,8 +153,8 @@ class EventContractRuleMixin:
 
     def _oi_flow_dir(self, f: Dict[str, Any], trend: str) -> str:
         # CG data is consumed via coinglass_reversal_score in analysis.py (boost-only).
-        # Keeping rules on the OHLCV fallback preserves the 30/30 consensus baseline
-        # validated at 75% on 30 days; otherwise CG enable shaves trades 20 -> 5.
+        # Keeping rules on the OHLCV fallback preserves the validated consensus
+        # baseline; otherwise CG enablement can sharply reduce trade coverage.
         return trend if f["volume_ratio"] >= 0.8 else "hold"
 
     def _funding_dir(self, f: Dict[str, Any], trend: str) -> str:

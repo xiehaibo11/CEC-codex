@@ -42,6 +42,23 @@ export async function getBinanceDailyQuota(accountId: number): Promise<BinanceDa
   return response.json();
 }
 
+export interface BinanceWalletSummary {
+  wallet_id: number;
+  account_id: number;
+  account_name: string;
+  model?: string;
+  api_key_masked?: string;
+  environment: 'testnet' | 'mainnet';
+  is_active: boolean;
+  max_leverage?: number;
+  default_leverage?: number;
+}
+
+export async function getAllBinanceWallets(): Promise<BinanceWalletSummary[]> {
+  const response = await apiRequest(`${BINANCE_API_BASE}/wallets/all`);
+  return response.json();
+}
+
 export async function getBinanceRateLimit(accountId: number): Promise<{
   success: boolean;
   rate_limit: {
@@ -154,6 +171,46 @@ export async function placeBinanceOrder(
         take_profit_price: order.takeProfitPrice,
         stop_loss_price: order.stopLossPrice,
       }),
+    }
+  );
+  return response.json();
+}
+
+export interface BinanceTestnetOrderProbeRequest {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;
+  leverage?: number;
+  priceOffsetPct?: number;
+}
+
+export interface BinanceTestnetOrderProbeResponse {
+  success: boolean;
+  action: string;
+  account_id: number;
+  environment: 'testnet';
+  base_url: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;
+  leverage: number;
+  mark_price: number;
+  limit_price: number;
+  order_id: number | string;
+  place_status: string;
+  query_status: string;
+  cancel_status: string;
+}
+
+export async function runBinanceTestnetOrderProbe(
+  accountId: number,
+  payload: BinanceTestnetOrderProbeRequest
+): Promise<BinanceTestnetOrderProbeResponse> {
+  const response = await apiRequest(
+    `${BINANCE_API_BASE}/accounts/${accountId}/testnet-order-probe`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }
   );
   return response.json();

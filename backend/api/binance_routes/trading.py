@@ -10,6 +10,7 @@ from database.connection import get_db
 from database.models import BinanceWallet, User
 from api.auth_dependencies import get_current_user, get_account_for_current_user
 from services.hyperliquid_environment import get_global_trading_mode
+from services.binance_testnet_order_probe import run_binance_testnet_order_probe
 
 from ._shared import router, logger, _get_client
 
@@ -28,6 +29,53 @@ class ManualOrderRequest(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class TestnetOrderProbeRequest(BaseModel):
+    """Small Binance Futures Testnet order that is cancelled immediately."""
+
+    symbol: str = Field("BTC", description="Asset symbol (e.g., 'BTC')")
+    side: str = Field("SELL", pattern="^(BUY|SELL)$")
+    quantity: float = Field(0.001, gt=0)
+    leverage: int = Field(1, ge=1, le=125)
+    price_offset_pct: float = Field(5.0, ge=0.1, le=20, alias="priceOffsetPct")
+
+    class Config:
+        populate_by_name = True
+
+
+@router.post("/accounts/{account_id}/testnet-order-probe")
+def place_testnet_order_probe(
+    account_id: int,
+    request: TestnetOrderProbeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Place and immediately cancel a real Binance Futures Testnet limit order."""
+
+    get_account_for_current_user(account_id, current_user, db)
+
+    wallet = db.query(BinanceWallet).filter(
+        BinanceWallet.account_id == account_id,
+        BinanceWallet.environment == "testnet",
+        BinanceWallet.is_active == "true",
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="No testnet wallet configured")
+
+    try:
+        return run_binance_testnet_order_probe(
+            wallet=wallet,
+            client=_get_client(wallet),
+            symbol=request.symbol,
+            side=request.side,
+            quantity=request.quantity,
+            leverage=request.leverage,
+            price_offset_pct=request.price_offset_pct,
+        )
+    except Exception as e:
+        logger.error(f"Binance testnet order probe failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/accounts/{account_id}/order")

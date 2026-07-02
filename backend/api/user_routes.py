@@ -206,7 +206,7 @@ async def set_exchange_config(
     """Set exchange configuration for the authenticated user."""
     try:
         selected_exchange = exchange_data.get("selected_exchange")
-        if not selected_exchange or selected_exchange not in ["hyperliquid", "binance", "aster"]:
+        if not selected_exchange or selected_exchange not in ["hyperliquid", "binance", "hibt", "aster"]:
             raise HTTPException(status_code=400, detail="Invalid exchange selection")
 
         config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == current_user.id).first()

@@ -10,7 +10,9 @@ from services.event_contract.constants import PERIOD_SECONDS
 
 
 class EventContractQualityMixin:
-    def _closed_klines(self, klines: List[Dict[str, Any]], period: str, now_ts: int) -> List[Dict[str, Any]]:
+    def _closed_klines(
+        self, klines: List[Dict[str, Any]], period: str, now_ts: int
+    ) -> List[Dict[str, Any]]:
         interval = PERIOD_SECONDS[period]
         return [item for item in klines if item["timestamp"] + interval <= now_ts]
 
@@ -42,6 +44,7 @@ class EventContractQualityMixin:
                     }
                 )
 
+        missing_bar_count = sum(item["missing_bars"] for item in gaps)
         decision_timestamps = [
             ts for ts in unique_timestamps if start_ts <= ts + interval <= end_ts
         ]
@@ -74,15 +77,20 @@ class EventContractQualityMixin:
             "duplicate_count": duplicate_count,
             "non_monotonic_count": non_monotonic_count,
             "gap_count": len(gaps),
+            "missing_bar_count": missing_bar_count,
             "max_gap_seconds": max_gap_seconds,
             "sample_gaps": gaps[:20],
             "warnings": warnings,
             "strict": cfg["strict_data_quality"],
         }
 
-    def _validate_data_quality(self, audit: Dict[str, Any], cfg: Dict[str, Any]) -> None:
+    def _validate_data_quality(
+        self, audit: Dict[str, Any], cfg: Dict[str, Any]
+    ) -> None:
         if cfg["strict_data_quality"] and audit["warnings"]:
-            raise ValueError(f"K-line data quality check failed: {'; '.join(audit['warnings'])}")
+            raise ValueError(
+                f"K-line data quality check failed: {'; '.join(audit['warnings'])}"
+            )
 
     def _resolve_expiry_index(
         self,

@@ -4,6 +4,7 @@ export type FormState = {
   environment: string
   period: string
   consensus_mode: 'ai_confirmed' | 'rule_only'
+  decision_policy: 'professional_v1' | 'legacy_vote'
   max_ai_evaluations: number
   start_time: string
   end_time: string
@@ -15,6 +16,7 @@ export type FormState = {
   slippage_bps: number
   delay_seconds: number
   consensus_threshold: number
+  reviewer_panel_size: number
   target_win_rate: number
   enable_edge_quality_gate: boolean
   max_trade_range_risk: number

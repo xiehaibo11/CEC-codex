@@ -12,8 +12,9 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
-from .virtual_account import VirtualAccount, VirtualPosition
+from .virtual_account import VirtualAccount
 from .models import BacktestTradeRecord
+from .execution_tp_sl import TpSlExecutionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class ExecutionResult:
     error: Optional[str] = None
 
 
-class ExecutionSimulator:
+class ExecutionSimulator(TpSlExecutionMixin):
     """
     Simulates order execution for backtesting.
 
@@ -101,243 +102,6 @@ class ExecutionSimulator:
         """
         rate = fee_rate if fee_rate is not None else self.fee_rate
         return notional * rate / 100
-
-    def check_tp_sl_triggers(
-        self,
-        account: VirtualAccount,
-        prices: Dict[str, float],
-        timestamp: int,
-    ) -> List[BacktestTradeRecord]:
-        """
-        Check if any TP/SL orders should trigger.
-
-        Each pending order is independent (like Hyperliquid) - when triggered,
-        only closes the portion of position that order controls.
-
-        Args:
-            account: Virtual account state
-            prices: Current prices {symbol: price}
-            timestamp: Current timestamp
-
-        Returns:
-            List of trade records for triggered orders
-        """
-        triggered_trades = []
-        orders_to_remove = []
-
-        # Check each pending order independently
-        for order in account.pending_orders:
-            symbol = order.symbol
-            if symbol not in prices:
-                continue
-
-            pos = account.get_position(symbol)
-            if not pos:
-                # Position no longer exists, mark order for removal
-                orders_to_remove.append(order.order_id)
-                continue
-
-            current_price = prices[symbol]
-            should_trigger = False
-
-            # Check trigger condition based on order type and position side
-            if order.order_type == "take_profit":
-                if pos.side == "long" and current_price >= order.trigger_price:
-                    should_trigger = True
-                elif pos.side == "short" and current_price <= order.trigger_price:
-                    should_trigger = True
-            elif order.order_type == "stop_loss":
-                if pos.side == "long" and current_price <= order.trigger_price:
-                    should_trigger = True
-                elif pos.side == "short" and current_price >= order.trigger_price:
-                    should_trigger = True
-
-            if should_trigger:
-                # Apply slippage to exit price
-                close_side = "sell" if pos.side == "long" else "buy"
-                executed_price, _ = self.calculate_execution_price(order.trigger_price, close_side)
-
-                # Use actual close size (min of order size and remaining position)
-                actual_close_size = min(order.size, pos.size)
-                if actual_close_size <= 0:
-                    orders_to_remove.append(order.order_id)
-                    continue
-
-                # Calculate fee for actual close size
-                notional = actual_close_size * executed_price
-                fee = self.calculate_fee(notional)
-
-                # Partial close position using order's entry price for accurate PnL
-                pnl = account.partial_close_position(
-                    symbol=symbol,
-                    size=actual_close_size,
-                    exit_price=executed_price,
-                    fee=fee,
-                    entry_price=order.entry_price,
-                )
-
-                if pnl is not None:
-                    # Calculate PnL percent based on actual close size
-                    entry_notional = actual_close_size * order.entry_price
-                    pnl_percent = (pnl / entry_notional * 100) if entry_notional > 0 else 0
-
-                    exit_reason = "tp" if order.order_type == "take_profit" else "sl"
-                    trade = BacktestTradeRecord(
-                        timestamp=order.created_at,
-                        trigger_type="",
-                        symbol=symbol,
-                        operation="close",
-                        side=pos.side,
-                        entry_price=order.entry_price,
-                        size=actual_close_size,
-                        leverage=pos.leverage,
-                        exit_price=executed_price,
-                        exit_timestamp=timestamp,
-                        exit_reason=exit_reason,
-                        pnl=pnl,
-                        pnl_percent=pnl_percent,
-                        fee=fee,
-                        reason=f"{'Take Profit' if exit_reason == 'tp' else 'Stop Loss'} triggered",
-                    )
-                    triggered_trades.append(trade)
-
-                # Mark order for removal (it's been executed)
-                orders_to_remove.append(order.order_id)
-
-        # Remove triggered/invalid orders
-        for order_id in orders_to_remove:
-            account.remove_pending_order(order_id)
-
-        return triggered_trades
-
-    def check_tp_sl_with_klines(
-        self,
-        account: VirtualAccount,
-        klines: List[Dict[str, Any]],
-        position_side: str,
-        data_provider: Any,
-    ) -> List[BacktestTradeRecord]:
-        """
-        Check TP/SL triggers using K-line high/low prices between triggers.
-
-        This provides more accurate TP/SL detection by checking if price
-        touched TP/SL levels at any point, not just at trigger timestamps.
-
-        Args:
-            account: Virtual account state
-            klines: List of klines between last trigger and current trigger
-                    Each kline has: timestamp, high, low, close
-            position_side: "long" or "short" for the position
-            data_provider: Historical data provider for querying prices of all symbols
-
-        Returns:
-            List of trade records for triggered orders, in chronological order
-        """
-        triggered_trades = []
-        orders_to_remove = []
-
-        # Process klines in chronological order
-        for kline in klines:
-            kline_time_ms = kline["timestamp"] * 1000
-            high = kline["high"]
-            low = kline["low"]
-
-            # Check each pending order
-            for order in list(account.pending_orders):
-                if order.order_id in orders_to_remove:
-                    continue
-
-                symbol = order.symbol
-                pos = account.get_position(symbol)
-                if not pos:
-                    orders_to_remove.append(order.order_id)
-                    continue
-
-                should_trigger = False
-                trigger_price = order.trigger_price
-
-                # Check trigger condition using kline high/low
-                if order.order_type == "take_profit":
-                    if pos.side == "long" and high >= trigger_price:
-                        should_trigger = True
-                    elif pos.side == "short" and low <= trigger_price:
-                        should_trigger = True
-                elif order.order_type == "stop_loss":
-                    if pos.side == "long" and low <= trigger_price:
-                        should_trigger = True
-                    elif pos.side == "short" and high >= trigger_price:
-                        should_trigger = True
-
-                if should_trigger:
-                    # Execute at trigger price (not kline close)
-                    close_side = "sell" if pos.side == "long" else "buy"
-                    executed_price, _ = self.calculate_execution_price(trigger_price, close_side)
-
-                    # Use actual close size (min of order size and remaining position)
-                    actual_close_size = min(order.size, pos.size)
-                    if actual_close_size <= 0:
-                        orders_to_remove.append(order.order_id)
-                        continue
-
-                    # Calculate fee for actual close size
-                    notional = actual_close_size * executed_price
-                    fee = self.calculate_fee(notional)
-
-                    # Partial close position
-                    pnl = account.partial_close_position(
-                        symbol=symbol,
-                        size=actual_close_size,
-                        exit_price=executed_price,
-                        fee=fee,
-                        entry_price=order.entry_price,
-                    )
-
-                    if pnl is not None:
-                        # Get prices for ALL position symbols at kline time for accurate equity
-                        # For single symbol: only current symbol price
-                        # For multi symbol: query all position symbols at same timestamp
-                        kline_prices = {symbol: kline["close"]}
-                        for pos_symbol in account.positions:
-                            if pos_symbol != symbol:
-                                # Query price at kline timestamp for other symbols
-                                other_price = data_provider._get_price_at_time(
-                                    pos_symbol, kline_time_ms
-                                )
-                                if other_price:
-                                    kline_prices[pos_symbol] = other_price
-                        account.update_equity(kline_prices)
-
-                        entry_notional = actual_close_size * order.entry_price
-                        pnl_percent = (pnl / entry_notional * 100) if entry_notional > 0 else 0
-
-                        exit_reason = "tp" if order.order_type == "take_profit" else "sl"
-                        trade = BacktestTradeRecord(
-                            timestamp=order.created_at,
-                            trigger_type="",
-                            symbol=symbol,
-                            operation="close",
-                            side=pos.side,
-                            entry_price=order.entry_price,
-                            size=actual_close_size,
-                            leverage=pos.leverage,
-                            exit_price=executed_price,
-                            exit_timestamp=kline_time_ms,
-                            exit_reason=exit_reason,
-                            pnl=pnl,
-                            pnl_percent=pnl_percent,
-                            fee=fee,
-                            equity_after=account.equity,  # Record equity after this trade
-                            reason=f"{'Take Profit' if exit_reason == 'tp' else 'Stop Loss'} triggered",
-                        )
-                        triggered_trades.append(trade)
-
-                    orders_to_remove.append(order.order_id)
-
-        # Remove triggered orders
-        for order_id in orders_to_remove:
-            account.remove_pending_order(order_id)
-
-        return triggered_trades
 
     def execute_decision(
         self,
@@ -693,4 +457,3 @@ class ExecutionSimulator:
             pool_name=pool_name,
             triggered_signals=triggered_signals or [],
         )
-

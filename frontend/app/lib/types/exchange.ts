@@ -2,7 +2,7 @@
  * Exchange selection and management types
  */
 
-export type ExchangeId = 'hyperliquid' | 'binance' | 'aster';
+export type ExchangeId = 'hyperliquid' | 'binance' | 'hibt' | 'aster';
 
 export interface ExchangeInfo {
   id: ExchangeId;
@@ -39,6 +39,7 @@ export const DEFAULT_EXCHANGE: ExchangeId = 'hyperliquid';
 export const EXCHANGE_DISPLAY_NAMES: Record<ExchangeId, string> = {
   hyperliquid: 'Hyperliquid',
   binance: 'Binance',
+  hibt: 'HiBT',
   aster: 'Aster DEX'
 };
 
@@ -47,5 +48,6 @@ export const EXCHANGE_DISPLAY_NAMES: Record<ExchangeId, string> = {
 export const EXCHANGE_STATUS_COLORS: Record<ExchangeId, string> = {
   hyperliquid: '🟢',
   binance: '🟡',
+  hibt: '🟡',
   aster: '🟡'
 };

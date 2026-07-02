@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # List of migration scripts in execution order
 # Each script MUST have idempotency checks (check if column/table exists before adding)
 MIGRATIONS = [
-    "add_environment_to_crypto_klines.py",
     "add_exchange_to_crypto_klines.py",
+    "add_environment_to_crypto_klines.py",
     "add_prompt_template_fields.py",
     "add_ai_prompt_chat.py",
     "fix_timestamp_bigint.py",
@@ -64,6 +64,7 @@ MIGRATIONS = [
     "add_source_fields_to_signal_pools.py",
     "migrate_to_multi_wallet.py",
     "add_binance_wallet_tables.py",
+    "add_hibt_wallet_tables.py",
     "add_exchange_to_trigger_configs.py",
     "add_exchange_to_decision_logs.py",
     "add_rebate_working_to_binance_wallets.py",
@@ -92,6 +93,7 @@ MIGRATIONS = [
     "create_coinglass_user_keys.py",
     "add_user_exchange_config.py",
     "add_sampling_depth_to_global_config.py",
+    "add_trading_hot_path_indexes.py",
 ]
 
 

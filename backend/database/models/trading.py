@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, BigInteger, String, DECIMAL, TIMESTAMP, ForeignKey,
-    UniqueConstraint, Float, Date, DateTime, Text, Boolean,
+    UniqueConstraint, Float, Date, DateTime, Text, Boolean, Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, text
@@ -23,7 +23,7 @@ class Position(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     version = Column(String(100), nullable=False, default="v1")
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
     symbol = Column(String(20), nullable=False)
     name = Column(String(100), nullable=False)
     market = Column(String(10), nullable=False)
@@ -40,6 +40,11 @@ class Position(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        # Serves the hot dashboard/polling query pattern:
+        # WHERE account_id = ... AND status = ... (also covers account_id-only lookups).
+        Index("ix_orders_account_id_status", "account_id", "status"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     version = Column(String(100), nullable=False, default="v1")

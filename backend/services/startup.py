@@ -3,12 +3,6 @@
 import logging
 import threading
 
-from services.auto_trader import (
-    place_ai_driven_crypto_order,
-    place_random_crypto_order,
-    AUTO_TRADE_JOB_ID,
-    AI_TRADE_JOB_ID
-)
 from services.scheduler import start_scheduler, setup_market_tasks, task_scheduler
 from services.market_stream import start_market_stream, stop_market_stream
 from services.market_events import subscribe_price_updates, unsubscribe_price_updates
@@ -44,6 +38,15 @@ def initialize_services():
         refresh_binance_symbols()
         schedule_binance_symbol_refresh()
         logger.info("[Binance] Symbol catalog refreshed and periodic refresh scheduled")
+
+        # Refresh HiBT symbol catalog + schedule periodic updates
+        from services.hibt_symbol_service import (
+            refresh_hibt_symbols,
+            schedule_symbol_refresh_task as schedule_hibt_symbol_refresh,
+        )
+        refresh_hibt_symbols()
+        schedule_hibt_symbol_refresh()
+        logger.info("[HiBT] Symbol catalog refreshed and periodic refresh scheduled")
 
         # Set up market-related scheduled tasks
         setup_market_tasks()

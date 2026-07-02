@@ -41,6 +41,7 @@ export function BacktestConfigPanel({
   const { t } = useTranslation()
   const coinGlassAvailable = coinglassCapability?.available === true
   const coinGlassDisabled = loadingCoinGlassCapability || !coinGlassAvailable
+  const professionalMode = form.decision_policy === 'professional_v1'
 
   return (
     <Card>
@@ -92,27 +93,55 @@ export function BacktestConfigPanel({
               </SelectContent>
             </Select>
           </div>
+          {professionalMode ? (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('backtestTool.executionMode', 'Execution Mode')}</Label>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                {t('backtestTool.professionalNoSharedVote', 'No shared AI vote gate')}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('backtestTool.consensusMode', 'Consensus Mode')}</Label>
+              <Select value={form.consensus_mode} onValueChange={value => updateForm('consensus_mode', value as FormState['consensus_mode'])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ai_confirmed">{t('backtestTool.aiConfirmed', 'Real AI confirmation')}</SelectItem>
+                  <SelectItem value="rule_only">{t('backtestTool.ruleOnly', 'Rule prefilter only')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1">
-            <Label className="text-xs">{t('backtestTool.consensusMode', 'Consensus Mode')}</Label>
-            <Select value={form.consensus_mode} onValueChange={value => updateForm('consensus_mode', value as FormState['consensus_mode'])}>
+            <Label className="text-xs">{t('backtestTool.decisionPolicy', 'Decision Policy')}</Label>
+            <Select value={form.decision_policy} onValueChange={value => updateForm('decision_policy', value as FormState['decision_policy'])}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="ai_confirmed">{t('backtestTool.aiConfirmed', 'Real AI confirmation')}</SelectItem>
-                <SelectItem value="rule_only">{t('backtestTool.ruleOnly', 'Rule prefilter only')}</SelectItem>
+                <SelectItem value="professional_v1">{t('backtestTool.professionalPolicy', 'Professional workflow')}</SelectItem>
+                <SelectItem value="legacy_vote">{t('backtestTool.legacyVotePolicy', 'Legacy vote gate')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">{t('backtestTool.maxAiEvaluations', 'Max AI Checks')}</Label>
-            <Input
-              type="number"
-              min={1}
-              max={200}
-              value={form.max_ai_evaluations}
-              disabled={form.consensus_mode === 'rule_only'}
-              onChange={event => updateForm('max_ai_evaluations', Number(event.target.value))}
-            />
-          </div>
+          {professionalMode ? (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('backtestTool.independentAiTraders', 'Independent AI Traders')}</Label>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                {t('backtestTool.independentAiTraderCount', '30 traders')}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('backtestTool.maxAiEvaluations', 'Max AI Checks')}</Label>
+              <Input
+                type="number"
+                min={1}
+                max={200}
+                value={form.max_ai_evaluations}
+                disabled={form.consensus_mode === 'rule_only'}
+                onChange={event => updateForm('max_ai_evaluations', Number(event.target.value))}
+              />
+            </div>
+          )}
           <div className="space-y-1">
             <Label className="text-xs">{t('backtestTool.targetWinRate', 'Target Win Rate')}</Label>
             <Input
@@ -163,14 +192,23 @@ export function BacktestConfigPanel({
           </div>
         </div>
 
-        <div className={`rounded-md border p-3 text-xs ${form.consensus_mode === 'ai_confirmed' ? 'bg-blue-500/5 text-blue-700 dark:text-blue-300' : 'bg-muted/30 text-muted-foreground'}`}>
-          {form.consensus_mode === 'ai_confirmed'
-            ? hyperAiProfile?.llm_configured
-              ? t('backtestTool.aiModeReady', 'Real AI mode: candidate signals will be confirmed by {{model}} before trades are counted.', {
-                model: hyperAiProfile.llm_model || hyperAiProfile.llm_provider || 'configured LLM',
-              })
-              : t('backtestTool.aiModeMissing', 'Real AI mode requires Hyper AI or an AI Trader with a valid LLM API key. No fake AI results will be generated.')
-            : t('backtestTool.ruleModeNotice', 'Rule-only mode is fast, but it is not real AI participation. Results are labeled as rule prefilter output.')}
+        <div className={`rounded-md border p-3 text-xs ${!professionalMode && form.consensus_mode === 'ai_confirmed' ? 'bg-blue-500/5 text-blue-700 dark:text-blue-300' : professionalMode ? 'bg-green-500/5 text-green-700 dark:text-green-300' : 'bg-muted/30 text-muted-foreground'}`}>
+          <div>
+            {professionalMode
+              ? t('backtestTool.professionalPolicyNotice', 'Professional workflow: score signal edge first; only objective risk thresholds can veto; execution feasibility is audited before a trade is counted.')
+              : t('backtestTool.legacyVotePolicyNotice', 'Legacy vote gate: trades must reach the configured reviewer vote threshold. Use only for old-run comparison.')}
+          </div>
+          <div className="mt-1">
+            {professionalMode
+              ? t('backtestTool.professionalIndependentDeskNotice', 'Professional mode does not wait for all AIs to agree: the main strategy trades by desk policy, while 30 AI traders run independent paper portfolios and are ranked in Research Mode.')
+              : form.consensus_mode === 'ai_confirmed'
+                ? hyperAiProfile?.llm_configured
+                  ? t('backtestTool.aiModeReady', 'Real AI mode: candidate signals will be confirmed by {{model}} before trades are counted.', {
+                    model: hyperAiProfile.llm_model || hyperAiProfile.llm_provider || 'configured LLM',
+                  })
+                  : t('backtestTool.aiModeMissing', 'Real AI mode requires Hyper AI or an AI Trader with a valid LLM API key. No fake AI results will be generated.')
+                : t('backtestTool.ruleModeNotice', 'Rule-only mode is fast, but it is not real AI participation. Results are labeled as rule prefilter output.')}
+          </div>
         </div>
 
         <div className="space-y-1">
@@ -195,17 +233,36 @@ export function BacktestConfigPanel({
             <Label className="text-xs">{t('backtestTool.payout', 'Win Payout')}</Label>
             <Input type="number" step="0.01" value={form.win_payout_ratio} onChange={event => updateForm('win_payout_ratio', Number(event.target.value))} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">{t('backtestTool.threshold', 'Consensus')}</Label>
-            <Select value={String(form.consensus_threshold)} onValueChange={value => updateForm('consensus_threshold', Number(value))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[30, 29, 28].map(value => (
-                  <SelectItem key={value} value={String(value)}>{value}/30</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!professionalMode && (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">{t('backtestTool.threshold', 'Required Votes')}</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={form.reviewer_panel_size}
+                  value={form.consensus_threshold}
+                  onChange={event => updateForm('consensus_threshold', Number(event.target.value))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{t('backtestTool.reviewerPanelSize', 'Panel Size')}</Label>
+                <Input
+                  type="number"
+                  min={5}
+                  max={31}
+                  value={form.reviewer_panel_size}
+                  onChange={event => {
+                    const panelSize = Number(event.target.value)
+                    updateForm('reviewer_panel_size', panelSize)
+                    if (form.consensus_threshold > panelSize) {
+                      updateForm('consensus_threshold', panelSize)
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )}
           <div className="space-y-1">
             <Label className="text-xs">{t('backtestTool.feeRate', 'Fee Rate')}</Label>
             <Input type="number" step="0.0001" value={form.fee_rate} onChange={event => updateForm('fee_rate', Number(event.target.value))} />

@@ -38,6 +38,20 @@ export default function ExchangeIcon({ exchangeId, className = '', size = 16 }: 
         className={className}
       />
     ),
+    hibt: (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 32 32"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className={className}
+      >
+        <rect width="32" height="32" rx="8" fill="#2563eb" />
+        <path d="M8 9h3v5h10V9h3v14h-3v-6H11v6H8V9Z" fill="white" />
+        <path d="M13.5 20.5h5v2.5h-5v-2.5Z" fill="#93c5fd" />
+      </svg>
+    ),
     aster: (
       <svg
         width={size}

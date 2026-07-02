@@ -45,6 +45,15 @@ export default function ExchangeModal({ isOpen, onClose }: ExchangeModalProps) {
       ],
       buttonText: t('exchange.binance.button', 'Register First'),
     },
+    hibt: {
+      description: t('exchange.hibt.description', 'Centralized perpetual futures API'),
+      features: [
+        t('exchange.hibt.feature1', 'Perpetual Futures'),
+        t('exchange.hibt.feature2', 'Access Key API'),
+        t('exchange.hibt.feature3', 'Market Data'),
+      ],
+      buttonText: t('exchange.hibt.button', 'Configure Wallet'),
+    },
   }
 
   // Data collection info for each exchange
@@ -72,6 +81,18 @@ export default function ExchangeModal({ isOpen, onClose }: ExchangeModalProps) {
         { label: t('exchange.data.funding', 'Funding Rate'), value: t('exchange.data.realtime', 'Real-time') },
         { label: t('exchange.data.orderbook', 'Orderbook'), value: 'REST 15s' },
       ]
+    },
+    hibt: {
+      method: 'REST',
+      icon: Clock,
+      color: 'text-blue-500',
+      items: [
+        { label: t('exchange.data.kline', 'K-line'), value: 'REST' },
+        { label: t('exchange.data.takerVolume', 'Taker Volume'), value: t('common.notAvailable', 'N/A') },
+        { label: t('exchange.data.oi', 'Open Interest'), value: t('common.notAvailable', 'N/A') },
+        { label: t('exchange.data.funding', 'Funding Rate'), value: 'REST' },
+        { label: t('exchange.data.orderbook', 'Orderbook'), value: 'REST' },
+      ]
     }
   }
 
@@ -91,11 +112,11 @@ export default function ExchangeModal({ isOpen, onClose }: ExchangeModalProps) {
           </Button>
         </div>
 
-        {/* Exchange Cards - Only show Hyperliquid and Binance */}
+        {/* Exchange Cards */}
         <div className="p-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {exchanges.filter(ex => ex.id === 'hyperliquid' || ex.id === 'binance').map((exchange) => {
-              const info = dataInfo[exchange.id as 'hyperliquid' | 'binance']
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {exchanges.filter(ex => ex.id === 'hyperliquid' || ex.id === 'binance' || ex.id === 'hibt').map((exchange) => {
+              const info = dataInfo[exchange.id as 'hyperliquid' | 'binance' | 'hibt']
               const DataIcon = info?.icon || Clock
 
               return (
@@ -141,6 +162,14 @@ export default function ExchangeModal({ isOpen, onClose }: ExchangeModalProps) {
                     <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
                       <p className="text-xs text-yellow-700 dark:text-yellow-300">
                         ⚠️ {t('exchange.binanceNote', 'One identity = One account. Register with referral link to get fee discount.')}
+                      </p>
+                    </div>
+                  )}
+
+                  {exchange.id === 'hibt' && (
+                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        {t('exchange.hibtNote', 'HiBT REST API is integrated for market data, wallet binding, balance, positions and manual orders.')}
                       </p>
                     </div>
                   )}

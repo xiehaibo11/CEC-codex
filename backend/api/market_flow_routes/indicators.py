@@ -31,7 +31,7 @@ from ._base import (
 
 
 @router.get("/indicators", response_model=MarketFlowResponse)
-async def get_market_flow_indicators(
+def get_market_flow_indicators(
     symbol: str = Query(..., description="Trading symbol, e.g., BTC"),
     exchange: str = Query("hyperliquid", description="Exchange: hyperliquid or binance"),
     timeframe: str = Query("1h", description="Aggregation timeframe"),

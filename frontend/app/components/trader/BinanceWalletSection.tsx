@@ -7,12 +7,15 @@
 
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Wallet, Eye, EyeOff, CheckCircle, RefreshCw, Trash2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { RefreshCw } from 'lucide-react'
 import RebateIneligibleModal from '@/components/binance/RebateIneligibleModal'
+import { BinanceWalletBlock } from './binance-wallet-section/BinanceWalletBlock'
+import { getErrorMessage } from './binance-wallet-section/errors'
+import type {
+  BinanceWalletData,
+  BinanceWalletEnvironment,
+  MainnetQuota,
+} from './binance-wallet-section/types'
 
 interface BinanceWalletSectionProps {
   accountId: number
@@ -21,33 +24,7 @@ interface BinanceWalletSectionProps {
   onWalletConfigured?: () => void
 }
 
-interface BinanceWalletData {
-  configured: boolean
-  apiKeyMasked?: string
-  maxLeverage: number
-  defaultLeverage: number
-  balance?: {
-    total_equity: number
-    available_balance: number
-    unrealized_pnl: number
-  }
-}
-
 const API_BASE = '/api/binance'
-
-const getErrorMessage = (data: any, fallback: string) => {
-  const detail = data?.detail
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail)) {
-    return detail
-      .map((item) => item?.msg || item?.message || JSON.stringify(item))
-      .join('; ')
-  }
-  if (detail && typeof detail === 'object') {
-    return detail.message || detail.msg || JSON.stringify(detail)
-  }
-  return data?.message || fallback
-}
 
 export default function BinanceWalletSection({
   accountId,
@@ -55,8 +32,6 @@ export default function BinanceWalletSection({
   onStatusChange,
   onWalletConfigured
 }: BinanceWalletSectionProps) {
-  const { t } = useTranslation()
-
   // Wallet data states
   const [testnetWallet, setTestnetWallet] = useState<BinanceWalletData | null>(null)
   const [mainnetWallet, setMainnetWallet] = useState<BinanceWalletData | null>(null)
@@ -97,7 +72,7 @@ export default function BinanceWalletSection({
     default_leverage: number
   } | null>(null)
   // Daily quota for mainnet non-rebate accounts
-  const [mainnetQuota, setMainnetQuota] = useState<{ limited: boolean; used: number; limit: number; remaining: number } | null>(null)
+  const [mainnetQuota, setMainnetQuota] = useState<MainnetQuota | null>(null)
 
   useEffect(() => {
     loadWalletInfo()
@@ -185,7 +160,7 @@ export default function BinanceWalletSection({
     }
   }
 
-  const handleSaveWallet = async (environment: 'testnet' | 'mainnet') => {
+  const handleSaveWallet = async (environment: BinanceWalletEnvironment) => {
     const setSaving = environment === 'testnet' ? setSavingTestnet : setSavingMainnet
     const apiKey = environment === 'testnet' ? testnetApiKey : mainnetApiKey
     const secretKey = environment === 'testnet' ? testnetSecretKey : mainnetSecretKey
@@ -265,7 +240,7 @@ export default function BinanceWalletSection({
     }
   }
 
-  const handleTestConnection = async (environment: 'testnet' | 'mainnet') => {
+  const handleTestConnection = async (environment: BinanceWalletEnvironment) => {
     const setTesting = environment === 'testnet' ? setTestingTestnet : setTestingMainnet
     try {
       setTesting(true)
@@ -323,7 +298,7 @@ export default function BinanceWalletSection({
     }
   }
 
-  const handleDeleteWallet = async (environment: 'testnet' | 'mainnet') => {
+  const handleDeleteWallet = async (environment: BinanceWalletEnvironment) => {
     if (!confirm(`Delete Binance ${environment} wallet?`)) return
     const setSaving = environment === 'testnet' ? setSavingTestnet : setSavingMainnet
     try {
@@ -343,177 +318,6 @@ export default function BinanceWalletSection({
     }
   }
 
-  const renderWalletBlock = (
-    environment: 'testnet' | 'mainnet',
-    wallet: BinanceWalletData | null,
-    editing: boolean,
-    setEditing: (v: boolean) => void,
-    apiKey: string,
-    setApiKey: (v: string) => void,
-    secretKey: string,
-    setSecretKey: (v: string) => void,
-    maxLev: number,
-    setMaxLev: (v: number) => void,
-    defaultLev: number,
-    setDefaultLev: (v: number) => void,
-    showKey: boolean,
-    setShowKey: (v: boolean) => void,
-    saving: boolean,
-    testing: boolean,
-    quota?: { limited: boolean; used: number; limit: number; remaining: number } | null
-  ) => {
-    const envName = environment === 'testnet' ? 'Testnet' : 'Mainnet'
-    const badgeVariant = environment === 'testnet' ? 'default' : 'destructive'
-    const credentialHint = environment === 'testnet'
-      ? 'Use Binance Futures Demo Trading API keys here. Mainnet, Spot Testnet, and old Mock Trading keys will be rejected.'
-      : 'Use Binance USD-M Futures Mainnet API keys here. Enable Futures read/trading permission; if IP-restricted, whitelist this server IP.'
-
-    return (
-      <div className="p-4 border rounded-lg space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-            <Badge variant={badgeVariant} className="text-xs">
-              {environment === 'testnet' ? 'TESTNET' : 'MAINNET'}
-            </Badge>
-            {environment === 'mainnet' && quota && (
-              <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full" title={t('binance.continueLimitedDescription')}>
-                {t('quota.executionQuota', 'Quota')}: {quota.remaining}/{quota.limit}
-              </span>
-            )}
-          </div>
-          {wallet && !editing && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                {t('common.edit', 'Edit')}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleDeleteWallet(environment)} disabled={saving}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {wallet && !editing ? (
-          <div className="space-y-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">API Key</label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-2 py-1 bg-muted rounded text-xs overflow-hidden">
-                  {wallet.apiKeyMasked || '****'}
-                </code>
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-              </div>
-            </div>
-
-            {wallet.balance && (
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <div className="text-muted-foreground">{t('wallet.balance', 'Balance')}</div>
-                  <div className="font-medium">${wallet.balance.total_equity?.toFixed(2) || '0.00'}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">{t('wallet.available', 'Available')}</div>
-                  <div className="font-medium">${wallet.balance.available_balance?.toFixed(2) || '0.00'}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">PnL</div>
-                  <div className={`font-medium ${(wallet.balance.unrealized_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ${wallet.balance.unrealized_pnl?.toFixed(2) || '0.00'}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <div className="text-muted-foreground">{t('wallet.maxLeverage', 'Max Leverage')}</div>
-                <div className="font-medium">{wallet.maxLeverage}x</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">{t('wallet.defaultLeverage', 'Default Leverage')}</div>
-                <div className="font-medium">{wallet.defaultLeverage}x</div>
-              </div>
-            </div>
-
-            <Button variant="outline" size="sm" onClick={() => handleTestConnection(environment)} disabled={testing} className="w-full">
-              {testing ? <><RefreshCw className="mr-2 h-3 w-3 animate-spin" />{t('wallet.testing', 'Testing...')}</> : t('wallet.testConnection', 'Test Connection')}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {!wallet && (
-              <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs">
-                <p className="text-yellow-800 dark:text-yellow-200">⚠️ No {envName.toLowerCase()} API configured.</p>
-              </div>
-            )}
-
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
-              <p className="text-blue-800 dark:text-blue-200 mb-1">
-                {credentialHint}
-              </p>
-              <p className="text-blue-800 dark:text-blue-200">
-                {t('binance.positionModeHint', 'Requires One-way Position Mode. Go to Binance App → Futures → Settings → Position Mode → One-way Mode')}
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">API Key</label>
-              <Input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Binance API Key"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Secret Key</label>
-              <div className="flex gap-2">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={secretKey}
-                  onChange={(e) => setSecretKey(e.target.value)}
-                  placeholder="Enter your Binance Secret Key"
-                  className="font-mono text-xs h-8"
-                />
-                <Button type="button" variant="outline" size="sm" onClick={() => setShowKey(!showKey)} className="h-8 px-2">
-                  {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                CEX uses API credentials for authentication. The key must match this environment.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">{t('wallet.maxLeverage', 'Max Leverage')}</label>
-                <Input type="number" value={maxLev} onChange={(e) => setMaxLev(Number(e.target.value))} min={1} max={125} className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">{t('wallet.defaultLeverage', 'Default Leverage')}</label>
-                <Input type="number" value={defaultLev} onChange={(e) => setDefaultLev(Number(e.target.value))} min={1} max={maxLev} className="h-8 text-xs" />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={() => handleSaveWallet(environment)} disabled={saving} size="sm" className="flex-1 h-8 text-xs">
-                {saving ? <><RefreshCw className="mr-2 h-3 w-3 animate-spin" />{t('wallet.saving', 'Saving...')}</> : t('wallet.saveWallet', 'Save Wallet')}
-              </Button>
-              {editing && (
-                <Button variant="outline" onClick={() => { setEditing(false); setApiKey(''); setSecretKey('') }} size="sm" className="h-8 text-xs">
-                  {t('common.cancel', 'Cancel')}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   if (loadingConfig && !testnetWallet && !mainnetWallet) {
     return (
       <div className="flex items-center justify-center py-4">
@@ -524,22 +328,50 @@ export default function BinanceWalletSection({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-      {renderWalletBlock(
-        'testnet', testnetWallet, editingTestnet, setEditingTestnet,
-        testnetApiKey, setTestnetApiKey, testnetSecretKey, setTestnetSecretKey,
-        testnetMaxLeverage, setTestnetMaxLeverage,
-        testnetDefaultLeverage, setTestnetDefaultLeverage,
-        showTestnetKey, setShowTestnetKey, savingTestnet, testingTestnet,
-        null
-      )}
-      {renderWalletBlock(
-        'mainnet', mainnetWallet, editingMainnet, setEditingMainnet,
-        mainnetApiKey, setMainnetApiKey, mainnetSecretKey, setMainnetSecretKey,
-        mainnetMaxLeverage, setMainnetMaxLeverage,
-        mainnetDefaultLeverage, setMainnetDefaultLeverage,
-        showMainnetKey, setShowMainnetKey, savingMainnet, testingMainnet,
-        mainnetQuota
-      )}
+      <BinanceWalletBlock
+        environment="testnet"
+        wallet={testnetWallet}
+        editing={editingTestnet}
+        setEditing={setEditingTestnet}
+        apiKey={testnetApiKey}
+        setApiKey={setTestnetApiKey}
+        secretKey={testnetSecretKey}
+        setSecretKey={setTestnetSecretKey}
+        maxLeverage={testnetMaxLeverage}
+        setMaxLeverage={setTestnetMaxLeverage}
+        defaultLeverage={testnetDefaultLeverage}
+        setDefaultLeverage={setTestnetDefaultLeverage}
+        showKey={showTestnetKey}
+        setShowKey={setShowTestnetKey}
+        saving={savingTestnet}
+        testing={testingTestnet}
+        quota={null}
+        onSaveWallet={handleSaveWallet}
+        onTestConnection={handleTestConnection}
+        onDeleteWallet={handleDeleteWallet}
+      />
+      <BinanceWalletBlock
+        environment="mainnet"
+        wallet={mainnetWallet}
+        editing={editingMainnet}
+        setEditing={setEditingMainnet}
+        apiKey={mainnetApiKey}
+        setApiKey={setMainnetApiKey}
+        secretKey={mainnetSecretKey}
+        setSecretKey={setMainnetSecretKey}
+        maxLeverage={mainnetMaxLeverage}
+        setMaxLeverage={setMainnetMaxLeverage}
+        defaultLeverage={mainnetDefaultLeverage}
+        setDefaultLeverage={setMainnetDefaultLeverage}
+        showKey={showMainnetKey}
+        setShowKey={setShowMainnetKey}
+        saving={savingMainnet}
+        testing={testingMainnet}
+        quota={mainnetQuota}
+        onSaveWallet={handleSaveWallet}
+        onTestConnection={handleTestConnection}
+        onDeleteWallet={handleDeleteWallet}
+      />
 
       {/* Rebate Ineligible Modal */}
       <RebateIneligibleModal

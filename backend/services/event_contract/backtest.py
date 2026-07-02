@@ -9,13 +9,33 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from services.event_contract.constants import ENGINE_VERSION, PERIOD_SECONDS
+from services.event_contract.ai_trader_team import (
+    build_ai_trader_team_state,
+    finalize_ai_trader_team_report,
+    record_ai_trader_team_decisions,
+)
+from services.event_contract.backtest_helpers import EventContractBacktestHelperMixin
+from services.event_contract.constants import ENGINE_VERSION, MAX_REVIEWER_PANEL_SIZE, PERIOD_SECONDS, reviewer_names_for_panel
+from services.event_contract.localization import join_chinese_reasons
 from services.event_contract.tasks import EventBacktestPaused, build_ai_reviewer_statuses
 
 logger = logging.getLogger(__name__)
 
 
-class EventContractBacktestMixin:
+class EventContractBacktestMixin(EventContractBacktestHelperMixin):
+    def _load_reviewer_weights(self, db: Session) -> Dict[str, float]:
+        """Fetch learned Bayesian weights for the reviewer panel.
+
+        Weights are cached inside reviewer_learning; a bad DB call must not
+        crash predict/backtest, so we fall back to a uniform 1.0 mapping.
+        """
+        try:
+            from services.event_contract.reviewer_learning import compute_reviewer_weights
+            return compute_reviewer_weights(db)
+        except Exception as exc:  # noqa: BLE001 - weights are optional
+            logger.warning("reviewer_learning weight load failed (%s) - using neutral weights", exc)
+            return {}
+
     def predict(self, db: Session, config: Dict[str, Any]) -> Dict[str, Any]:
         cfg = self._normalize_config(config, prediction=True)
         now_ts = int(datetime.now(timezone.utc).timestamp())
@@ -73,7 +93,10 @@ class EventContractBacktestMixin:
                 latest_decision_ts,
             )
         history = klines[-cfg["warmup_bars"] :]
-        rule_analysis = self._analyze_snapshot(history, cfg, source="system_30_ai")
+        # Load learned reviewer weights once per predict call - _analyze_snapshot
+        # reads them out of cfg to apply weighted consensus without new plumbing.
+        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db)}
+        rule_analysis = self._analyze_snapshot(history, cfg, source="system_panel")
         analysis = rule_analysis
         if cfg["consensus_mode"] == "ai_confirmed":
             ai_decisions, ai_meta = self._call_llm_consensus(db, cfg, history, rule_analysis)
@@ -93,6 +116,7 @@ class EventContractBacktestMixin:
             "exchange": cfg["exchange"],
             "period": cfg["period"],
             "consensus_mode": cfg["consensus_mode"],
+            "decision_policy": analysis["decision_policy"],
             "ai_participated": analysis["ai_participated"],
             "ai_model": analysis.get("ai_model"),
             "ai_account_name": analysis.get("ai_account_name"),
@@ -112,8 +136,15 @@ class EventContractBacktestMixin:
             "trap_risk": analysis["trap_risk"],
             "fake_breakout_risk": analysis["fake_breakout_risk"],
             "range_risk": analysis["range_risk"],
+            "edge_score": analysis["edge_score"],
+            "risk_score": analysis["risk_score"],
+            "execution_score": analysis["execution_score"],
+            "decision_grade": analysis["decision_grade"],
+            "trade_readiness": analysis["trade_readiness"],
+            "veto_reasons": analysis["veto_reasons"],
+            "decision_diagnostics": analysis["decision_diagnostics"],
             "reason": analysis["reason_summary"],
-            "entry_warning": "; ".join(analysis["blocked_reasons"]),
+            "entry_warning": join_chinese_reasons(analysis["blocked_reasons"]),
             "similar_patterns": similar,
             "event_signal": analysis["event_signal"],
             "data_quality": data_quality,
@@ -187,7 +218,9 @@ class EventContractBacktestMixin:
         total_decision_bars = len(decision_candles)
         if total_decision_bars > cfg["max_bars"]:
             raise ValueError(f"Backtest range is too large. Limit is {cfg['max_bars']} decision bars.")
-        expected_ai_reviews = cfg["max_ai_evaluations"] * 30 if cfg["consensus_mode"] == "ai_confirmed" else 0
+        reviewer_names = reviewer_names_for_panel(cfg["reviewer_panel_size"])
+        reviewer_count = len(reviewer_names)
+        expected_ai_reviews = cfg["max_ai_evaluations"] * reviewer_count if cfg["consensus_mode"] == "ai_confirmed" else 0
         report(
             {
                 "phase": "scanning",
@@ -201,6 +234,9 @@ class EventContractBacktestMixin:
         )
 
         ts_to_index = {item["timestamp"]: idx for idx, item in enumerate(klines)}
+        # Learned reviewer weights are computed once per backtest and reused for
+        # every _analyze_snapshot call inside the loop (weights don't change mid-run).
+        cfg = {**cfg, "reviewer_weights": self._load_reviewer_weights(db)}
         equity = cfg["initial_balance"]
         peak_equity = equity
         max_drawdown = 0.0
@@ -224,6 +260,7 @@ class EventContractBacktestMixin:
         }
         ai_evaluations = 0
         completed_ai_reviews = 0
+        ai_trader_team_state = build_ai_trader_team_state(cfg)
 
         for idx, candle in enumerate(klines):
             decision_ts = self._decision_timestamp(candle, cfg)
@@ -270,7 +307,23 @@ class EventContractBacktestMixin:
                 continue
 
             history = klines[: idx + 1]
-            analysis = self._analyze_snapshot(history, cfg, source="system_30_ai")
+            team_features = self._compute_features(history)
+            team_decisions = self._build_rule_decisions(
+                team_features,
+                {**cfg, "reviewer_panel_size": MAX_REVIEWER_PANEL_SIZE},
+            )
+            record_ai_trader_team_decisions(
+                state=ai_trader_team_state,
+                cfg=cfg,
+                decisions=team_decisions,
+                signal_time=self._to_iso(self._decision_timestamp(candle, cfg)),
+                entry_time=self._to_iso(self._decision_timestamp(klines[entry_idx], cfg)),
+                expiry_time=self._to_iso(self._decision_timestamp(klines[expiry_idx], cfg)),
+                entry_price=klines[entry_idx]["close"],
+                expiry_price=klines[expiry_idx]["close"],
+                market_state=str(team_features.get("market_state") or "unknown"),
+            )
+            analysis = self._analyze_snapshot(history, cfg, source="system_panel")
             skipped["ai_evaluated_count"] += 1
             if not analysis["allow_trade"]:
                 if analysis["fake_breakout_risk"] > 60:
@@ -298,8 +351,11 @@ class EventContractBacktestMixin:
                         "total_decision_bars": total_decision_bars,
                         "completed_ai_reviews": completed_ai_reviews,
                         "expected_ai_reviews": expected_ai_reviews,
-                        "ai_reviewer_statuses": build_ai_reviewer_statuses(status="running"),
-                        "message": f"Running 30 AI reviewers for candidate {ai_evaluations + 1}",
+                        "ai_reviewer_statuses": build_ai_reviewer_statuses(
+                            status="running",
+                            reviewer_names=reviewer_names,
+                        ),
+                        "message": f"Running {reviewer_count} consensus votes for candidate {ai_evaluations + 1}",
                     }
                 )
                 ai_decisions, ai_meta = self._call_llm_consensus(db, cfg, history, analysis)
@@ -314,8 +370,11 @@ class EventContractBacktestMixin:
                         "total_decision_bars": total_decision_bars,
                         "completed_ai_reviews": completed_ai_reviews,
                         "expected_ai_reviews": expected_ai_reviews,
-                        "ai_reviewer_statuses": build_ai_reviewer_statuses(ai_decisions),
-                        "message": f"Completed 30 AI reviewers for candidate {ai_evaluations}",
+                        "ai_reviewer_statuses": build_ai_reviewer_statuses(
+                            ai_decisions,
+                            reviewer_names=reviewer_names,
+                        ),
+                        "message": f"Completed {len(ai_decisions)}/{reviewer_count} consensus votes for candidate {ai_evaluations}",
                     }
                 )
                 analysis = self._analyze_snapshot(
@@ -395,7 +454,16 @@ class EventContractBacktestMixin:
             trades.append(trade)
             equity_curve.append({"timestamp": self._decision_timestamp(klines[expiry_idx], cfg) * 1000, "equity": round(equity, 4)})
 
-        summary = self._build_summary(cfg, trades, equity, max_drawdown, skipped, data_quality)
+        ai_trader_team_report = finalize_ai_trader_team_report(ai_trader_team_state, cfg)
+        summary = self._build_summary(
+            cfg,
+            trades,
+            equity,
+            max_drawdown,
+            skipped,
+            data_quality,
+            ai_trader_team_report=ai_trader_team_report,
+        )
         summary["execution_time_ms"] = int((time.perf_counter() - started) * 1000)
         report(
             {
@@ -427,167 +495,3 @@ class EventContractBacktestMixin:
             "trades_returned": min(len(trades), cfg["return_trade_limit"]),
             "total_trade_logs": len(trades),
         }
-
-    def _build_summary(
-        self,
-        cfg: Dict[str, Any],
-        trades: List[Dict[str, Any]],
-        final_equity: float,
-        max_drawdown: float,
-        skipped: Dict[str, int],
-        data_quality: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        total = len(trades)
-        wins = sum(1 for t in trades if t["result"] == "win")
-        losses = sum(1 for t in trades if t["result"] == "loss")
-        draws = sum(1 for t in trades if t["result"] == "draw")
-        gross_profit = sum(t["profit_loss"] for t in trades if t["profit_loss"] > 0)
-        gross_loss = abs(sum(t["profit_loss"] for t in trades if t["profit_loss"] < 0))
-        long_trades = [t for t in trades if t["direction"] == "long"]
-        short_trades = [t for t in trades if t["direction"] == "short"]
-
-        def rate(items: List[Dict[str, Any]]) -> float:
-            return round(sum(1 for item in items if item["result"] == "win") / len(items) * 100, 2) if items else 0
-        fee = cfg["stake_amount"] * cfg["fee_rate"]
-        break_even_win_rate = (
-            (cfg["stake_amount"] + fee) / (cfg["stake_amount"] * (cfg["win_payout_ratio"] + 1)) * 100
-            if cfg["win_payout_ratio"] > -1
-            else 100
-        )
-        target_win_rate = cfg.get("target_win_rate", 75)
-        nested_quality_warnings = any(
-            bool((data_quality.get(key) or {}).get("warnings"))
-            for key in ("coinglass", "l2")
-        )
-        partial = (
-            skipped.get("ai_skipped_cap_count", 0) > 0
-            or skipped.get("missing_expiry_count", 0) > 0
-            or skipped.get("expiry_lag_skipped_count", 0) > 0
-            or skipped.get("entry_delay_skipped_count", 0) > 0
-            or bool(data_quality.get("warnings"))
-            or nested_quality_warnings
-        )
-        win_rate = round(wins / total * 100, 2) if total else 0
-        target_min_trades = int(cfg.get("target_min_trades", 10))
-        target_sample_met = total >= target_min_trades
-        target_win_rate_met = not partial and target_sample_met and win_rate >= target_win_rate
-
-        streak_w = streak_l = max_w = max_l = 0
-        for trade in trades:
-            if trade["result"] == "win":
-                streak_w += 1
-                streak_l = 0
-            elif trade["result"] == "loss":
-                streak_l += 1
-                streak_w = 0
-            max_w = max(max_w, streak_w)
-            max_l = max(max_l, streak_l)
-
-        return {
-            "engine_version": ENGINE_VERSION,
-            "config_hash": self._config_hash(cfg),
-            "data_quality": data_quality,
-            "consensus_mode": cfg["consensus_mode"],
-            "consensus_source": "llm_ai" if cfg["consensus_mode"] == "ai_confirmed" else "system_30_ai",
-            "ai_confirmed": cfg["consensus_mode"] == "ai_confirmed",
-            "max_ai_evaluations": cfg["max_ai_evaluations"],
-            "target_win_rate": round(target_win_rate, 2),
-            "target_min_trades": target_min_trades,
-            "target_sample_met": target_sample_met,
-            "target_win_rate_met": target_win_rate_met,
-            "break_even_win_rate": round(break_even_win_rate, 2),
-            "partial": partial,
-            "audit_status": "partial" if partial else "complete",
-            "total_trades": total,
-            "wins": wins,
-            "losses": losses,
-            "draws": draws,
-            "win_rate": win_rate,
-            "loss_rate": round(losses / total * 100, 2) if total else 0,
-            "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (round(gross_profit, 4) if gross_profit else 0),
-            "expectancy": round(sum(t["profit_loss"] for t in trades) / total, 4) if total else 0,
-            "initial_balance": cfg["initial_balance"],
-            "final_equity": round(final_equity, 4),
-            "total_pnl": round(final_equity - cfg["initial_balance"], 4),
-            "total_pnl_percent": round((final_equity - cfg["initial_balance"]) / cfg["initial_balance"] * 100, 4),
-            "max_drawdown": round(max_drawdown, 4),
-            "max_consecutive_wins": max_w,
-            "max_consecutive_losses": max_l,
-            "average_signal_strength": round(self._avg(t["signal_strength"] for t in trades), 2),
-            "average_trap_risk": round(self._avg(t["trap_risk"] for t in trades), 2),
-            "long_win_rate": rate(long_trades),
-            "short_win_rate": rate(short_trades),
-            "trend_market_win_rate": rate([t for t in trades if t["market_state"] in ("trend_up", "trend_down")]),
-            "range_market_win_rate": rate([t for t in trades if t["market_state"] == "range"]),
-            "breakout_win_rate": rate([t for t in trades if t["market_state"] == "breakout"]),
-            "pullback_win_rate": rate([t for t in trades if t["market_state"] == "pullback"]),
-            **skipped,
-        }
-
-    def _find_similar_patterns(
-        self,
-        klines: List[Dict[str, Any]],
-        current: Dict[str, Any],
-        cfg: Dict[str, Any],
-        limit: int = 5,
-    ) -> List[Dict[str, Any]]:
-        if len(klines) < cfg["warmup_bars"] + cfg["expiry_bars"] + 20:
-            return []
-        target_state = current["market_state"]
-        target_direction = current["final_direction"]
-        matches = []
-        ts_to_index = {item["timestamp"]: idx for idx, item in enumerate(klines)}
-        max_scan = min(len(klines) - cfg["expiry_bars"] - 1, 1500)
-        start = max(cfg["warmup_bars"], len(klines) - max_scan)
-        for idx in range(start, len(klines) - cfg["expiry_bars"] - 1):
-            snapshot = self._analyze_snapshot(klines[: idx + 1], cfg)
-            if snapshot["market_state"] != target_state:
-                continue
-            if target_direction != "hold" and snapshot["final_direction"] != target_direction:
-                continue
-            direction = snapshot["final_direction"]
-            if direction not in ("long", "short"):
-                continue
-            expiry_ts = klines[idx]["timestamp"] + cfg["expiry_minutes"] * 60
-            expiry_idx, expiry_lag = self._resolve_expiry_index(klines, ts_to_index, expiry_ts, cfg)
-            if expiry_idx is None:
-                continue
-            expiry = klines[expiry_idx]
-            outcome = self._settle_event_contract(direction, klines[idx]["close"], expiry["close"], cfg["draw_result"])
-            matches.append(
-                {
-                    "direction": direction,
-                    "market_state": snapshot["market_state"],
-                    "signal_strength": snapshot["signal_strength"],
-                    "result": outcome,
-                    "entry_price": round(klines[idx]["close"], 6),
-                    "expiry_price": round(expiry["close"], 6),
-                    "entry_time": self._to_iso(self._decision_timestamp(klines[idx], cfg)),
-                    "expiry_time": self._to_iso(self._decision_timestamp(expiry, cfg)),
-                    "expiry_lag_seconds": expiry_lag or 0,
-                }
-            )
-        recent = matches[-limit:]
-        win_rate = round(sum(1 for item in matches if item["result"] == "win") / len(matches) * 100, 2) if matches else 0
-        return [{"sample_size": len(matches), "historical_win_rate": win_rate, "matches": recent}]
-
-    def _first_index_at_or_after(self, klines: List[Dict[str, Any]], target_ts: int) -> Optional[int]:
-        for idx, item in enumerate(klines):
-            if item["timestamp"] >= target_ts:
-                return idx
-        return None
-
-    def _settle_event_contract(self, direction: str, entry: float, expiry: float, draw_result: str) -> str:
-        if expiry == entry:
-            return "draw" if draw_result == "draw" else "loss"
-        if direction == "long":
-            return "win" if expiry > entry else "loss"
-        if direction == "short":
-            return "win" if expiry < entry else "loss"
-        return "loss"
-
-    def _apply_slippage(self, price: float, direction: str, bps: float) -> float:
-        if not bps:
-            return price
-        multiplier = bps / 10000
-        return price * (1 + multiplier) if direction == "long" else price * (1 - multiplier)

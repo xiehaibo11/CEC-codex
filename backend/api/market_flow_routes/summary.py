@@ -25,7 +25,7 @@ from ._base import (
 
 
 @router.get("/summary", response_model=MarketFlowSummaryResponse)
-async def get_market_flow_summary(
+def get_market_flow_summary(
     symbols: str = Query(..., description="Comma-separated symbols, e.g. BTC,ETH"),
     exchange: str = Query("hyperliquid", description="Exchange: hyperliquid or binance"),
     window: str = Query("1h", description="Summary window"),
@@ -80,7 +80,7 @@ async def get_market_flow_summary(
 
 
 @router.get("/large-order-zones", response_model=LargeOrderZoneResponse)
-async def get_large_order_zones(
+def get_large_order_zones(
     symbol: str = Query(..., description="Trading symbol, e.g. BTC"),
     exchange: str = Query("hyperliquid", description="Exchange: hyperliquid or binance"),
     timeframe: str = Query("15m", description="Aggregation timeframe"),

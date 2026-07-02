@@ -31,7 +31,18 @@ export default defineConfig({
       output: {
         entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
-        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`
+        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+        // Split heavy, page-specific vendor libs out of the shared bundle so
+        // they're only downloaded by pages that actually use them (charts,
+        // Monaco, ethers, markdown rendering aren't needed on first paint).
+        manualChunks: {
+          "vendor-chartjs": ["chart.js", "react-chartjs-2"],
+          "vendor-recharts": ["recharts"],
+          "vendor-lightweight-charts": ["lightweight-charts"],
+          "vendor-monaco": ["@monaco-editor/react"],
+          "vendor-ethers": ["ethers"],
+          "vendor-markdown": ["react-markdown", "remark-gfm", "rehype-raw", "react-syntax-highlighter"],
+        },
       }
     }
   },

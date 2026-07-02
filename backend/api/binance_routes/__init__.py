@@ -30,13 +30,21 @@ from . import market  # noqa: E402,F401
 
 # Re-export request models for backward compatibility.
 from .wallet import BinanceSetupRequest, ConfirmLimitedBindingRequest  # noqa: E402,F401
-from .trading import ManualOrderRequest  # noqa: E402,F401
+from .trading import ManualOrderRequest, TestnetOrderProbeRequest  # noqa: E402,F401
 from .market import BinanceSymbolSelectionRequest  # noqa: E402,F401
 
 __all__ = [
     "router",
+    "logger",
+    "_client_cache",
+    "_get_client",
+    "_clear_client_cache",
+    "_is_premium_user",
+    "_format_credential_error",
+    "DAILY_QUOTA_LIMIT",
     "BinanceSetupRequest",
     "ConfirmLimitedBindingRequest",
     "ManualOrderRequest",
+    "TestnetOrderProbeRequest",
     "BinanceSymbolSelectionRequest",
 ]

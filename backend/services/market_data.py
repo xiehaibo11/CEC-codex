@@ -120,9 +120,20 @@ def get_all_symbols() -> List[str]:
 
 
 def get_ticker_data(symbol: str, market: str = "CRYPTO", environment: str = "mainnet") -> Dict[str, Any]:
-    """Get complete ticker data including 24h change and volume"""
+    """Get complete ticker data including 24h change and volume.
+
+    Backed by a short-lived (2s) in-memory cache: this endpoint is polled
+    repeatedly by the dashboard and by AI context-building, and a per-request
+    live exchange round-trip is the dominant source of latency. A 2s TTL
+    collapses bursts of near-simultaneous requests into one upstream call
+    while staying far fresher than the existing 30s last-price cache.
+    """
     key = f"{symbol}.{market}.{environment}"
-    logger.info(f"[DEBUG] get_ticker_data called for {key} in {environment}")
+
+    from .price_cache import get_cached_ticker, cache_ticker
+    cached = get_cached_ticker(symbol, market, environment)
+    if cached is not None:
+        return cached
 
     # Route to Binance if market is binance
     if market.lower() == "binance":
@@ -146,7 +157,7 @@ def get_ticker_data(symbol: str, market: str = "CRYPTO", environment: str = "mai
             except Exception as e:
                 logger.warning(f"Failed to fetch premium index for {symbol}: {e}")
 
-            return {
+            result = {
                 'symbol': symbol,
                 'price': float(ticker.get('lastPrice', 0)),
                 'oracle_price': float(ticker.get('lastPrice', 0)),  # Binance doesn't have oracle price
@@ -156,22 +167,21 @@ def get_ticker_data(symbol: str, market: str = "CRYPTO", environment: str = "mai
                 'open_interest': open_interest_value,
                 'funding_rate': funding_rate,
             }
+            cache_ticker(symbol, market, result, environment)
+            return result
         except Exception as e:
             logger.error(f"Failed to get ticker data from Binance ({environment}): {e}")
             raise Exception(f"Unable to get ticker data for {key}: {e}")
 
     try:
-        logger.info(f"[DEBUG] Calling get_ticker_data_from_hyperliquid for {symbol} in {environment}")
         ticker_data = get_ticker_data_from_hyperliquid(symbol, environment)
-        logger.info(f"[DEBUG] get_ticker_data_from_hyperliquid returned: {ticker_data}")
         if ticker_data:
-            logger.info(f"Got ticker data for {key}: price={ticker_data['price']}, change24h={ticker_data['change24h']}")
+            cache_ticker(symbol, market, ticker_data, environment)
             return ticker_data
         raise Exception("Hyperliquid returned empty ticker data")
     except Exception as hl_err:
         logger.error(f"Failed to get ticker data from Hyperliquid ({environment}): {hl_err}")
         # Fallback to price-only data
-        logger.info(f"[DEBUG] Falling back to price-only data for {key}")
         try:
             price = get_last_price(symbol, market, environment)
             fallback_data = {
@@ -181,7 +191,6 @@ def get_ticker_data(symbol: str, market: str = "CRYPTO", environment: str = "mai
                 'volume24h': 0,
                 'percentage24h': 0,
             }
-            logger.info(f"[DEBUG] Returning fallback data for {key}: {fallback_data}")
             return fallback_data
         except Exception:
             raise Exception(f"Unable to get ticker data for {key}: {hl_err}")

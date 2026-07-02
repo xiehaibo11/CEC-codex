@@ -6,10 +6,7 @@
 
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Wallet, Eye, EyeOff, CheckCircle, RefreshCw, Plus, Trash2 } from 'lucide-react'
+import { Wallet, RefreshCw } from 'lucide-react'
 import {
   getAccountWallet,
   configureAccountWallet,
@@ -18,52 +15,16 @@ import {
 } from '@/lib/hyperliquidApi'
 import { type UnauthorizedAccount } from '@/lib/api'
 import { checkBuilderFeeAuthorized, approveBuilderFee } from '@/lib/hyperliquidWalletSetup'
-import { copyToClipboard } from '@/lib/utils'
 import { AuthorizationModal } from '@/components/hyperliquid'
 import { useTranslation } from 'react-i18next'
+import { HyperliquidWalletBlock } from './hyperliquid-wallet-panel/HyperliquidWalletBlock'
+import { detectInputType, formatPrivateKey } from './hyperliquid-wallet-panel/privateKeyInput'
+import type { WalletData, WalletEnvironment } from './hyperliquid-wallet-panel/types'
 
 interface WalletConfigPanelProps {
   accountId: number
   accountName: string
   onWalletConfigured?: () => void
-}
-
-interface WalletData {
-  id?: number
-  walletAddress?: string
-  maxLeverage: number
-  defaultLeverage: number
-  balance?: {
-    totalEquity: number
-    availableBalance: number
-    marginUsagePercent: number
-  }
-}
-
-// Detect if input looks like a wallet address instead of private key
-type InputType = 'empty' | 'valid_key' | 'key_no_prefix' | 'wallet_address' | 'invalid'
-
-function detectInputType(input: string): InputType {
-  const trimmed = input.trim()
-  if (!trimmed) return 'empty'
-  const withoutPrefix = trimmed.startsWith('0x') ? trimmed.slice(2) : trimmed
-  if (!/^[0-9a-fA-F]+$/.test(withoutPrefix)) return 'invalid'
-  if (withoutPrefix.length === 64) {
-    return trimmed.startsWith('0x') ? 'valid_key' : 'key_no_prefix'
-  }
-  if (withoutPrefix.length === 40) return 'wallet_address'
-  return 'invalid'
-}
-
-// Auto-format private key (add 0x prefix if missing)
-function formatPrivateKey(input: string): string {
-  const trimmed = input.trim()
-  if (!trimmed) return ''
-  const withoutPrefix = trimmed.startsWith('0x') ? trimmed.slice(2) : trimmed
-  if (withoutPrefix.length === 64 && /^[0-9a-fA-F]+$/.test(withoutPrefix)) {
-    return '0x' + withoutPrefix
-  }
-  return trimmed
 }
 
 export default function WalletConfigPanel({
@@ -132,7 +93,7 @@ export default function WalletConfigPanel({
     }
   }
 
-  const handleSaveWallet = async (environment: 'testnet' | 'mainnet') => {
+  const handleSaveWallet = async (environment: WalletEnvironment) => {
     const rawPrivateKey = environment === 'testnet' ? testnetPrivateKey : mainnetPrivateKey
     const maxLeverage = environment === 'testnet' ? testnetMaxLeverage : mainnetMaxLeverage
     const defaultLeverage = environment === 'testnet' ? testnetDefaultLeverage : mainnetDefaultLeverage
@@ -223,7 +184,7 @@ export default function WalletConfigPanel({
     }
   }
 
-  const handleTestConnection = async (environment: 'testnet' | 'mainnet') => {
+  const handleTestConnection = async (environment: WalletEnvironment) => {
     try {
       if (environment === 'testnet') {
         setTestingTestnet(true)
@@ -268,7 +229,7 @@ export default function WalletConfigPanel({
     }
   }
 
-  const handleDeleteWallet = async (environment: 'testnet' | 'mainnet') => {
+  const handleDeleteWallet = async (environment: WalletEnvironment) => {
     const envName = environment === 'testnet' ? 'Testnet' : 'Mainnet'
 
     if (!confirm(`Are you sure you want to delete the ${envName} wallet? This action cannot be undone.`)) {
@@ -294,245 +255,6 @@ export default function WalletConfigPanel({
     }
   }
 
-  const renderWalletBlock = (
-    environment: 'testnet' | 'mainnet',
-    wallet: WalletData | null,
-    editing: boolean,
-    setEditing: (v: boolean) => void,
-    privateKey: string,
-    setPrivateKey: (v: string) => void,
-    maxLeverage: number,
-    setMaxLeverage: (v: number) => void,
-    defaultLeverage: number,
-    setDefaultLeverage: (v: number) => void,
-    showKey: boolean,
-    setShowKey: (v: boolean) => void,
-    testing: boolean,
-    inputWarning: string | null,
-    setInputWarning: (v: string | null) => void
-  ) => {
-    const envName = environment === 'testnet' ? 'Testnet' : 'Mainnet'
-    const badgeVariant = environment === 'testnet' ? 'default' : 'destructive'
-
-    return (
-      <div className="p-4 border rounded-lg space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-            <Badge variant={badgeVariant} className="text-xs">
-              {environment === 'testnet' ? 'TESTNET' : 'MAINNET'}
-            </Badge>
-          </div>
-          {wallet && !editing && (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditing(true)}
-              >
-                {t('common.edit', 'Edit')}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDeleteWallet(environment)}
-                disabled={loading}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {wallet && !editing ? (
-          // Display existing wallet
-          <div className="space-y-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">{t('wallet.walletAddress', 'Wallet Address')}</label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-2 py-1 bg-muted rounded text-xs" style={{maxWidth: '100%', overflow: "hidden"}}>
-                  {wallet.walletAddress}
-                </code>
-                <button
-                  onClick={async () => {
-                    const success = await copyToClipboard(wallet.walletAddress || '');
-                    if (success) {
-                      toast.success(t('wallet.addressCopied', 'Wallet address copied to clipboard'));
-                    } else {
-                      toast.error(t('wallet.copyFailed', 'Failed to copy'));
-                    }
-                  }}
-                  className="cursor-pointer"
-                  title={t('wallet.copyAddress', 'Copy wallet address')}
-                >
-                  <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                </button>
-              </div>
-            </div>
-
-            {wallet.balance && (
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <div className="text-muted-foreground">{t('wallet.balance', 'Balance')}</div>
-                  <div className="font-medium">${wallet.balance.totalEquity.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">{t('wallet.available', 'Available')}</div>
-                  <div className="font-medium">${wallet.balance.availableBalance.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">{t('wallet.margin', 'Margin')}</div>
-                  <div className="font-medium">{wallet.balance.marginUsagePercent.toFixed(1)}%</div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <div className="text-muted-foreground">{t('wallet.maxLeverage', 'Max Leverage')}</div>
-                <div className="font-medium">{wallet.maxLeverage}x</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">{t('wallet.defaultLeverage', 'Default Leverage')}</div>
-                <div className="font-medium">{wallet.defaultLeverage}x</div>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleTestConnection(environment)}
-              disabled={testing}
-              className="w-full"
-            >
-              {testing ? (
-                <>
-                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                  {t('wallet.testing', 'Testing...')}
-                </>
-              ) : (
-                t('wallet.testConnection', 'Test Connection')
-              )}
-            </Button>
-          </div>
-        ) : (
-          // Configuration form
-          <div className="space-y-3">
-            {!wallet && (
-              <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                <p className="text-yellow-800">
-                  ⚠️ {t('wallet.noWalletConfigured', 'No {{env}} wallet configured.', { env: envName.toLowerCase() })}
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">{t('wallet.privateKey', 'Private Key')}</label>
-              <div className="flex gap-2">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={privateKey}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setPrivateKey(value)
-                    const inputType = detectInputType(value)
-                    if (inputType === 'wallet_address') {
-                      setInputWarning(t('wallet.addressWarning', 'This looks like a wallet ADDRESS (40 chars), not a private key (64 chars).'))
-                    } else if (inputType === 'invalid' && value.trim()) {
-                      setInputWarning(t('wallet.invalidFormat', 'Invalid format. Private key must be 64 hex characters.'))
-                    } else {
-                      setInputWarning(null)
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const formatted = formatPrivateKey(e.target.value)
-                    if (formatted !== privateKey && detectInputType(formatted) === 'valid_key') {
-                      setPrivateKey(formatted)
-                      toast.success(t('wallet.prefixAdded', 'Added 0x prefix automatically'))
-                    }
-                  }}
-                  placeholder={t('wallet.privateKeyPlaceholder', '0x... or paste without 0x prefix')}
-                  className={`font-mono text-xs h-8 ${inputWarning ? 'border-red-500' : ''}`}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowKey(!showKey)}
-                  className="h-8 px-2"
-                >
-                  {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                </Button>
-              </div>
-              {inputWarning && (
-                <p className="text-xs text-red-500">{inputWarning}</p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {t('wallet.privateKeyHint', '64 hex chars (0x auto-added). DEX needs private key to sign on-chain transactions.')}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">{t('wallet.maxLeverage', 'Max Leverage')}</label>
-                <Input
-                  type="number"
-                  value={maxLeverage}
-                  onChange={(e) => setMaxLeverage(Number(e.target.value))}
-                  min={1}
-                  max={50}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">{t('wallet.defaultLeverage', 'Default Leverage')}</label>
-                <Input
-                  type="number"
-                  value={defaultLeverage}
-                  onChange={(e) => setDefaultLeverage(Number(e.target.value))}
-                  min={1}
-                  max={maxLeverage}
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={() => handleSaveWallet(environment)}
-                disabled={loading}
-                size="sm"
-                className="flex-1 h-8 text-xs"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                    {t('wallet.saving', 'Saving...')}
-                  </>
-                ) : (
-                  t('wallet.saveWallet', 'Save Wallet')
-                )}
-              </Button>
-              {editing && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditing(false)
-                    setPrivateKey('')
-                  }}
-                  size="sm"
-                  className="h-8 text-xs"
-                >
-                  {t('common.cancel', 'Cancel')}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   if (loading && !testnetWallet && !mainnetWallet) {
     return (
       <div className="p-4 border rounded-lg">
@@ -551,41 +273,49 @@ export default function WalletConfigPanel({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {renderWalletBlock(
-          'testnet',
-          testnetWallet,
-          editingTestnet,
-          setEditingTestnet,
-          testnetPrivateKey,
-          setTestnetPrivateKey,
-          testnetMaxLeverage,
-          setTestnetMaxLeverage,
-          testnetDefaultLeverage,
-          setTestnetDefaultLeverage,
-          showTestnetKey,
-          setShowTestnetKey,
-          testingTestnet,
-          testnetInputWarning,
-          setTestnetInputWarning
-        )}
+        <HyperliquidWalletBlock
+          environment="testnet"
+          wallet={testnetWallet}
+          editing={editingTestnet}
+          setEditing={setEditingTestnet}
+          privateKey={testnetPrivateKey}
+          setPrivateKey={setTestnetPrivateKey}
+          maxLeverage={testnetMaxLeverage}
+          setMaxLeverage={setTestnetMaxLeverage}
+          defaultLeverage={testnetDefaultLeverage}
+          setDefaultLeverage={setTestnetDefaultLeverage}
+          showKey={showTestnetKey}
+          setShowKey={setShowTestnetKey}
+          testing={testingTestnet}
+          loading={loading}
+          inputWarning={testnetInputWarning}
+          setInputWarning={setTestnetInputWarning}
+          onSaveWallet={handleSaveWallet}
+          onTestConnection={handleTestConnection}
+          onDeleteWallet={handleDeleteWallet}
+        />
 
-        {renderWalletBlock(
-          'mainnet',
-          mainnetWallet,
-          editingMainnet,
-          setEditingMainnet,
-          mainnetPrivateKey,
-          setMainnetPrivateKey,
-          mainnetMaxLeverage,
-          setMainnetMaxLeverage,
-          mainnetDefaultLeverage,
-          setMainnetDefaultLeverage,
-          showMainnetKey,
-          setShowMainnetKey,
-          testingMainnet,
-          mainnetInputWarning,
-          setMainnetInputWarning
-        )}
+        <HyperliquidWalletBlock
+          environment="mainnet"
+          wallet={mainnetWallet}
+          editing={editingMainnet}
+          setEditing={setEditingMainnet}
+          privateKey={mainnetPrivateKey}
+          setPrivateKey={setMainnetPrivateKey}
+          maxLeverage={mainnetMaxLeverage}
+          setMaxLeverage={setMainnetMaxLeverage}
+          defaultLeverage={mainnetDefaultLeverage}
+          setDefaultLeverage={setMainnetDefaultLeverage}
+          showKey={showMainnetKey}
+          setShowKey={setShowMainnetKey}
+          testing={testingMainnet}
+          loading={loading}
+          inputWarning={mainnetInputWarning}
+          setInputWarning={setMainnetInputWarning}
+          onSaveWallet={handleSaveWallet}
+          onTestConnection={handleTestConnection}
+          onDeleteWallet={handleDeleteWallet}
+        />
       </div>
 
       <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">

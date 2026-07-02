@@ -24,16 +24,19 @@ class EventContractDataMixin:
                 break
         return value or "BTC"
 
-    def get_available_symbols(self, db: Session, exchange: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_available_symbols(
+        self, db: Session, exchange: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         params: Dict[str, Any] = {}
         where = ""
         if exchange and exchange != "all":
             where = "WHERE exchange = :exchange"
             params["exchange"] = exchange
 
-        rows = db.execute(
-            text(
-                f"""
+        rows = (
+            db.execute(
+                text(
+                    f"""
                 SELECT exchange, symbol, period, environment, COUNT(*) AS records,
                        MIN(timestamp) AS earliest_ts, MAX(timestamp) AS latest_ts
                 FROM crypto_klines
@@ -41,9 +44,12 @@ class EventContractDataMixin:
                 GROUP BY exchange, symbol, period, environment
                 ORDER BY exchange, symbol, period
                 """
-            ),
-            params,
-        ).mappings().all()
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
 
         by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         for row in rows:
@@ -62,7 +68,10 @@ class EventContractDataMixin:
             )
             entry["periods"].append(row["period"])
             entry["records"] += int(row["records"] or 0)
-            if entry["earliest_ts"] is None or row["earliest_ts"] < entry["earliest_ts"]:
+            if (
+                entry["earliest_ts"] is None
+                or row["earliest_ts"] < entry["earliest_ts"]
+            ):
                 entry["earliest_ts"] = row["earliest_ts"]
             if entry["latest_ts"] is None or row["latest_ts"] > entry["latest_ts"]:
                 entry["latest_ts"] = row["latest_ts"]
@@ -80,24 +89,53 @@ class EventContractDataMixin:
         environment: str = "mainnet",
         min_bars: int = 0,
     ) -> List[Dict[str, Any]]:
-        klines = self._query_klines(db, exchange, symbol, period, start_ts, end_ts, environment)
+        klines = self._query_klines(
+            db, exchange, symbol, period, start_ts, end_ts, environment
+        )
 
         # On-demand backfill: if the local DB has fewer bars than the caller needs
         # (e.g. a fresh DB right after startup), pull the recent window from Binance
         # and re-read. Default min_bars=0 preserves existing callers untouched.
         latest_ts = max((item["timestamp"] for item in klines), default=0)
         interval = PERIOD_SECONDS.get(period, 60)
-        stale_recent_window = end_ts >= int(datetime.now(timezone.utc).timestamp()) - interval * 3 and latest_ts < end_ts - interval * 2
+        requested_bars = max(min_bars, int((end_ts - start_ts) // interval) + 1)
+        backfill_limit = min(max(requested_bars + 10, 200), 1500)
+        recent_window = (
+            end_ts >= int(datetime.now(timezone.utc).timestamp()) - interval * 3
+        )
+        stale_recent_window = recent_window and latest_ts < end_ts - interval * 2
+        recent_gap = recent_window and self._has_kline_gap(
+            [
+                item
+                for item in klines
+                if int(item["timestamp"]) >= end_ts - (backfill_limit - 1) * interval
+            ],
+            interval,
+        )
         if (
-            (min_bars > 0 and len(klines) < min_bars or stale_recent_window)
+            (
+                min_bars > 0
+                and len(klines) < min_bars
+                or stale_recent_window
+                or recent_gap
+            )
             and str(exchange or "").lower() == "binance"
             and environment == "mainnet"
         ):
-            requested_bars = max(min_bars, int((end_ts - start_ts) // interval) + 1)
-            self._backfill_recent_binance_klines(db, symbol, period, requested_bars, environment)
-            klines = self._query_klines(db, exchange, symbol, period, start_ts, end_ts, environment)
+            self._backfill_recent_binance_klines(
+                db, symbol, period, requested_bars, environment
+            )
+            klines = self._query_klines(
+                db, exchange, symbol, period, start_ts, end_ts, environment
+            )
 
         return klines
+
+    def _has_kline_gap(self, klines: List[Dict[str, Any]], interval: int) -> bool:
+        timestamps = sorted({int(item["timestamp"]) for item in klines})
+        return any(
+            cur - prev > interval for prev, cur in zip(timestamps, timestamps[1:])
+        )
 
     def _query_klines(
         self,
@@ -109,9 +147,10 @@ class EventContractDataMixin:
         end_ts: int,
         environment: str,
     ) -> List[Dict[str, Any]]:
-        rows = db.execute(
-            text(
-                """
+        rows = (
+            db.execute(
+                text(
+                    """
                 SELECT timestamp, datetime_str, open_price, high_price, low_price,
                        close_price, volume
                 FROM crypto_klines
@@ -122,16 +161,19 @@ class EventContractDataMixin:
                   AND timestamp BETWEEN :start_ts AND :end_ts
                 ORDER BY timestamp
                 """
-            ),
-            {
-                "exchange": exchange,
-                "symbol": symbol,
-                "period": period,
-                "environment": environment,
-                "start_ts": int(start_ts),
-                "end_ts": int(end_ts),
-            },
-        ).mappings().all()
+                ),
+                {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "period": period,
+                    "environment": environment,
+                    "start_ts": int(start_ts),
+                    "end_ts": int(end_ts),
+                },
+            )
+            .mappings()
+            .all()
+        )
 
         klines = []
         for row in rows:
@@ -170,33 +212,46 @@ class EventContractDataMixin:
             from services.exchanges.data_persistence import ExchangeDataPersistence
 
             limit = min(max(int(min_bars) + 10, 200), 1500)
-            fetched = BinanceAdapter(environment=environment).fetch_klines(symbol, period, limit=limit)
+            fetched = BinanceAdapter(environment=environment).fetch_klines(
+                symbol, period, limit=limit
+            )
             if fetched:
                 # save_klines() commits internally.
-                ExchangeDataPersistence(db).save_klines(fetched, environment=environment)
+                ExchangeDataPersistence(db).save_klines(
+                    fetched, environment=environment
+                )
             logger.info(
                 "[EventContract] Binance kline backfill %s/%s: fetched %s bars (needed %s)",
-                symbol, period, len(fetched), min_bars,
+                symbol,
+                period,
+                len(fetched),
+                min_bars,
             )
         except Exception as exc:  # noqa: BLE001 - backfill must never be fatal
             logger.warning(
                 "[EventContract] Binance kline backfill failed for %s/%s: %s",
-                symbol, period, exc,
+                symbol,
+                period,
+                exc,
             )
 
     def get_backtest_result(self, db: Session, run_id: int) -> Dict[str, Any]:
-        row = db.execute(
-            text(
-                """
+        row = (
+            db.execute(
+                text(
+                    """
                 SELECT id, symbol, exchange, period, start_time, end_time, config,
                        summary, equity_curve, status, total_trades, win_rate,
                        final_equity, created_at
                 FROM event_contract_backtest_runs
                 WHERE id = :run_id
                 """
-            ),
-            {"run_id": run_id},
-        ).mappings().first()
+                ),
+                {"run_id": run_id},
+            )
+            .mappings()
+            .first()
+        )
         if not row:
             raise ValueError(f"Backtest run {run_id} not found")
         return {
@@ -213,7 +268,9 @@ class EventContractDataMixin:
             "created_at": self._dt_to_iso(row["created_at"]),
         }
 
-    def get_backtest_response(self, db: Session, run_id: int, trade_limit: int = 300) -> Dict[str, Any]:
+    def get_backtest_response(
+        self, db: Session, run_id: int, trade_limit: int = 300
+    ) -> Dict[str, Any]:
         result = self.get_backtest_result(db, run_id)
         summary = result.get("summary") or {}
         trades_payload = self.get_trade_logs(db, run_id, limit=trade_limit, offset=0)
@@ -230,25 +287,36 @@ class EventContractDataMixin:
             "status": result.get("status"),
         }
 
-    def get_trade_logs(self, db: Session, run_id: int, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
+    def get_trade_logs(
+        self, db: Session, run_id: int, limit: int = 100, offset: int = 0
+    ) -> Dict[str, Any]:
         limit = min(max(int(limit or 100), 1), 500)
         offset = max(int(offset or 0), 0)
-        total = db.execute(
-            text("SELECT COUNT(*) FROM event_contract_trade_logs WHERE run_id = :run_id"),
-            {"run_id": run_id},
-        ).scalar() or 0
-        rows = db.execute(
-            text(
-                """
+        total = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM event_contract_trade_logs WHERE run_id = :run_id"
+                ),
+                {"run_id": run_id},
+            ).scalar()
+            or 0
+        )
+        rows = (
+            db.execute(
+                text(
+                    """
                 SELECT *
                 FROM event_contract_trade_logs
                 WHERE run_id = :run_id
                 ORDER BY trade_index
                 LIMIT :limit OFFSET :offset
                 """
-            ),
-            {"run_id": run_id, "limit": limit, "offset": offset},
-        ).mappings().all()
+                ),
+                {"run_id": run_id, "limit": limit, "offset": offset},
+            )
+            .mappings()
+            .all()
+        )
         trades = []
         for row in rows:
             trades.append(
@@ -282,10 +350,18 @@ class EventContractDataMixin:
                     "fake_breakout_risk": row["fake_breakout_risk"],
                     "reason": row["reason"],
                     "factor_snapshot": json.loads(row["factor_snapshot"] or "[]"),
-                    "ai_decision_snapshot": json.loads(row["ai_decision_snapshot"] or "[]"),
+                    "ai_decision_snapshot": json.loads(
+                        row["ai_decision_snapshot"] or "[]"
+                    ),
                 }
             )
-        return {"run_id": run_id, "total": total, "limit": limit, "offset": offset, "trades": trades}
+        return {
+            "run_id": run_id,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "trades": trades,
+        }
 
     def _persist_backtest(
         self,
@@ -357,11 +433,17 @@ class EventContractDataMixin:
                     "trade_index": trade["trade_index"],
                     "symbol": trade["symbol"],
                     "direction": trade["direction"],
-                    "entry_time": self._parse_datetime(trade["entry_time"]).replace(tzinfo=None),
+                    "entry_time": self._parse_datetime(trade["entry_time"]).replace(
+                        tzinfo=None
+                    ),
                     "entry_price": trade["entry_price"],
-                    "expiry_time": self._parse_datetime(trade["expiry_time"]).replace(tzinfo=None),
+                    "expiry_time": self._parse_datetime(trade["expiry_time"]).replace(
+                        tzinfo=None
+                    ),
                     "expiry_price": trade["expiry_price"],
-                    "signal_time": self._parse_datetime(trade.get("signal_time") or trade["entry_time"]).replace(tzinfo=None),
+                    "signal_time": self._parse_datetime(
+                        trade.get("signal_time") or trade["entry_time"]
+                    ).replace(tzinfo=None),
                     "entry_delay_lag_seconds": trade.get("entry_delay_lag_seconds", 0),
                     "expiry_lag_seconds": trade.get("expiry_lag_seconds", 0),
                     "result": trade["result"],
@@ -402,7 +484,9 @@ class EventContractDataMixin:
     def _decision_timestamp(self, candle: Dict[str, Any], cfg: Dict[str, Any]) -> int:
         return int(candle["timestamp"]) + PERIOD_SECONDS[cfg["period"]]
 
-    def _expiry_timestamp(self, entry_candle: Dict[str, Any], cfg: Dict[str, Any]) -> int:
+    def _expiry_timestamp(
+        self, entry_candle: Dict[str, Any], cfg: Dict[str, Any]
+    ) -> int:
         return self._decision_timestamp(entry_candle, cfg) + cfg["expiry_minutes"] * 60
 
     def _parse_datetime(self, value: Any) -> datetime:
@@ -416,7 +500,11 @@ class EventContractDataMixin:
         return dt.astimezone(timezone.utc)
 
     def _to_iso(self, timestamp_s: int) -> str:
-        return datetime.fromtimestamp(int(timestamp_s), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            datetime.fromtimestamp(int(timestamp_s), tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     def _dt_to_iso(self, value: Any) -> Optional[str]:
         if value is None:

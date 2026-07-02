@@ -1,4 +1,4 @@
-"""LLM-backed 30-role consensus for event-contract candidates."""
+"""LLM-backed role consensus for event-contract candidates."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from services.ai_decision_service import (
     get_max_tokens,
     strip_thinking_tags,
 )
-from services.event_contract.constants import DEFAULT_API_KEYS, EVENT_AI_NAMES
+from services.event_contract.constants import DEFAULT_API_KEYS, event_ai_names_for_panel
 
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class EventContractLlmMixin:
         rule_analysis: Dict[str, Any],
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         llm = self._resolve_llm_config(db, cfg)
+        reviewer_names = event_ai_names_for_panel(cfg.get("reviewer_panel_size", 25))
         api_format = llm.get("api_format") or detect_api_format(llm["base_url"])[1] or "openai"
         headers = build_llm_headers(api_format, llm["api_key"], llm["base_url"])
         from services.event_contract.reviewer_expertise import expertise_summary_for_prompt
@@ -44,7 +45,7 @@ class EventContractLlmMixin:
             {
                 "role": "system",
                 "content": (
-                    "You are a 30-person quant trading panel. Each reviewer is a domain specialist "
+                    f"You are a {len(reviewer_names)}-person quant trading reviewer panel. Each reviewer is a domain specialist "
                     "with a distinct discipline (see Reviewer playbook). Stay in role: each reviewer "
                     "must reason from its own focus area and emit risk_flags consistent with its discipline. "
                     "Evaluate ONLY the data supplied in the prompt. Do not use future prices, external live data, "
@@ -53,7 +54,7 @@ class EventContractLlmMixin:
                     + expertise_summary_for_prompt()
                 ),
             },
-            {"role": "user", "content": self._build_llm_consensus_prompt(history, cfg, rule_analysis)},
+            {"role": "user", "content": self._build_llm_consensus_prompt(history, cfg, rule_analysis, reviewer_names)},
         ]
         payload = build_llm_payload(
             model=llm["model"],
@@ -80,8 +81,9 @@ class EventContractLlmMixin:
                     if response.status_code == 200:
                         result = response.json()
                         raw_text = self._extract_llm_text(result, api_format)
-                        decisions = self._parse_llm_decisions(raw_text, llm)
-                        return decisions, {
+                        decisions = self._parse_llm_decisions(raw_text, llm, reviewer_names)
+                        main_logic_decision = self._main_logic_decision_from_rule_analysis(rule_analysis, cfg)
+                        return [main_logic_decision, *decisions], {
                             "account_id": llm.get("account_id"),
                             "account_name": llm["account_name"],
                             "model": llm["model"],
@@ -182,6 +184,7 @@ class EventContractLlmMixin:
         history: List[Dict[str, Any]],
         cfg: Dict[str, Any],
         rule_analysis: Dict[str, Any],
+        reviewer_names: List[str],
     ) -> str:
         latest = history[-1]
         recent = [
@@ -219,7 +222,8 @@ class EventContractLlmMixin:
             },
             "factors": rule_analysis["factors"],
             "recent_klines_oldest_to_newest": recent,
-            "required_ai_reviewers": EVENT_AI_NAMES,
+            "required_ai_reviewers": reviewer_names,
+            "main_logic_vote": "Main Logic is computed by the backend rule prefilter and must not be included in your decisions.",
             "output_schema": {
                 "decisions": [
                     {
@@ -235,7 +239,7 @@ class EventContractLlmMixin:
             },
         }
         return (
-            "Return a JSON object with exactly 30 decisions, one for each required_ai_reviewers item and no extra text. "
+            f"Return a JSON object with exactly {len(reviewer_names)} decisions, one for each required_ai_reviewers item and no extra text. "
             "A long decision means expiry close is expected above entry price; short means below; hold means no valid edge. "
             "Critical risk reviewers should hold when fake breakout, trap, range-middle, or data quality risk is too high.\n\n"
             f"{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
@@ -253,7 +257,12 @@ class EventContractLlmMixin:
             text = _extract_text_from_message(message.get("reasoning_content"))
         return text
 
-    def _parse_llm_decisions(self, raw_text: str, llm: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _parse_llm_decisions(
+        self,
+        raw_text: str,
+        llm: Dict[str, Any],
+        expected_names: List[str],
+    ) -> List[Dict[str, Any]]:
         clean_text, _ = strip_thinking_tags(raw_text or "")
         clean_text = clean_text.strip()
         if clean_text.startswith("```"):
@@ -266,8 +275,8 @@ class EventContractLlmMixin:
 
         data = json.loads(clean_text[start : end + 1])
         raw_decisions = data.get("decisions") or data.get("ai_decisions")
-        if not isinstance(raw_decisions, list) or len(raw_decisions) < 30:
-            raise ValueError("AI returned fewer than 30 reviewer decisions")
+        if not isinstance(raw_decisions, list) or len(raw_decisions) < len(expected_names):
+            raise ValueError(f"AI returned fewer than {len(expected_names)} reviewer decisions")
 
         decisions_by_name = {
             str(item.get("ai_name", "")).strip(): item
@@ -275,7 +284,7 @@ class EventContractLlmMixin:
             if isinstance(item, dict)
         }
         normalized: List[Dict[str, Any]] = []
-        for idx, expected_name in enumerate(EVENT_AI_NAMES):
+        for idx, expected_name in enumerate(expected_names):
             item = decisions_by_name.get(expected_name)
             if item is None and idx < len(raw_decisions) and isinstance(raw_decisions[idx], dict):
                 item = raw_decisions[idx]

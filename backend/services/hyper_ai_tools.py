@@ -12,15 +12,12 @@ Provides tools for:
 
 import json
 import logging
-import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
-import requests
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 
-from database.models import SystemConfig
 from services.hyper_ai_subagents import SUBAGENT_TOOLS, execute_subagent_tool
 
 # Tool schema catalog (split by responsibility into sibling modules)
@@ -211,121 +208,9 @@ def execute_analyze_tracked_address(db: Session, address: str) -> str:
 def execute_list_strategies(db: Session, strategy_id: int = None, strategy_type: str = None) -> str:
     """List all prompts and programs with binding status.
     Pass strategy_id + strategy_type to get full content of a specific strategy."""
-    from database.models import (
-        PromptTemplate, TradingProgram,
-        AccountProgramBinding, AccountPromptBinding, Account
-    )
+    from services.hyper_ai_strategy_tools import execute_list_strategies as _execute_list_strategies
 
-    try:
-        # Single strategy detail mode
-        if strategy_id and strategy_type:
-            if strategy_type == "prompt":
-                tpl = db.query(PromptTemplate).filter(
-                    PromptTemplate.id == strategy_id,
-                    PromptTemplate.is_deleted == "false"
-                ).first()
-                if not tpl:
-                    return json.dumps({"error": f"Prompt {strategy_id} not found"})
-                bindings = db.query(AccountPromptBinding).filter(
-                    AccountPromptBinding.prompt_template_id == tpl.id,
-                    AccountPromptBinding.is_deleted != True
-                ).all()
-                bound_traders = []
-                for b in bindings:
-                    acc = db.get(Account, b.account_id)
-                    if acc:
-                        bound_traders.append({"trader_id": acc.id, "trader_name": acc.name})
-                return json.dumps({
-                    "prompt_id": tpl.id,
-                    "name": tpl.name,
-                    "description": getattr(tpl, "description", None),
-                    "template_text": tpl.template_text,
-                    "bound_traders": bound_traders
-                }, indent=2)
-            elif strategy_type == "program":
-                prog = db.query(TradingProgram).filter(
-                    TradingProgram.id == strategy_id,
-                    TradingProgram.is_deleted != True
-                ).first()
-                if not prog:
-                    return json.dumps({"error": f"Program {strategy_id} not found"})
-                bindings = db.query(AccountProgramBinding).filter(
-                    AccountProgramBinding.program_id == prog.id,
-                    AccountProgramBinding.is_deleted != True
-                ).all()
-                bound_traders = []
-                for b in bindings:
-                    acc = db.get(Account, b.account_id)
-                    if acc:
-                        bound_traders.append({
-                            "trader_id": acc.id, "trader_name": acc.name,
-                            "is_active": b.is_active
-                        })
-                return json.dumps({
-                    "program_id": prog.id,
-                    "name": prog.name,
-                    "description": prog.description,
-                    "code": prog.code,
-                    "bound_traders": bound_traders
-                }, indent=2)
-
-        # List all mode (original behavior)
-        # Prompts
-        templates = db.query(PromptTemplate).filter(
-            PromptTemplate.is_deleted == "false"
-        ).all()
-        prompts = []
-        for tpl in templates:
-            bindings = db.query(AccountPromptBinding).filter(
-                AccountPromptBinding.prompt_template_id == tpl.id,
-                AccountPromptBinding.is_deleted != True
-            ).all()
-            bound_traders = []
-            for b in bindings:
-                acc = db.get(Account, b.account_id)
-                if acc:
-                    bound_traders.append({"trader_id": acc.id, "trader_name": acc.name})
-            prompts.append({
-                "prompt_id": tpl.id,
-                "name": tpl.name,
-                "description": getattr(tpl, "description", None),
-                "bound_traders": bound_traders
-            })
-
-        # Programs
-        programs_db = db.query(TradingProgram).filter(TradingProgram.is_deleted != True).all()
-        programs = []
-        for prog in programs_db:
-            bindings = db.query(AccountProgramBinding).filter(
-                AccountProgramBinding.program_id == prog.id,
-                AccountProgramBinding.is_deleted != True
-            ).all()
-            bound_traders = []
-            for b in bindings:
-                acc = db.get(Account, b.account_id)
-                if acc:
-                    bound_traders.append({
-                        "trader_id": acc.id,
-                        "trader_name": acc.name,
-                        "is_active": b.is_active
-                    })
-            programs.append({
-                "program_id": prog.id,
-                "name": prog.name,
-                "description": prog.description,
-                "bound_traders": bound_traders
-            })
-
-        return json.dumps({
-            "prompts": prompts,
-            "programs": programs,
-            "prompt_count": len(prompts),
-            "program_count": len(programs)
-        }, indent=2)
-
-    except Exception as e:
-        logger.error(f"[list_strategies] Error: {e}")
-        return json.dumps({"error": str(e)})
+    return _execute_list_strategies(db, strategy_id=strategy_id, strategy_type=strategy_type)
 
 def execute_get_tracked_wallets(db: Session) -> str:
     """Return the current CoinGlass wallet tracking state and available wallet addresses."""
@@ -411,102 +296,14 @@ def execute_get_tracked_wallets(db: Session) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 
-_STRATEGY_RADAR_UNIVERSE_CACHE: dict[str, Any] = {"expires_at": None, "payload": None}
-
-
-def _get_hyper_insight_access_token(db: Session) -> str:
-    token_row = db.query(SystemConfig).filter(SystemConfig.key == "hyper_insight_wallet_access_token").first()
-    return ((token_row.value if token_row else "") or "").strip()
-
-
-def _strategy_radar_headers(db: Session) -> dict[str, str] | None:
-    access_token = _get_hyper_insight_access_token(db)
-    if not access_token:
-        return None
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-def _strategy_radar_base_url() -> str:
-    return os.getenv("HYPER_INSIGHT_API_BASE_URL", "https://hyper.akooi.com").rstrip("/")
-
-
-def _fetch_strategy_radar_universe(db: Session, *, force_refresh: bool = False) -> dict:
-    now = datetime.now(timezone.utc)
-    cached_until = _STRATEGY_RADAR_UNIVERSE_CACHE.get("expires_at")
-    cached_payload = _STRATEGY_RADAR_UNIVERSE_CACHE.get("payload")
-    if (
-        not force_refresh
-        and cached_payload is not None
-        and isinstance(cached_until, datetime)
-        and cached_until > now
-    ):
-        return cached_payload
-
-    headers = _strategy_radar_headers(db)
-    if headers is None:
-        return {
-            "ok": False,
-            "error": "Please log in to CEC-codex before using Strategy Radar with Hyper AI.",
-            "reason": "missing_login_token",
-            "next_steps": [
-                "Log in to CEC-codex with your linked account first.",
-                "After login, ask Hyper AI to search Strategy Radar again.",
-            ],
-        }
-
-    url = f"{_strategy_radar_base_url()}/api/s2s/strategy-radar/universe"
-    response = requests.get(url, headers=headers, timeout=10)
-    if response.status_code == 401:
-        return {
-            "ok": False,
-            "error": "Your Hyper Insight login in CEC-codex is no longer valid.",
-            "reason": "upstream_401",
-            "next_steps": [
-                "Log in to CEC-codex again.",
-                "After login, ask Hyper AI to search Strategy Radar again.",
-            ],
-        }
-    if response.status_code in {403, 503}:
-        return {
-            "ok": False,
-            "error": "Strategy Radar lookup is temporarily unavailable right now.",
-            "reason": f"upstream_{response.status_code}",
-        }
-    response.raise_for_status()
-    payload = response.json()
-    if isinstance(payload, dict):
-        payload["ok"] = True
-        _STRATEGY_RADAR_UNIVERSE_CACHE["payload"] = payload
-        _STRATEGY_RADAR_UNIVERSE_CACHE["expires_at"] = now + timedelta(minutes=10)
-        return payload
-    return {"ok": False, "error": "Strategy Radar returned an invalid universe response."}
+_STRATEGY_RADAR_UNIVERSE_CACHE: dict[str, Any] = {"moved_to": "hyper_ai_strategy_radar"}
 
 
 def execute_get_strategy_radar_universe(db: Session) -> str:
     """Return Strategy Radar's currently queryable symbol/period/regime combinations."""
-    try:
-        payload = _fetch_strategy_radar_universe(db)
-        return json.dumps(payload, indent=2, ensure_ascii=False)
-    except requests.RequestException as exc:
-        logger.error("[strategy_radar_universe] Error: %s", exc)
-        return json.dumps({
-            "ok": False,
-            "error": "Failed to fetch Strategy Radar supported symbols right now.",
-        }, ensure_ascii=False)
+    from services.hyper_ai_strategy_radar import execute_get_strategy_radar_universe as _execute
 
-
-def _universe_supports(universe: dict, *, symbol: str, period: str, exchange: str | None) -> tuple[bool, dict | None]:
-    for item in universe.get("symbols") or []:
-        if str(item.get("symbol", "")).upper() != symbol:
-            continue
-        for period_item in item.get("periods") or []:
-            if period_item.get("period") != period:
-                continue
-            if exchange and period_item.get("exchange") != exchange:
-                continue
-            return True, period_item
-        return False, None
-    return False, None
+    return _execute(db)
 
 
 def execute_search_strategy_radar(
@@ -523,106 +320,20 @@ def execute_search_strategy_radar(
     limit: int = 5,
 ) -> str:
     """Search protected Strategy Radar S2S endpoints for current strategy candidates."""
-    safe_symbol = (symbol or "").strip().upper()
-    safe_period = period if period in {"1h", "4h", "1d"} else "1h"
-    safe_exchange = exchange if exchange in {"hyperliquid", "binance"} else None
-    safe_sort_by = sort_by if sort_by in {"relevance", "quality", "newest"} else None
-    safe_risk_level = risk_level if risk_level in {"Low", "Medium", "High"} else None
-    safe_timeframe = timeframe if timeframe in {"1h", "4h", "1d", "multi"} else None
-    safe_limit = max(1, min(int(limit or 5), 10))
+    from services.hyper_ai_strategy_radar import execute_search_strategy_radar as _execute
 
-    if not safe_symbol:
-        return json.dumps({"ok": False, "error": "symbol is required"}, ensure_ascii=False)
-
-    universe = _fetch_strategy_radar_universe(db)
-    if not universe.get("ok"):
-        return json.dumps(universe, ensure_ascii=False)
-
-    supported, period_item = _universe_supports(
-        universe,
-        symbol=safe_symbol,
-        period=safe_period,
-        exchange=safe_exchange,
+    return _execute(
+        db,
+        symbol=symbol,
+        period=period,
+        regime=regime,
+        exchange=exchange,
+        strategy_type=strategy_type,
+        sort_by=sort_by,
+        risk_level=risk_level,
+        timeframe=timeframe,
+        limit=limit,
     )
-    if not supported:
-        return json.dumps({
-            "ok": False,
-            "reason": "unsupported_symbol_period",
-            "symbol": safe_symbol,
-            "period": safe_period,
-            "exchange": safe_exchange,
-            "supported_symbols": [
-                item.get("symbol") for item in (universe.get("symbols") or []) if item.get("symbol")
-            ],
-            "usage_note": "Only combinations returned by get_strategy_radar_universe are supported.",
-        }, ensure_ascii=False)
-
-    headers = _strategy_radar_headers(db)
-    if headers is None:
-        return json.dumps({
-            "ok": False,
-            "error": "Please log in to CEC-codex before using Strategy Radar with Hyper AI.",
-            "next_steps": [
-                "Log in to CEC-codex with your linked account first.",
-                "After login, ask Hyper AI to search Strategy Radar again.",
-            ],
-        }, ensure_ascii=False)
-
-    params = {
-        "symbol": safe_symbol,
-        "period": safe_period,
-        "limit": safe_limit,
-    }
-    if regime:
-        params["regime"] = regime
-    if safe_exchange:
-        params["exchange"] = safe_exchange
-    if strategy_type:
-        params["strategy_type"] = strategy_type
-    if safe_sort_by:
-        params["sort_by"] = safe_sort_by
-    if safe_risk_level:
-        params["risk_level"] = safe_risk_level
-    if safe_timeframe:
-        params["timeframe"] = safe_timeframe
-
-    try:
-        response = requests.get(
-            f"{_strategy_radar_base_url()}/api/s2s/strategy-radar/search",
-            headers=headers,
-            params=params,
-            timeout=12,
-        )
-        if response.status_code == 401:
-            return json.dumps({
-                "ok": False,
-                "error": "Your Hyper Insight login in CEC-codex is no longer valid.",
-                "reason": "upstream_401",
-                "next_steps": [
-                    "Log in to CEC-codex again.",
-                    "After login, ask Hyper AI to search Strategy Radar again.",
-                ],
-            }, ensure_ascii=False)
-        if response.status_code in {403, 503}:
-            return json.dumps({
-                "ok": False,
-                "error": "Strategy Radar lookup is temporarily unavailable right now.",
-                "reason": f"upstream_{response.status_code}",
-            }, ensure_ascii=False)
-        if response.status_code == 429:
-            return json.dumps({
-                "ok": False,
-                "error": "Strategy Radar is rate limited right now. Please retry later.",
-            }, ensure_ascii=False)
-        response.raise_for_status()
-        payload = response.json()
-        return json.dumps(payload, indent=2, ensure_ascii=False)
-    except requests.RequestException as exc:
-        logger.error("[search_strategy_radar] Error: %s", exc)
-        return json.dumps({
-            "ok": False,
-            "error": "Failed to fetch Strategy Radar candidates right now.",
-        }, ensure_ascii=False)
 
 
 

@@ -1,12 +1,17 @@
 import {
   closeBinancePosition,
+  closeHibtPosition,
   getBinanceBalance,
   getBinancePositions,
   getBinancePrice,
+  getHibtBalance,
+  getHibtPositions,
+  getHibtPrice,
   getCurrentPrice,
   getHyperliquidBalance,
   getHyperliquidPositions,
   placeBinanceOrder,
+  placeHibtOrder,
   placeManualOrder,
 } from '@/lib/hyperliquidApi'
 import type {
@@ -120,9 +125,34 @@ const binanceAdapter: ManualTradingExchangeAdapter = {
   },
 }
 
+const hibtAdapter: ManualTradingExchangeAdapter = {
+  getBalance: getHibtBalance,
+  getPositions: getHibtPositions,
+  getPrice: getHibtPrice,
+  placeOrder: async (order) => normalizeOrderResult(await placeHibtOrder(order.accountId, {
+    symbol: order.symbol,
+    side: order.isBuy ? 'BUY' : 'SELL',
+    quantity: order.size,
+    orderType: order.timeInForce === 'Ioc' ? 'MARKET' : 'LIMIT',
+    price: order.timeInForce !== 'Ioc' ? order.price : undefined,
+    leverage: order.leverage,
+    reduceOnly: order.reduceOnly,
+    takeProfitPrice: order.takeProfitPrice,
+    stopLossPrice: order.stopLossPrice,
+  }, order.environment)),
+  closePosition: async (accountId, symbol, environment) => {
+    const raw = await closeHibtPosition(accountId, symbol, environment)
+    if (raw?.message?.includes('No position')) {
+      return { status: 'error', error: 'No position to close', raw }
+    }
+    return normalizeOrderResult({ ...raw, status: 'filled' })
+  },
+}
+
 export const MANUAL_TRADING_ADAPTERS: Record<ManualTradingExchangeId, ManualTradingExchangeAdapter> = {
   hyperliquid: hyperliquidAdapter,
   binance: binanceAdapter,
+  hibt: hibtAdapter,
 }
 
 export function getManualTradingAdapter(exchange: ManualTradingExchangeId) {

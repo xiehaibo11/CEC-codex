@@ -22,6 +22,7 @@ interface ExchangeProviderProps {
 
 // Storage key for persisting exchange selection
 const STORAGE_KEY = 'hyper-alpha-arena-selected-exchange';
+const VALID_EXCHANGE_IDS: ExchangeId[] = ['hyperliquid', 'binance', 'hibt', 'aster'];
 
 export function ExchangeProvider({ children }: ExchangeProviderProps) {
   const [currentExchange, setCurrentExchange] = useState<ExchangeId>(DEFAULT_EXCHANGE);
@@ -36,7 +37,7 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
       if (!isAuthenticated()) {
         try {
           const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && ['hyperliquid', 'binance', 'aster'].includes(stored)) {
+          if (stored && VALID_EXCHANGE_IDS.includes(stored as ExchangeId)) {
             setCurrentExchange(stored as ExchangeId);
           }
         } catch {
@@ -48,13 +49,13 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
         const response = await fetch('/api/users/exchange-config');
         if (response.ok) {
           const data = await response.json();
-          if (data.selected_exchange && ['hyperliquid', 'binance', 'aster'].includes(data.selected_exchange)) {
+          if (data.selected_exchange && VALID_EXCHANGE_IDS.includes(data.selected_exchange as ExchangeId)) {
             setCurrentExchange(data.selected_exchange as ExchangeId);
           }
         } else {
           // Fallback to localStorage if backend fails
           const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && ['hyperliquid', 'binance', 'aster'].includes(stored)) {
+          if (stored && VALID_EXCHANGE_IDS.includes(stored as ExchangeId)) {
             setCurrentExchange(stored as ExchangeId);
           }
         }
@@ -63,7 +64,7 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
         // Fallback to localStorage
         try {
           const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && ['hyperliquid', 'binance', 'aster'].includes(stored)) {
+          if (stored && VALID_EXCHANGE_IDS.includes(stored as ExchangeId)) {
             setCurrentExchange(stored as ExchangeId);
           }
         } catch (localError) {
@@ -104,6 +105,20 @@ export function ExchangeProvider({ children }: ExchangeProviderProps) {
       features: ['KYC Required', 'High Liquidity', 'Testnet Available'],
       referralLink: 'https://www.binance.com/en/join?ref=HYPERSVIP',
       buttonText: 'Register First',
+      buttonVariant: 'outline'
+    },
+    {
+      id: 'hibt',
+      name: 'HiBT',
+      displayName: 'HiBT',
+      selectable: false,
+      selected: currentExchange === 'hibt',
+      apiSupported: true,
+      comingSoon: false,
+      logo: '',
+      description: 'Centralized perpetual futures API',
+      features: ['Perpetual Futures', 'Access Key API', 'Market Data'],
+      buttonText: 'Configure Wallet',
       buttonVariant: 'outline'
     },
     {

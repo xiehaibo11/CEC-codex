@@ -9,13 +9,21 @@ export const BinanceLogo = () => (
   <img src="/static/binance_logo.svg" alt="Binance" width="14" height="14" />
 )
 
+export const HibtLogo = () => (
+  <svg width="14" height="14" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="8" fill="#2563eb" />
+    <path d="M8 9h3v5h10V9h3v14h-3v-6H11v6H8V9Z" fill="white" />
+  </svg>
+)
+
 export const ExchangeBadge = ({ exchange, size = 'sm' }: { exchange: string; size?: 'sm' | 'xs' }) => {
   const isHyperliquid = exchange === 'hyperliquid'
+  const isHibt = exchange === 'hibt'
   const textSize = size === 'xs' ? 'text-[10px]' : 'text-xs'
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${isHyperliquid ? 'bg-emerald-500/10 text-emerald-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-      {isHyperliquid ? <HyperliquidLogo /> : <BinanceLogo />}
-      <span className={textSize}>{isHyperliquid ? 'Hyperliquid' : 'Binance'}</span>
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${isHyperliquid ? 'bg-emerald-500/10 text-emerald-400' : isHibt ? 'bg-blue-500/10 text-blue-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+      {isHyperliquid ? <HyperliquidLogo /> : isHibt ? <HibtLogo /> : <BinanceLogo />}
+      <span className={textSize}>{isHyperliquid ? 'Hyperliquid' : isHibt ? 'HiBT' : 'Binance'}</span>
     </span>
   )
 }

@@ -14,6 +14,7 @@ from database.models import CoinGlassUserKey
 from services.event_contract_service import event_contract_service
 from services.event_contract.tasks import (
     create_event_backtest_task,
+    find_latest_event_backtest_task,
     get_event_backtest_task,
     request_event_backtest_pause,
     start_event_backtest_task_thread,
@@ -38,10 +39,12 @@ class PredictRequest(BaseModel):
     environment: str = "mainnet"
     period: str = "1m"
     expiry_minutes: int = 5
-    consensus_mode: str = Field(default="ai_confirmed", pattern="^(ai_confirmed|rule_only)$")
+    consensus_mode: str = Field(default="rule_only", pattern="^(ai_confirmed|rule_only)$")
+    decision_policy: str = Field(default="professional_v1", pattern="^(professional_v1|legacy_vote)$")
     ai_trader_id: Optional[int] = None
     max_ai_evaluations: int = Field(default=1, ge=1, le=200)
-    consensus_threshold: int = Field(default=30, ge=28, le=30)
+    consensus_threshold: int = Field(default=5, ge=1, le=31)
+    reviewer_panel_size: int = Field(default=25, ge=5, le=31)
     target_win_rate: float = Field(default=75, ge=0, le=100)
     target_min_trades: int = Field(default=10, ge=1, le=10000)
     enable_edge_quality_gate: bool = True
@@ -137,6 +140,19 @@ def create_backtest_task(request: Request, payload_model: BacktestRequest, db: S
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Backtest task failed to start: {exc}")
+
+
+@router.get("/backtest/tasks/latest")
+def get_latest_backtest_task(request: Request, db: Session = Depends(get_db)):
+    try:
+        task = find_latest_event_backtest_task(db, user_id=_current_user_id(request, db))
+        if not task:
+            return None
+        if task.get("run_id"):
+            task["result"] = event_contract_service.get_backtest_response(db, task["run_id"])
+        return task
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/backtest/tasks/{task_id}")

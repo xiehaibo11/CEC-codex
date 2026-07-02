@@ -49,6 +49,14 @@ export function resultClass(result?: string) {
   return 'text-muted-foreground'
 }
 
+export function missingKlineCount(
+  dataQuality?: { missing_bar_count?: number; sample_gaps?: Array<{ missing_bars?: number }> } | null,
+) {
+  if (!dataQuality) return 0
+  if (typeof dataQuality.missing_bar_count === 'number') return dataQuality.missing_bar_count
+  return (dataQuality.sample_gaps || []).reduce((total, gap) => total + (gap.missing_bars || 0), 0)
+}
+
 export function MetricCard({
   label,
   value,

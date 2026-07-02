@@ -24,8 +24,12 @@ import {
 } from '@/components/ui/table'
 import type {
   EventAiDecision,
+  EventAiReviewerStatus,
   EventBacktestResponse,
+  EventBacktestResearchReport,
   EventBacktestTaskStatus,
+  EventBacktestQualityGate,
+  EventBacktestValidationReport,
   EventFactorSnapshot,
   EventTradeLog,
 } from '@/lib/api'
@@ -37,6 +41,7 @@ import {
   formatPrice,
   formatTime,
   MetricCard,
+  missingKlineCount,
   resultClass,
 } from './shared'
 
@@ -49,6 +54,40 @@ type Props = {
   displayFactors: EventFactorSnapshot[]
   selectedTrade: EventTradeLog | null
   setSelectedTrade: (trade: EventTradeLog) => void
+}
+
+const REVIEWER_NAME_KEYS: Record<string, string> = {
+  'Main Logic': 'mainLogic',
+  'Trend Micro AI': 'trendMicro',
+  'Trend Structure AI': 'trendStructure',
+  'Momentum AI': 'momentum',
+  'Volume AI': 'volume',
+  'Volatility AI': 'volatility',
+  'Kline Pattern AI': 'klinePattern',
+  'Wick Rejection AI': 'wickRejection',
+  'Breakout AI': 'breakout',
+  'Fake Breakout AI': 'fakeBreakout',
+  'Pullback AI': 'pullback',
+  'Range AI': 'range',
+  'Trap Detection AI': 'trapDetection',
+  'Bull Trap AI': 'bullTrap',
+  'Bear Trap AI': 'bearTrap',
+  'Liquidity Sweep AI': 'liquiditySweep',
+  'Stop Hunt AI': 'stopHunt',
+  'Orderbook AI': 'orderbook',
+  'Spread AI': 'spread',
+  'CVD AI': 'cvd',
+  'Taker Ratio AI': 'takerRatio',
+  'Open Interest AI': 'openInterest',
+  'Funding Rate AI': 'fundingRate',
+  'Liquidation AI': 'liquidation',
+  'Support Resistance AI': 'supportResistance',
+  'VWAP AI': 'vwap',
+  'Multi Timeframe AI': 'multiTimeframe',
+  'Market Regime AI': 'marketRegime',
+  'Noise Filter AI': 'noiseFilter',
+  'Entry Timing AI': 'entryTiming',
+  'Final Risk AI': 'finalRisk',
 }
 
 export function BacktestResultsPanel({
@@ -73,6 +112,9 @@ export function BacktestResultsPanel({
         {backtest ? (
           <>
             <SummaryGrid backtest={backtest} />
+            <ProfessionalDecisionSummary trade={selectedTrade || backtest.trades[0]} />
+            <QualityGatePanel qualityGate={backtest.summary.quality_gate} />
+            <ValidationReportPanel validationReport={backtest.summary.validation_report} />
             <EquityChart chartData={chartData} />
             <Tabs defaultValue="trades" className="min-h-[420px]">
               <TabsList className="w-full justify-start overflow-x-auto">
@@ -80,6 +122,7 @@ export function BacktestResultsPanel({
                 <TabsTrigger value="ai">{t('backtestTool.aiConsensus', 'AI / Rule Decisions')}</TabsTrigger>
                 <TabsTrigger value="factors">{t('backtestTool.factorSnapshot', 'Factor Snapshot')}</TabsTrigger>
                 <TabsTrigger value="filters">{t('backtestTool.filters', 'Filters')}</TabsTrigger>
+                <TabsTrigger value="research">{t('backtestTool.researchMode', 'Research Mode')}</TabsTrigger>
               </TabsList>
               <TradeLogsTab
                 trades={backtest.trades}
@@ -89,6 +132,7 @@ export function BacktestResultsPanel({
               <AiDecisionsTab items={displayAi} />
               <FactorsTab items={displayFactors} />
               <FiltersTab backtest={backtest} />
+              <ResearchModeTab researchReport={backtest.summary.research_report} />
             </Tabs>
           </>
         ) : (
@@ -103,6 +147,47 @@ export function BacktestResultsPanel({
   )
 }
 
+function ProfessionalDecisionSummary({ trade }: { trade?: EventTradeLog | null }) {
+  const { t } = useTranslation()
+  const signal = trade?.event_signal
+  if (!signal?.trade_readiness && signal?.edge_score == null && signal?.risk_score == null && signal?.execution_score == null) {
+    return null
+  }
+  const vetoReasons = signal?.veto_reasons || []
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold">{t('backtestTool.professionalDecision', 'Professional Decision')}</div>
+          <div className="text-xs text-muted-foreground">
+            {trade
+              ? t('backtestTool.professionalDecisionTradeHint', 'Showing diagnostics for the selected or first returned trade.')
+              : t('backtestTool.professionalDecisionNoTradeHint', 'No settled trade diagnostics yet.')}
+          </div>
+        </div>
+        {signal?.decision_grade && (
+          <Badge variant="outline">{t('backtestTool.decisionGrade', 'Grade')} {signal.decision_grade}</Badge>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label={t('backtestTool.tradeReadiness', 'Trade Readiness')} value={readinessLabel(signal?.trade_readiness, t)} tone={readinessTone(signal?.trade_readiness)} />
+        <MetricCard label={t('backtestTool.edgeScore', 'Edge Score')} value={signal?.edge_score == null ? '-' : formatPct(signal.edge_score)} tone={(signal?.edge_score ?? 0) >= 75 ? 'green' : 'amber'} />
+        <MetricCard label={t('backtestTool.riskScore', 'Risk Score')} value={signal?.risk_score == null ? '-' : formatPct(signal.risk_score)} tone={(signal?.risk_score ?? 100) <= 45 ? 'green' : 'red'} />
+        <MetricCard label={t('backtestTool.executionScore', 'Execution Score')} value={signal?.execution_score == null ? '-' : formatPct(signal.execution_score)} tone={(signal?.execution_score ?? 0) >= 65 ? 'green' : 'amber'} />
+      </div>
+      {vetoReasons.length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <div className="font-medium">{t('backtestTool.vetoReasons', 'Risk Veto Reasons')}</div>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {vetoReasons.map(reason => <li key={reason}>{reason}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus }) {
   const { t } = useTranslation()
   const ai_reviewer_statuses = taskStatus.ai_reviewer_statuses || []
@@ -110,17 +195,20 @@ function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus
   const runningAi = ai_reviewer_statuses.filter(item => item.status === 'running').length
   const failedAi = ai_reviewer_statuses.filter(item => item.status === 'failed').length
   const skippedAi = ai_reviewer_statuses.filter(item => item.status === 'skipped').length
+  const totalReviewers = ai_reviewer_statuses.length || taskStatus.config?.reviewer_panel_size || 25
   // rule_only mode never calls the LLM reviewers - hide the per-reviewer cards
   // and the AI counters to avoid the "30 stuck on pending" impression.
-  const reviewersActive = ai_reviewer_statuses.length > 0 && skippedAi !== ai_reviewer_statuses.length
+  const isExpired = taskStatus.status === 'failed' && taskStatus.phase === 'expired'
+  const reviewersActive = !isExpired && ai_reviewer_statuses.length > 0 && skippedAi !== ai_reviewer_statuses.length
   const isActive = ['pending', 'running', 'pause_requested'].includes(taskStatus.status)
+  const statusBadgeVariant = isActive ? 'default' : taskStatus.status === 'failed' ? 'destructive' : 'secondary'
 
   return (
     <div className="rounded-md border bg-muted/20 p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={isActive ? 'default' : 'secondary'}>{taskStatus.status}</Badge>
+            <Badge variant={statusBadgeVariant}>{taskStatusLabel(taskStatus.status, t, taskStatus.phase)}</Badge>
             <span className="text-sm font-medium">
               {taskStatus.phase || t('backtestTool.taskPhase', 'Backtest task')}
             </span>
@@ -137,35 +225,602 @@ function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus
         </div>
       </div>
       <Progress value={taskStatus.progress_pct || 0} className="mt-3" />
+      {isExpired && (
+        <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {t('backtestTool.taskExpiredHint', 'This backtest task is expired and is no longer running. Start a new backtest to continue.')}
+        </div>
+      )}
       {reviewersActive ? (
         <>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <MetricCard label={t('backtestTool.aiCompleted', 'AI Completed')} value={`${completedAi}/30`} tone={completedAi === 30 ? 'green' : undefined} />
+            <MetricCard label={t('backtestTool.aiCompleted', 'AI Completed')} value={`${completedAi}/${totalReviewers}`} tone={completedAi === totalReviewers ? 'green' : undefined} />
             <MetricCard label={t('backtestTool.aiRunning', 'AI Running')} value={String(runningAi)} tone={runningAi ? 'amber' : undefined} />
             <MetricCard label={t('backtestTool.aiFailed', 'AI Failed')} value={String(failedAi)} tone={failedAi ? 'red' : undefined} />
           </div>
+          {runningAi > 0 && (
+            <div className="mt-3 rounded-md border border-dashed bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+              {t('backtestTool.aiReviewerRunningHint', 'Running reviewers have not returned direction/confidence yet. This is waiting state, not missing data.')}
+            </div>
+          )}
           <div className="mt-3 grid max-h-[210px] gap-2 overflow-auto sm:grid-cols-2 xl:grid-cols-3">
             {ai_reviewer_statuses.map(item => (
               <div key={item.ai_name} className="rounded-md border bg-background px-2 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-medium">{item.ai_name}</span>
-                  <Badge variant="outline" className="text-[10px]">{item.status}</Badge>
+                  <span className="min-w-0 truncate text-xs font-medium">{reviewerNameLabel(item.ai_name, t)}</span>
+                  <Badge variant="outline" className="text-[10px]">{reviewerStatusLabel(item.status, t)}</Badge>
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className={directionClass(item.direction || 'hold')}>{item.direction || '-'}</span>
-                  <span>{item.confidence == null ? '-' : formatPct(item.confidence)}</span>
+                  {item.direction || item.confidence != null ? (
+                    <>
+                      <span className={directionClass(item.direction || 'hold')}>{reviewerDirectionLabel(item.direction, t)}</span>
+                      <span>{item.confidence == null ? t('backtestTool.aiReviewerConfidencePending', 'Waiting confidence') : formatPct(item.confidence)}</span>
+                    </>
+                  ) : (
+                    <span>{reviewerPendingLabel(item.status, t)}</span>
+                  )}
                 </div>
+                {item.status === 'running' && !item.direction && item.confidence == null && (
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {t('backtestTool.aiReviewerPendingHint', 'Waiting for the AI call to return direction and confidence.')}
+                  </div>
+                )}
+                {item.error && (
+                  <div className="mt-1 line-clamp-2 text-[11px] text-red-500">{item.error}</div>
+                )}
               </div>
             ))}
           </div>
         </>
-      ) : skippedAi > 0 && (
+      ) : !isExpired && skippedAi > 0 && (
         <div className="mt-3 rounded-md border border-dashed bg-background/40 px-3 py-2 text-xs text-muted-foreground">
           {t('backtestTool.aiReviewersSkipped', 'Rule-only mode: LLM reviewers skipped (rule consensus is deterministic).')}
         </div>
       )}
     </div>
   )
+}
+
+function taskStatusLabel(status: EventBacktestTaskStatus['status'], t: ReturnType<typeof useTranslation>['t'], phase?: string) {
+  if (status === 'failed' && phase === 'expired') return t('backtestTool.taskStatusExpired', 'Expired')
+  if (status === 'pending') return t('backtestTool.taskStatusPending', 'Queued')
+  if (status === 'running') return t('backtestTool.taskStatusRunning', 'Running')
+  if (status === 'pause_requested') return t('backtestTool.taskStatusPauseRequested', 'Pause requested')
+  if (status === 'paused') return t('backtestTool.taskStatusPaused', 'Paused')
+  if (status === 'completed') return t('backtestTool.taskStatusCompleted', 'Completed')
+  if (status === 'failed') return t('backtestTool.taskStatusFailed', 'Failed')
+  return status
+}
+
+function reviewerStatusLabel(status: EventAiReviewerStatus['status'], t: ReturnType<typeof useTranslation>['t']) {
+  if (status === 'pending') return t('backtestTool.aiReviewerStatusPending', 'Queued')
+  if (status === 'running') return t('backtestTool.aiReviewerStatusRunning', 'Running')
+  if (status === 'completed') return t('backtestTool.aiReviewerStatusCompleted', 'Completed')
+  if (status === 'failed') return t('backtestTool.aiReviewerStatusFailed', 'Failed')
+  if (status === 'skipped') return t('backtestTool.aiReviewerStatusSkipped', 'Skipped')
+  return status
+}
+
+function reviewerPendingLabel(status: EventAiReviewerStatus['status'], t: ReturnType<typeof useTranslation>['t']) {
+  if (status === 'running') return t('backtestTool.aiReviewerPending', 'Waiting for AI direction/confidence')
+  if (status === 'pending') return t('backtestTool.aiReviewerQueued', 'Queued for review')
+  if (status === 'skipped') return t('backtestTool.aiReviewerSkippedShort', 'Skipped by rule mode')
+  if (status === 'failed') return t('backtestTool.aiReviewerFailedShort', 'Review failed')
+  return t('backtestTool.aiReviewerNoResult', 'No result yet')
+}
+
+function reviewerDirectionLabel(
+  direction: EventAiReviewerStatus['direction'],
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  if (direction === 'long') return t('backtestTool.directionLong', 'Long')
+  if (direction === 'short') return t('backtestTool.directionShort', 'Short')
+  if (direction === 'hold') return t('backtestTool.directionHold', 'Hold')
+  return t('backtestTool.aiReviewerDirectionPending', 'Waiting direction')
+}
+
+function reviewerNameLabel(name: string, t: ReturnType<typeof useTranslation>['t']) {
+  const key = REVIEWER_NAME_KEYS[name]
+  if (key) return t(`backtestTool.reviewerNames.${key}`, name)
+  if (name.endsWith(' Rule Agent')) {
+    return t('backtestTool.ruleAgentReviewerName', '{{name}} Rule Reviewer', {
+      name: name.replace(' Rule Agent', ''),
+    })
+  }
+  if (name.endsWith(' AI')) {
+    return t('backtestTool.genericAiReviewerName', '{{name}} Reviewer', {
+      name: name.replace(' AI', ''),
+    })
+  }
+  return name
+}
+
+function QualityGatePanel({ qualityGate }: { qualityGate?: EventBacktestQualityGate }) {
+  const { t } = useTranslation()
+  if (!qualityGate) return null
+  const toneClass =
+    qualityGate.status === 'pass' ? 'border-green-500 bg-green-500/5' :
+    qualityGate.status === 'fail' ? 'border-red-500 bg-red-500/5' :
+    'border-amber-500 bg-amber-500/5'
+  const badgeClass =
+    qualityGate.status === 'pass' ? 'border-green-500 text-green-600' :
+    qualityGate.status === 'fail' ? 'border-red-500 text-red-600' :
+    'border-amber-500 text-amber-600'
+  const statusLabel =
+    qualityGate.status === 'pass'
+      ? t('backtestTool.qualityStatusPass', 'Pass')
+      : qualityGate.status === 'fail'
+        ? t('backtestTool.qualityStatusFail', 'Fail')
+        : t('backtestTool.qualityStatusWarning', 'Warning')
+  const attentionChecks = qualityGate.checks.filter(check => check.status !== 'pass')
+  const visibleChecks = attentionChecks.length ? attentionChecks : qualityGate.checks.slice(0, 3)
+
+  return (
+    <div className={`rounded-md border p-3 ${toneClass}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">{t('backtestTool.qualityGate', 'Quality Gate')}</span>
+            <Badge variant="outline" className={badgeClass}>
+              {t('backtestTool.qualityGrade', 'Grade')} {qualityGate.grade}
+            </Badge>
+            <Badge variant="outline" className={badgeClass}>{statusLabel}</Badge>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {t('backtestTool.qualityGateHint', 'Credibility audit based on sample size, partial status, data quality, and execution-cost assumptions.')}
+          </div>
+        </div>
+        <div className="text-left sm:text-right">
+          <div className="text-2xl font-semibold">{qualityGate.score}</div>
+          <div className="text-xs text-muted-foreground">{t('backtestTool.qualityScore', 'Quality Score')}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        {visibleChecks.map(check => (
+          <div key={check.id} className="rounded-md border bg-background/70 px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium">{check.label}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{check.message}</div>
+              </div>
+              <Badge variant="outline" className={`shrink-0 text-[10px] ${qualityCheckClass(check.status)}`}>
+                {check.status}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {qualityGate.recommendations.length > 0 && (
+        <div className="mt-3 rounded-md border border-dashed bg-background/60 px-3 py-2">
+          <div className="text-xs font-medium">{t('backtestTool.qualityRecommendations', 'Recommendations')}</div>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            {qualityGate.recommendations.map(item => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ValidationReportPanel({ validationReport }: { validationReport?: EventBacktestValidationReport }) {
+  const { t } = useTranslation()
+  if (!validationReport) return null
+  const verdictTone = validationReport.verdict === 'pass' ? 'green' : validationReport.verdict === 'fail' ? 'red' : 'amber'
+  const toneClass =
+    validationReport.verdict === 'pass' ? 'border-green-500 bg-green-500/5' :
+    validationReport.verdict === 'fail' ? 'border-red-500 bg-red-500/5' :
+    'border-amber-500 bg-amber-500/5'
+  const weakestRegime = validationReport.regime_stability.weakest_regime || '-'
+
+  return (
+    <div className={`rounded-md border p-3 ${toneClass}`}>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">{t('backtestTool.validationReport', 'Validation Report')}</span>
+            <Badge variant="outline" className={validationVerdictClass(validationReport.verdict)}>
+              {validationVerdictLabel(validationReport.verdict, t)}
+            </Badge>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {t('backtestTool.validationReportHint', 'Credibility checks using walk-forward windows, Monte Carlo sequence stress, regime stability, and conservative live decay.')}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label={t('backtestTool.walkForwardPassRate', 'Walk-Forward Pass Rate')}
+          value={formatPct(validationReport.walk_forward.pass_rate)}
+          tone={validationReport.walk_forward.pass_rate >= 70 ? 'green' : 'amber'}
+        />
+        <MetricCard
+          label={t('backtestTool.mcProfitableRatio', 'MC Profitable Ratio')}
+          value={formatPct(validationReport.monte_carlo.profitable_ratio)}
+          tone={validationReport.monte_carlo.profitable_ratio >= 90 ? 'green' : 'amber'}
+        />
+        <MetricCard
+          label={t('backtestTool.weakestRegime', 'Weakest Regime')}
+          value={weakestRegime}
+          tone={validationReport.regime_stability.unstable_regime_count ? 'red' : 'green'}
+        />
+        <MetricCard
+          label={t('backtestTool.liveDecayPnl', 'Conservative Live PnL')}
+          value={formatMoney(validationReport.live_decay_estimate.conservative_pnl)}
+          tone={verdictTone}
+        />
+        <MetricCard
+          label={t('backtestTool.worstWindowPnl', 'Worst Window PnL')}
+          value={formatMoney(validationReport.walk_forward.worst_window_pnl)}
+          tone={validationReport.walk_forward.worst_window_pnl >= 0 ? 'green' : 'red'}
+        />
+        <MetricCard
+          label={t('backtestTool.mcP5Pnl', 'MC P5 PnL')}
+          value={formatMoney(validationReport.monte_carlo.p5_pnl)}
+          tone={validationReport.monte_carlo.p5_pnl >= 0 ? 'green' : 'red'}
+        />
+        <MetricCard
+          label={t('backtestTool.unstableRegimes', 'Unstable Regimes')}
+          value={String(validationReport.regime_stability.unstable_regime_count)}
+          tone={validationReport.regime_stability.unstable_regime_count ? 'red' : 'green'}
+        />
+        <MetricCard
+          label={t('backtestTool.expectedDecay', 'Expected Decay')}
+          value={formatPct(validationReport.live_decay_estimate.expected_decay_pct)}
+          tone={validationReport.live_decay_estimate.expected_decay_pct >= 65 ? 'amber' : 'green'}
+        />
+      </div>
+      {validationReport.warnings.length > 0 && (
+        <div className="mt-3 rounded-md border border-dashed bg-background/60 px-3 py-2">
+          <div className="text-xs font-medium">{t('backtestTool.validationWarnings', 'Validation Warnings')}</div>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            {validationReport.warnings.map(item => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function validationVerdictLabel(verdict: string, t: ReturnType<typeof useTranslation>['t']) {
+  if (verdict === 'pass') return t('backtestTool.validationPass', 'Pass')
+  if (verdict === 'fail') return t('backtestTool.validationFail', 'Fail')
+  return t('backtestTool.validationWarning', 'Warning')
+}
+
+function validationVerdictClass(verdict: string) {
+  if (verdict === 'pass') return 'border-green-500 text-green-600'
+  if (verdict === 'fail') return 'border-red-500 text-red-600'
+  return 'border-amber-500 text-amber-600'
+}
+
+function ResearchModeTab({ researchReport }: { researchReport?: EventBacktestResearchReport }) {
+  const { t } = useTranslation()
+  if (!researchReport) {
+    return (
+      <TabsContent value="research" className="mt-3">
+        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+          {t('backtestTool.researchNoReport', 'No research report is available for this run. Re-run the backtest with the latest backend.')}
+        </div>
+      </TabsContent>
+    )
+  }
+
+  const verdictTone =
+    researchReport.verdict.status === 'paper_candidate'
+      ? 'green'
+      : researchReport.verdict.status === 'watch'
+        ? 'amber'
+        : 'red'
+  const aiTeam = researchReport.ai_trader_team
+
+  return (
+    <TabsContent value="research" className="mt-3 space-y-3">
+      <div className={`rounded-md border p-3 ${researchVerdictPanelClass(researchReport.verdict.status)}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold">{t('backtestTool.researchMode', 'Research Mode')}</span>
+              <Badge variant="outline" className={researchVerdictBadgeClass(researchReport.verdict.status)}>
+                {researchVerdictLabel(researchReport.verdict.status, researchReport.verdict.label, t)}
+              </Badge>
+              {researchReport.verdict.best_candidate_name && (
+                <Badge variant="secondary">{researchReport.verdict.best_candidate_name}</Badge>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {t('backtestTool.researchModeHint', 'Automatic research audit: OOS validation, candidate strategies, factor discovery, overfitting warnings, and missing data.')}
+            </div>
+          </div>
+        </div>
+        {researchReport.verdict.reasons.length > 0 && (
+          <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            {researchReport.verdict.reasons.map(reason => <li key={reason}>{reason}</li>)}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label={t('backtestTool.trainWinRate', 'Train Win Rate')} value={formatPct(researchReport.oos_validation.train_win_rate)} />
+        <MetricCard label={t('backtestTool.oosWinRate', 'OOS Win Rate')} value={formatPct(researchReport.oos_validation.oos_win_rate)} tone={verdictTone} />
+        <MetricCard label={t('backtestTool.oosTradeCount', 'OOS Trades')} value={String(researchReport.oos_validation.oos_trade_count)} />
+        <MetricCard label={t('backtestTool.winRateGap', 'Win Rate Gap')} value={formatPct(researchReport.oos_validation.win_rate_gap)} tone={researchReport.oos_validation.win_rate_gap > 15 ? 'red' : 'amber'} />
+        <MetricCard label={t('backtestTool.oosPnl', 'OOS PnL')} value={formatMoney(researchReport.oos_validation.oos_pnl)} tone={researchReport.oos_validation.oos_pnl >= 0 ? 'green' : 'red'} />
+        <MetricCard label={t('backtestTool.researchTarget', 'Research Target')} value={formatPct(researchReport.oos_validation.target_win_rate)} />
+        <MetricCard label={t('backtestTool.researchBreakEven', 'Break-even')} value={formatPct(researchReport.oos_validation.break_even_win_rate)} />
+        <MetricCard label={t('backtestTool.overfitRisk', 'Overfit Risk')} value={overfitRiskLabel(researchReport.oos_validation.overfit_risk, t)} tone={researchReport.oos_validation.overfit_risk === 'critical' || researchReport.oos_validation.overfit_risk === 'high' ? 'red' : 'amber'} />
+      </div>
+
+      {aiTeam && (
+        <div className="rounded-md border p-3">
+          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-sm font-semibold">{t('backtestTool.aiTraderTeam', '30 AI Traders')}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {aiTeam.description || t('backtestTool.aiTraderTeamHint', 'Each AI trades independently and is ranked by its own OOS results. This is not consensus voting.')}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">
+                {t('backtestTool.aiTraderCount', 'Traders')}: {aiTeam.total_traders}
+              </Badge>
+              <Badge variant="outline">
+                {t('backtestTool.aiTraderTeamTrades', 'Team Trades')}: {aiTeam.total_team_trades}
+              </Badge>
+              <Badge variant="outline" className="border-green-500 text-green-600">
+                {t('backtestTool.paperCandidates', 'Paper Candidates')}: {aiTeam.paper_candidates.length}
+              </Badge>
+            </div>
+          </div>
+          <div className="max-h-[420px] overflow-auto">
+            <Table className="min-w-[1120px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('backtestTool.aiTrader', 'AI Trader')}</TableHead>
+                  <TableHead>{t('backtestTool.strategyType', 'Strategy Type')}</TableHead>
+                  <TableHead>{t('backtestTool.totalTrades', 'Total Trades')}</TableHead>
+                  <TableHead>{t('backtestTool.winRate', 'Win Rate')}</TableHead>
+                  <TableHead>{t('backtestTool.oosWinRate', 'OOS Win Rate')}</TableHead>
+                  <TableHead>{t('backtestTool.pnl', 'P&L')}</TableHead>
+                  <TableHead>{t('backtestTool.maxDrawdown', 'Max Drawdown')}</TableHead>
+                  <TableHead>{t('backtestTool.overfitRisk', 'Overfit Risk')}</TableHead>
+                  <TableHead>{t('backtestTool.researchRecommendation', 'Recommendation')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {aiTeam.traders.map(trader => (
+                  <TableRow key={trader.trader_id}>
+                    <TableCell>
+                      <div className="font-medium">{trader.name}</div>
+                      <div className="mt-1 max-w-[260px] text-xs text-muted-foreground">
+                        {trader.factor_focus.slice(0, 3).join(' / ') || trader.ai_name}
+                      </div>
+                    </TableCell>
+                    <TableCell>{trader.strategy_type}</TableCell>
+                    <TableCell>
+                      <div>{trader.trade_count}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t('backtestTool.holdCount', 'Hold')}: {trader.hold_count}
+                      </div>
+                    </TableCell>
+                    <TableCell>{formatPct(trader.win_rate)}</TableCell>
+                    <TableCell>
+                      <div>{formatPct(trader.oos_win_rate)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        n={trader.oos_trade_count}
+                      </div>
+                    </TableCell>
+                    <TableCell className={trader.pnl >= 0 ? 'text-green-600' : 'text-red-600'}>{formatMoney(trader.pnl)}</TableCell>
+                    <TableCell>{formatPct(trader.max_drawdown)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={overfitRiskClass(trader.overfit_risk)}>
+                        {overfitRiskLabel(trader.overfit_risk, t)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[260px] text-xs">{trader.recommendation}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-md border p-3">
+        <div className="mb-2 text-sm font-semibold">{t('backtestTool.strategyCandidates', 'Strategy Candidates')}</div>
+        <div className="max-h-[360px] overflow-auto">
+          <Table className="min-w-[980px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('backtestTool.candidate', 'Candidate')}</TableHead>
+                <TableHead>{t('backtestTool.totalTrades', 'Total Trades')}</TableHead>
+                <TableHead>{t('backtestTool.winRate', 'Win Rate')}</TableHead>
+                <TableHead>{t('backtestTool.pnl', 'P&L')}</TableHead>
+                <TableHead>{t('backtestTool.oosWinRate', 'OOS Win Rate')}</TableHead>
+                <TableHead>{t('backtestTool.overfitRisk', 'Overfit Risk')}</TableHead>
+                <TableHead>{t('backtestTool.researchRecommendation', 'Recommendation')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {researchReport.strategy_candidates.map(candidate => (
+                <TableRow key={candidate.candidate_id}>
+                  <TableCell>
+                    <div className="font-medium">{candidate.name}</div>
+                    <div className="mt-1 max-w-[320px] text-xs text-muted-foreground">{candidate.description}</div>
+                  </TableCell>
+                  <TableCell>{candidate.trade_count}</TableCell>
+                  <TableCell>{formatPct(candidate.win_rate)}</TableCell>
+                  <TableCell className={candidate.pnl >= 0 ? 'text-green-600' : 'text-red-600'}>{formatMoney(candidate.pnl)}</TableCell>
+                  <TableCell>{formatPct(candidate.oos_win_rate)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={overfitRiskClass(candidate.overfit_risk)}>
+                      {overfitRiskLabel(candidate.overfit_risk, t)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[260px] text-xs">{candidate.recommendation}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div className="rounded-md border p-3">
+        <div className="mb-2 text-sm font-semibold">{t('backtestTool.factorDiscovery', 'Factor Discovery')}</div>
+        <div className="max-h-[320px] overflow-auto">
+          <Table className="min-w-[900px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('backtestTool.factor', 'Factor')}</TableHead>
+                <TableHead>{t('backtestTool.category', 'Category')}</TableHead>
+                <TableHead>{t('backtestTool.sampleCount', 'Samples')}</TableHead>
+                <TableHead>{t('backtestTool.winMean', 'Win Mean')}</TableHead>
+                <TableHead>{t('backtestTool.lossMean', 'Loss Mean')}</TableHead>
+                <TableHead>{t('backtestTool.separationScore', 'Separation')}</TableHead>
+                <TableHead>{t('backtestTool.factorReliability', 'Reliability')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {researchReport.factor_insights.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                    {t('backtestTool.noFactorInsights', 'No factor insight yet. Need settled trades with factor snapshots.')}
+                  </TableCell>
+                </TableRow>
+              ) : researchReport.factor_insights.map(factor => (
+                <TableRow key={factor.factor_name}>
+                  <TableCell>
+                    <div className="font-medium">{factor.factor_name}</div>
+                    <div className="mt-1 max-w-[360px] text-xs text-muted-foreground">{factor.interpretation}</div>
+                  </TableCell>
+                  <TableCell>{factor.category}</TableCell>
+                  <TableCell>{factor.sample_count}</TableCell>
+                  <TableCell>{factor.win_mean}</TableCell>
+                  <TableCell>{factor.loss_mean}</TableCell>
+                  <TableCell>{formatPct(factor.separation_score)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={factorReliabilityClass(factor.reliability)}>
+                      {factorReliabilityLabel(factor.reliability, t)}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ResearchListPanel
+          title={t('backtestTool.overfittingWarnings', 'Overfitting Warnings')}
+          empty={t('backtestTool.noOverfittingWarnings', 'No overfitting warning from this report.')}
+          items={researchReport.overfitting_warnings.map(item => ({
+            key: `${item.severity}-${item.message}`,
+            badge: item.severity,
+            badgeClass: warningSeverityClass(item.severity),
+            title: item.message,
+            body: item.evidence,
+          }))}
+        />
+        <ResearchListPanel
+          title={t('backtestTool.missingDataRecommendations', 'Missing Data Recommendations')}
+          empty={t('backtestTool.noMissingDataRecommendations', 'No missing-data recommendation from this report.')}
+          items={researchReport.missing_data_recommendations.map(item => ({
+            key: `${item.data_type}-${item.status}`,
+            badge: item.status,
+            badgeClass: 'border-amber-500 text-amber-600',
+            title: item.data_type,
+            body: item.recommendation,
+          }))}
+        />
+      </div>
+    </TabsContent>
+  )
+}
+
+function ResearchListPanel({
+  title,
+  empty,
+  items,
+}: {
+  title: string
+  empty: string
+  items: Array<{ key: string; badge: string; badgeClass: string; title: string; body: string }>
+}) {
+  return (
+    <div className="rounded-md border p-3">
+      <div className="mb-2 text-sm font-semibold">{title}</div>
+      {items.length === 0 ? (
+        <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">{empty}</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map(item => (
+            <div key={item.key} className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs font-medium">{item.title}</div>
+                <Badge variant="outline" className={`shrink-0 text-[10px] ${item.badgeClass}`}>{item.badge}</Badge>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{item.body}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function researchVerdictLabel(status: EventBacktestResearchReport['verdict']['status'], fallback: string, t: ReturnType<typeof useTranslation>['t']) {
+  if (status === 'paper_candidate') return t('backtestTool.researchVerdictPaper', 'Paper candidate')
+  if (status === 'watch') return t('backtestTool.researchVerdictWatch', 'Research watch')
+  if (status === 'rejected') return t('backtestTool.researchVerdictRejected', 'Rejected')
+  return fallback
+}
+
+function researchVerdictPanelClass(status: EventBacktestResearchReport['verdict']['status']) {
+  if (status === 'paper_candidate') return 'border-green-500 bg-green-500/5'
+  if (status === 'watch') return 'border-amber-500 bg-amber-500/5'
+  return 'border-red-500 bg-red-500/5'
+}
+
+function researchVerdictBadgeClass(status: EventBacktestResearchReport['verdict']['status']) {
+  if (status === 'paper_candidate') return 'border-green-500 text-green-600'
+  if (status === 'watch') return 'border-amber-500 text-amber-600'
+  return 'border-red-500 text-red-600'
+}
+
+function overfitRiskLabel(risk: string, t: ReturnType<typeof useTranslation>['t']) {
+  if (risk === 'critical') return t('backtestTool.overfitCritical', 'Critical')
+  if (risk === 'high') return t('backtestTool.overfitHigh', 'High')
+  if (risk === 'medium') return t('backtestTool.overfitMedium', 'Medium')
+  if (risk === 'low') return t('backtestTool.overfitLow', 'Low')
+  return t('backtestTool.overfitNone', 'None')
+}
+
+function overfitRiskClass(risk: string) {
+  if (risk === 'critical' || risk === 'high') return 'border-red-500 text-red-600'
+  if (risk === 'medium') return 'border-amber-500 text-amber-600'
+  return 'border-green-500 text-green-600'
+}
+
+function factorReliabilityLabel(reliability: string, t: ReturnType<typeof useTranslation>['t']) {
+  if (reliability === 'strong') return t('backtestTool.factorStrong', 'Strong')
+  if (reliability === 'medium') return t('backtestTool.factorMedium', 'Medium')
+  if (reliability === 'low_sample') return t('backtestTool.factorLowSample', 'Low sample')
+  return t('backtestTool.factorWeak', 'Weak')
+}
+
+function factorReliabilityClass(reliability: string) {
+  if (reliability === 'strong') return 'border-green-500 text-green-600'
+  if (reliability === 'medium') return 'border-amber-500 text-amber-600'
+  if (reliability === 'low_sample') return 'border-red-500 text-red-600'
+  return 'border-muted-foreground text-muted-foreground'
+}
+
+function warningSeverityClass(severity: string) {
+  if (severity === 'critical' || severity === 'high') return 'border-red-500 text-red-600'
+  return 'border-amber-500 text-amber-600'
 }
 
 function SummaryGrid({ backtest }: { backtest: EventBacktestResponse }) {
@@ -226,6 +881,12 @@ function SummaryGrid({ backtest }: { backtest: EventBacktestResponse }) {
       )}
     </div>
   )
+}
+
+function qualityCheckClass(status: EventBacktestQualityGate['status']) {
+  if (status === 'pass') return 'border-green-500 text-green-600'
+  if (status === 'fail') return 'border-red-500 text-red-600'
+  return 'border-amber-500 text-amber-600'
 }
 
 function EquityChart({ chartData }: { chartData: Array<{ timestamp: number; equity: number; label: string }> }) {
@@ -317,15 +978,19 @@ function AiDecisionsTab({ items }: { items: EventAiDecision[] }) {
           <div key={item.ai_name} className="rounded-md border p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{item.ai_name}</div>
+                <div className="truncate text-sm font-medium">{reviewerNameLabel(item.ai_name, t)}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   <Badge variant="secondary" className="text-[10px]">
-                    {item.source === 'llm_ai' ? (item.model || t('backtestTool.realAi', 'Real AI')) : t('backtestTool.system30Ai', '30 AI')}
+                    {item.source === 'llm_ai'
+                      ? (item.model || t('backtestTool.realAi', 'Real AI'))
+                      : item.source === 'main_logic'
+                        ? t('backtestTool.mainLogic', 'Main Logic')
+                        : t('backtestTool.systemPanel', 'Rule Panel')}
                   </Badge>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{item.reason}</div>
               </div>
-              <Badge variant="outline" className={directionClass(item.direction)}>{item.direction}</Badge>
+              <Badge variant="outline" className={directionClass(item.direction)}>{reviewerDirectionLabel(item.direction, t)}</Badge>
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="w-16 text-muted-foreground">{formatPct(item.confidence)}</span>
@@ -383,6 +1048,7 @@ function FactorsTab({ items }: { items: EventFactorSnapshot[] }) {
 function FiltersTab({ backtest }: { backtest: EventBacktestResponse }) {
   const { t } = useTranslation()
   const summary = backtest.summary
+  const missingKlines = missingKlineCount(summary.data_quality)
 
   return (
     <TabsContent value="filters" className="mt-3">
@@ -402,7 +1068,8 @@ function FiltersTab({ backtest }: { backtest: EventBacktestResponse }) {
         {summary.data_quality && (
           <>
             <MetricCard label={t('backtestTool.dataCoverage', 'Data Coverage')} value={formatPct(summary.data_quality.coverage_pct)} tone={summary.data_quality.warnings.length ? 'amber' : 'green'} />
-            <MetricCard label={t('backtestTool.klineGaps', 'K-line Gaps')} value={String(summary.data_quality.gap_count)} tone={summary.data_quality.gap_count ? 'amber' : 'green'} />
+            <MetricCard label={t('backtestTool.klineGapSegments', 'K-line Gap Segments')} value={String(summary.data_quality.gap_count)} tone={summary.data_quality.gap_count ? 'amber' : 'green'} />
+            <MetricCard label={t('backtestTool.missingKlines', 'Missing K-lines')} value={String(missingKlines)} tone={missingKlines ? 'amber' : 'green'} />
           </>
         )}
         {summary.data_quality?.coinglass?.enabled && (
@@ -450,4 +1117,18 @@ function FiltersTab({ backtest }: { backtest: EventBacktestResponse }) {
       </div>
     </TabsContent>
   )
+}
+
+function readinessLabel(readiness: string | undefined, t: ReturnType<typeof useTranslation>['t']) {
+  if (readiness === 'tradable') return t('backtestTool.readinessTradable', 'Tradable')
+  if (readiness === 'watch') return t('backtestTool.readinessWatch', 'Watch')
+  if (readiness === 'blocked') return t('backtestTool.readinessBlocked', 'Blocked')
+  return '-'
+}
+
+function readinessTone(readiness: string | undefined): 'green' | 'amber' | 'red' | undefined {
+  if (readiness === 'tradable') return 'green'
+  if (readiness === 'watch') return 'amber'
+  if (readiness === 'blocked') return 'red'
+  return undefined
 }

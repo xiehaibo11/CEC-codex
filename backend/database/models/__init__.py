@@ -65,6 +65,9 @@ from .binance import (
     BinanceAccountSnapshot,
     BinanceBackfillTask,
 )
+from .hibt import (
+    HibtWallet,
+)
 from .signals import (
     SignalDefinition,
     SignalPool,
@@ -153,6 +156,7 @@ __all__ = [
     "BinanceWallet",
     "BinanceAccountSnapshot",
     "BinanceBackfillTask",
+    "HibtWallet",
     "SignalDefinition",
     "SignalPool",
     "SignalTriggerLog",
