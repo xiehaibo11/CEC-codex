@@ -94,6 +94,7 @@ MIGRATIONS = [
     "add_user_exchange_config.py",
     "add_sampling_depth_to_global_config.py",
     "add_trading_hot_path_indexes.py",
+    "add_event_contract_trade_log_ai_columns.py",
 ]
 
 
