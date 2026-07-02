@@ -7,6 +7,8 @@ import random
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List
 
+from services.event_contract.constants import PERIOD_SECONDS
+
 
 MONTE_CARLO_SIMULATIONS = 200
 MONTE_CARLO_SEED = 20260701
@@ -28,7 +30,7 @@ def build_backtest_validation_report(
     """
 
     walk_forward = _walk_forward_report(cfg, trades)
-    monte_carlo = _monte_carlo_report(trades)
+    monte_carlo = _monte_carlo_report(trades, cfg)
     regime_stability = _regime_stability_report(cfg, trades)
     live_decay = _live_decay_estimate(
         cfg=cfg,
@@ -111,11 +113,21 @@ def _walk_forward_report(cfg: Dict[str, Any], trades: List[Dict[str, Any]]) -> D
     }
 
 
-def _monte_carlo_report(trades: List[Dict[str, Any]], simulations: int = MONTE_CARLO_SIMULATIONS) -> Dict[str, Any]:
+def _monte_carlo_report(
+    trades: List[Dict[str, Any]],
+    cfg: Dict[str, Any],
+    simulations: int = MONTE_CARLO_SIMULATIONS,
+) -> Dict[str, Any]:
     pnls = [float(trade.get("profit_loss") or 0.0) for trade in trades]
+    non_overlapping = bool(cfg.get("non_overlapping_only", True))
+    interval = PERIOD_SECONDS.get(str(cfg.get("period") or "1m"), 60)
+    block_length = max(1, math.ceil(int(cfg.get("expiry_minutes") or 5) * 60 / interval))
+    method = "iid" if non_overlapping else "block"
     if not pnls:
         return {
             "simulations": 0,
+            "method": method,
+            "block_length": block_length,
             "profitable_ratio": 0.0,
             "p5_pnl": 0.0,
             "p50_pnl": 0.0,
@@ -127,12 +139,21 @@ def _monte_carlo_report(trades: List[Dict[str, Any]], simulations: int = MONTE_C
     totals: List[float] = []
     drawdowns: List[float] = []
     for _ in range(simulations):
-        sampled = [rng.choice(pnls) for _ in pnls]
+        if method == "iid" or block_length >= len(pnls):
+            sampled = [rng.choice(pnls) for _ in pnls]
+        else:
+            sampled = []
+            while len(sampled) < len(pnls):
+                start = rng.randrange(0, len(pnls) - block_length + 1)
+                sampled.extend(pnls[start : start + block_length])
+            sampled = sampled[: len(pnls)]
         totals.append(round(sum(sampled), 4))
         drawdowns.append(round(_max_drawdown_from_pnls(sampled), 4))
 
     return {
         "simulations": simulations,
+        "method": method,
+        "block_length": block_length,
         "profitable_ratio": round(sum(1 for total in totals if total > 0) / simulations * 100, 2),
         "p5_pnl": round(_percentile(totals, 5), 4),
         "p50_pnl": round(_percentile(totals, 50), 4),
