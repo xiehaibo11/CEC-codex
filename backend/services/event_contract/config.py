@@ -112,6 +112,7 @@ class EventContractConfigMixin:
             "min_stake": float(config.get("min_stake") or 1.0),
             "min_seconds_between_trades": int(config.get("min_seconds_between_trades") or 0),
             "daily_loss_cap": float(config["daily_loss_cap"]) if config.get("daily_loss_cap") is not None else None,
+            "non_overlapping_only": bool(config.get("non_overlapping_only", True)),
             "reviewer_weights_mode": str(config.get("reviewer_weights_mode") or "pre_window").lower(),
             "warmup_bars": int(config.get("warmup_bars") or 80),
             "max_bars": int(config.get("max_bars") or 50000),

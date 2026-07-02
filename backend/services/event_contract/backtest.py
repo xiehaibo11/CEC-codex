@@ -265,10 +265,19 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             "entry_delay_skipped_count": 0,
             "decision_bars_count": 0,
             "candidate_signals_count": 0,
+            "overlap_skipped_count": 0,
+            "frequency_skipped_count": 0,
+            "daily_cap_skipped_count": 0,
         }
         ai_evaluations = 0
         completed_ai_reviews = 0
         ai_trader_team_state = build_ai_trader_team_state(cfg)
+        from services.event_contract.backtest_constraints import TradeConstraintTracker
+        constraints = TradeConstraintTracker(
+            non_overlapping=cfg["non_overlapping_only"],
+            min_seconds_between_trades=cfg["min_seconds_between_trades"],
+            daily_loss_cap=cfg["daily_loss_cap"],
+        )
 
         for idx, candle in enumerate(klines):
             decision_ts = self._decision_timestamp(candle, cfg)
@@ -399,6 +408,11 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 skipped["no_trade_filtered_count"] += 1
                 continue
 
+            constraint_reason = constraints.allow(decision_ts)
+            if constraint_reason:
+                skipped[constraint_reason] += 1
+                continue
+
             raw_entry_price = klines[entry_idx]["open"]
             raw_expiry_price = klines[expiry_idx]["open"]
             entry_price = self._apply_slippage(raw_entry_price, direction, cfg["slippage_bps"])
@@ -417,6 +431,12 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             peak_equity = max(peak_equity, equity)
             if peak_equity > 0:
                 max_drawdown = max(max_drawdown, (peak_equity - equity) / peak_equity * 100)
+
+            constraints.record(
+                entry_ts=klines[entry_idx]["timestamp"],
+                settlement_ts=klines[expiry_idx]["timestamp"],
+                pnl=pnl,
+            )
 
             trade = {
                 "trade_id": f"evt-{len(trades) + 1}",
