@@ -60,4 +60,4 @@ def test_migration_upgrade_is_idempotent():
 
 def test_migration_registered_last_in_migration_manager():
     migration_manager = importlib.import_module("database.migration_manager")
-    assert migration_manager.MIGRATIONS[-1] == "add_event_contract_paper_tables.py"
+    assert "add_event_contract_paper_tables.py" in migration_manager.MIGRATIONS

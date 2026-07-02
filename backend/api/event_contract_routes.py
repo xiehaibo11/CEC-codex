@@ -13,6 +13,7 @@ from database.connection import SessionLocal
 from database.models import CoinGlassUserKey
 from services.event_contract_service import event_contract_service
 from services.event_contract import paper_trader_api
+from services.event_contract.rolling_validation import cumulative_validation_stats
 from services.event_contract.tasks import (
     create_event_backtest_task,
     find_latest_event_backtest_task,
@@ -354,5 +355,16 @@ def get_paper_trader_stats(trader_id: int, db: Session = Depends(get_db)):
         return paper_trader_api.get_paper_trader_stats(db, trader_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/validation/{fingerprint}")
+def get_rolling_validation_progress(fingerprint: str, db: Session = Depends(get_db)):
+    """Cumulative significance across every rolling out-of-sample holdout
+    window the scheduler has appended for this strategy fingerprint (spec
+    module 4). Replaces manually clicking the holdout endpoint."""
+    try:
+        return cumulative_validation_stats(db, fingerprint)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

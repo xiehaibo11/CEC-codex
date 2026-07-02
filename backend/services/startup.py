@@ -209,6 +209,20 @@ def initialize_services():
         )
         logger.info("Event-contract live paper trading cycle scheduled (60s interval)")
 
+        # Automate rolling out-of-sample validation: append a frozen-parameter
+        # holdout backtest for every enabled paper trader's strategy fingerprint
+        # once 12h have passed since its last validated window (every 12 hours)
+        from services.event_contract.rolling_validation import (
+            run_rolling_validation_cycle,
+            ROLLING_VALIDATION_JOB_ID,
+        )
+        task_scheduler.add_interval_task(
+            task_func=run_rolling_validation_cycle,
+            interval_seconds=12 * 3600,
+            task_id=ROLLING_VALIDATION_JOB_ID,
+        )
+        logger.info("Event-contract rolling validation cycle scheduled (12h interval)")
+
         logger.info("All services initialized successfully")
 
     except Exception as e:

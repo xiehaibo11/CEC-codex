@@ -96,6 +96,7 @@ MIGRATIONS = [
     "add_trading_hot_path_indexes.py",
     "add_event_contract_trade_log_ai_columns.py",
     "add_event_contract_paper_tables.py",
+    "add_event_contract_validation_log.py",
 ]
 
 

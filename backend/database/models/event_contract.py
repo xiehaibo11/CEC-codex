@@ -149,3 +149,24 @@ class EventContractPaperBet(Base):
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
     trader = relationship("EventContractPaperTrader", back_populates="bets")
+
+
+class EventContractValidationLog(Base):
+    """One row per frozen-parameter out-of-sample holdout window, appended by
+    the rolling validation scheduler cycle (spec module 4). Cumulative
+    significance across ``status='recorded'`` rows for a fingerprint replaces
+    manually clicking the holdout endpoint."""
+    __tablename__ = "event_contract_validation_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    strategy_fingerprint = Column(String(32), nullable=False, index=True)
+    source_run_id = Column(Integer, nullable=True)
+    holdout_run_id = Column(Integer, nullable=True, index=True)
+    task_id = Column(Integer, nullable=True)
+    window_start = Column(TIMESTAMP, nullable=True)
+    window_end = Column(TIMESTAMP, nullable=True)
+    decided = Column(Integer, nullable=True)
+    wins = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending|recorded|failed
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
