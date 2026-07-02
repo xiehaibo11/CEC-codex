@@ -121,7 +121,10 @@ class EventContractQualityMixin:
         """Config hash that ignores the tested window - two runs with the same
         fingerprint on different windows form an honest out-of-sample pair."""
         public_cfg = self._public_config(cfg)
-        for key in ("start_time", "end_time"):
+        # Exclude window boundaries and window-derived runtime injections
+        for key in ("start_time", "end_time", "reviewer_weights"):
+            # reviewer_weights is computed from trades before start_time (pre_window mode),
+            # so different windows get different weights despite identical strategy config
             public_cfg.pop(key, None)
         payload = json.dumps(public_cfg, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
