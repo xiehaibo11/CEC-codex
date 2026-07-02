@@ -13,6 +13,7 @@ import {
 import {
   getEventContractSymbols,
   createEventContractBacktestTask,
+  createEventContractHoldoutTask,
   getCoinGlassEventContractCapability,
   getEventContractBacktestTask,
   getHyperAiProfile,
@@ -148,6 +149,7 @@ export default function BacktestTool() {
   const [loadingSymbols, setLoadingSymbols] = useState(false)
   const [loadingPrediction, setLoadingPrediction] = useState(false)
   const [startingBacktest, setStartingBacktest] = useState(false)
+  const [startingHoldout, setStartingHoldout] = useState(false)
   const [pausingBacktest, setPausingBacktest] = useState(false)
   const [runningBinanceProbe, setRunningBinanceProbe] = useState(false)
   const [binanceProbeResult, setBinanceProbeResult] = useState<BinanceTestnetOrderProbeResponse | null>(null)
@@ -316,6 +318,31 @@ export default function BacktestTool() {
       toast.error(error?.message || t('backtestTool.backtestFailed', 'Backtest failed'))
     } finally {
       setStartingBacktest(false)
+    }
+  }
+
+  const runHoldout = async () => {
+    if (!backtest?.run_id) return
+    try {
+      setStartingHoldout(true)
+      const prevEnd = fromLocalInputValue(form.end_time)
+      const windowMs = new Date(prevEnd).getTime() - new Date(fromLocalInputValue(form.start_time)).getTime()
+      const start = new Date(new Date(prevEnd).getTime())
+      const end = new Date(Math.min(Date.now() - 10 * 60 * 1000, start.getTime() + windowMs))
+      if (end.getTime() <= start.getTime()) {
+        throw new Error(t('backtestTool.holdoutNoData', 'No unseen time window after the tested range yet'))
+      }
+      const task = await createEventContractHoldoutTask(backtest.run_id, {
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+      })
+      window.localStorage.setItem(BACKTEST_TASK_STORAGE_KEY, String(task.task_id))
+      setTaskStatus(task)
+      toast.success(t('backtestTool.holdoutStarted', 'Frozen-parameter verification started on a new window'))
+    } catch (error: any) {
+      toast.error(error?.message || t('backtestTool.holdoutFailed', 'Holdout run failed'))
+    } finally {
+      setStartingHoldout(false)
     }
   }
 
@@ -598,6 +625,8 @@ export default function BacktestTool() {
               displayFactors={displayFactors}
               selectedTrade={selectedTrade}
               setSelectedTrade={trade => setSelectedTrade(trade)}
+              onHoldout={runHoldout}
+              holdoutRunning={startingHoldout}
             />
           </div>
         </div>

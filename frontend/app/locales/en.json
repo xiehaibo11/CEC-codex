@@ -1831,7 +1831,20 @@
     "noBinanceTestnetWallet": "No active Binance Testnet wallet found",
     "binanceProbeSuccess": "Binance Testnet order {{orderId}} was placed and cancelled",
     "binanceProbeFailed": "Binance Testnet order probe failed",
-    "binanceProbeResult": "Binance Testnet order {{orderId}}: placed={{placeStatus}}, queried={{queryStatus}}, cancelled={{cancelStatus}}, price={{price}}"
+    "binanceProbeResult": "Binance Testnet order {{orderId}}: placed={{placeStatus}}, queried={{queryStatus}}, cancelled={{cancelStatus}}, price={{price}}",
+    "credibility": "Credibility",
+    "holdoutRun": "Verify on new window",
+    "sampleSize": "{{count}} decided trades",
+    "winRateCi": "Win rate 95% CI: {{low}}%–{{high}}%",
+    "significant": "Beats breakeven {{be}}% (p={{p}})",
+    "notSignificant": "Not proven above breakeven {{be}}%",
+    "insufficientSample": "Sample too small to judge",
+    "sensitivity": "Settlement sensitivity: {{b2}}% of results flip at ±2bps, {{b5}}% at ±5bps, {{b10}}% at ±10bps.",
+    "calibration": "Calibration (Brier {{score}}):",
+    "calibrationBucket": "Predicted {{range}}% → actual {{actual}}% (n={{n}})",
+    "holdoutStarted": "Frozen-parameter verification started on a new window",
+    "holdoutFailed": "Holdout run failed",
+    "holdoutNoData": "No unseen time window after the tested range yet"
   },
   "traderData": {
     "export": "Export Data",

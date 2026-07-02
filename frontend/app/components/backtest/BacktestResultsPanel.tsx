@@ -34,6 +34,7 @@ import type {
   EventTradeLog,
 } from '@/lib/api'
 
+import { CredibilityCard } from './CredibilityCard'
 import {
   directionClass,
   formatMoney,
@@ -54,6 +55,8 @@ type Props = {
   displayFactors: EventFactorSnapshot[]
   selectedTrade: EventTradeLog | null
   setSelectedTrade: (trade: EventTradeLog) => void
+  onHoldout: () => void
+  holdoutRunning: boolean
 }
 
 const REVIEWER_NAME_KEYS: Record<string, string> = {
@@ -99,6 +102,8 @@ export function BacktestResultsPanel({
   displayFactors,
   selectedTrade,
   setSelectedTrade,
+  onHoldout,
+  holdoutRunning,
 }: Props) {
   const { t } = useTranslation()
 
@@ -111,6 +116,9 @@ export function BacktestResultsPanel({
         {taskStatus && <TaskProgressPanel taskStatus={taskStatus} />}
         {backtest ? (
           <>
+            {backtest.summary && (
+              <CredibilityCard summary={backtest.summary} onHoldout={onHoldout} holdoutRunning={holdoutRunning} />
+            )}
             <SummaryGrid backtest={backtest} />
             <ProfessionalDecisionSummary trade={selectedTrade || backtest.trades[0]} />
             <QualityGatePanel qualityGate={backtest.summary.quality_gate} />

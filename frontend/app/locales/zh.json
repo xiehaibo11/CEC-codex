@@ -1851,7 +1851,20 @@
     "noBinanceTestnetWallet": "没有找到可用的币安 Testnet 钱包",
     "binanceProbeSuccess": "币安 Testnet 订单 {{orderId}} 已下单并撤单",
     "binanceProbeFailed": "币安 Testnet 模拟下单失败",
-    "binanceProbeResult": "币安 Testnet 订单 {{orderId}}：下单={{placeStatus}}，查询={{queryStatus}}，撤单={{cancelStatus}}，价格={{price}}"
+    "binanceProbeResult": "币安 Testnet 订单 {{orderId}}：下单={{placeStatus}}，查询={{queryStatus}}，撤单={{cancelStatus}}，价格={{price}}",
+    "credibility": "可信度",
+    "holdoutRun": "换新时段验证",
+    "sampleSize": "{{count}} 笔有效交易",
+    "winRateCi": "胜率 95% 置信区间：{{low}}%–{{high}}%",
+    "significant": "显著高于盈亏平衡线 {{be}}%（p={{p}}）",
+    "notSignificant": "尚不能证明高于盈亏平衡线 {{be}}%",
+    "insufficientSample": "样本太小，无法下结论",
+    "sensitivity": "结算敏感度：±2bps 时 {{b2}}% 的结果会翻转，±5bps 时 {{b5}}%，±10bps 时 {{b10}}%。",
+    "calibration": "概率校准（Brier {{score}}）：",
+    "calibrationBucket": "预测 {{range}}% → 实际 {{actual}}%（n={{n}}）",
+    "holdoutStarted": "已用冻结参数在新时段启动验证",
+    "holdoutFailed": "验证启动失败",
+    "holdoutNoData": "测试区间之后暂无未见过的数据时段"
   },
   "traderData": {
     "export": "导出数据",
