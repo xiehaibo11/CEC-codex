@@ -1853,6 +1853,7 @@
     "binanceProbeFailed": "币安 Testnet 模拟下单失败",
     "binanceProbeResult": "币安 Testnet 订单 {{orderId}}：下单={{placeStatus}}，查询={{queryStatus}}，撤单={{cancelStatus}}，价格={{price}}",
     "credibility": "可信度",
+    "credibilityLegacy": "该结果生成于可信度统计功能上线之前——重新运行回测即可查看置信区间与显著性。",
     "holdoutRun": "换新时段验证",
     "sampleSize": "{{count}} 笔有效交易",
     "winRateCi": "胜率 95% 置信区间：{{low}}%–{{high}}%",

@@ -1833,6 +1833,7 @@
     "binanceProbeFailed": "Binance Testnet order probe failed",
     "binanceProbeResult": "Binance Testnet order {{orderId}}: placed={{placeStatus}}, queried={{queryStatus}}, cancelled={{cancelStatus}}, price={{price}}",
     "credibility": "Credibility",
+    "credibilityLegacy": "This result was produced before credibility statistics existed — run the backtest again to see confidence intervals and significance.",
     "holdoutRun": "Verify on new window",
     "sampleSize": "{{count}} decided trades",
     "winRateCi": "Win rate 95% CI: {{low}}%–{{high}}%",

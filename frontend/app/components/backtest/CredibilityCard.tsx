@@ -26,11 +26,15 @@ const TONE_CLASS: Record<string, string> = {
 
 export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
   const { t } = useTranslation()
+  const isLegacy =
+    summary.decided_trades === undefined ||
+    summary.win_rate_ci_low === undefined ||
+    summary.p_value_vs_breakeven === undefined
   const decided = summary.decided_trades ?? 0
   const tone = sampleTone(decided)
   const ciLow = summary.win_rate_ci_low ?? 0
   const ciHigh = summary.win_rate_ci_high ?? 0
-  const breakeven = summary.break_even_win_rate ?? 55.56
+  const breakeven = summary.break_even_win_rate
   const significant = summary.significant_vs_breakeven === true
   const sensitivity = summary.settlement_sensitivity
   const calibration = summary.calibration_report
@@ -46,6 +50,16 @@ export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
           </Button>
         </div>
       </CardHeader>
+      {isLegacy ? (
+        <CardContent className="text-sm">
+          <p className="text-xs text-muted-foreground">
+            {t(
+              'backtestTool.credibilityLegacy',
+              'This result was produced before credibility statistics existed — run the backtest again to see confidence intervals and significance.'
+            )}
+          </p>
+        </CardContent>
+      ) : (
       <CardContent className="space-y-2 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-md border px-2 py-0.5 text-xs ${TONE_CLASS[tone]}`}>
@@ -54,11 +68,13 @@ export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
           <Badge variant="outline">
             {t('backtestTool.winRateCi', 'Win rate 95% CI: {{low}}%–{{high}}%', { low: ciLow, high: ciHigh })}
           </Badge>
-          <Badge variant={significant ? 'default' : 'secondary'}>
-            {significant
-              ? t('backtestTool.significant', 'Beats breakeven {{be}}% (p={{p}})', { be: breakeven, p: summary.p_value_vs_breakeven })
-              : t('backtestTool.notSignificant', 'Not proven above breakeven {{be}}%', { be: breakeven })}
-          </Badge>
+          {breakeven !== undefined && (
+            <Badge variant={significant ? 'default' : 'secondary'}>
+              {significant
+                ? t('backtestTool.significant', 'Beats breakeven {{be}}% (p={{p}})', { be: breakeven, p: summary.p_value_vs_breakeven })
+                : t('backtestTool.notSignificant', 'Not proven above breakeven {{be}}%', { be: breakeven })}
+            </Badge>
+          )}
           {summary.target_win_rate_status === 'insufficient_sample' && (
             <Badge variant="secondary">{t('backtestTool.insufficientSample', 'Sample too small to judge')}</Badge>
           )}
@@ -87,6 +103,7 @@ export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   )
 }
