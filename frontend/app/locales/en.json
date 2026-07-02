@@ -1888,7 +1888,20 @@
     "calibrationBucket": "Predicted {{range}}% → actual {{actual}}% (n={{n}})",
     "holdoutStarted": "Frozen-parameter verification started on a new window",
     "holdoutFailed": "Holdout run failed",
-    "holdoutNoData": "No unseen time window after the tested range yet"
+    "holdoutNoData": "No unseen time window after the tested range yet",
+    "rollingValidation": "Rolling validation progress",
+    "rollingValidationError": "Failed to load rolling validation progress: {{error}}",
+    "rollingValidationProgressLabel": "Cumulative sample",
+    "rollingValidationProgressCount": "{{n}} / {{target}}",
+    "rollingValidationBreakeven": "Breakeven {{be}}% (p={{p}})",
+    "rollingValidationNoSample": "Not enough decided holdout trades yet for a confidence interval.",
+    "rollingValidationEmpty": "No rolling validation windows recorded yet",
+    "rollingValidationSegmentStat": "{{wins}}/{{decided}} wins",
+    "rollingValidationStatus": {
+      "recorded": "recorded",
+      "pending": "pending",
+      "failed": "failed"
+    }
   },
   "traderData": {
     "export": "Export Data",

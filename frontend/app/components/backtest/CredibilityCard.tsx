@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { EventBacktestSummary } from '@/lib/api'
+import { RollingValidationSection } from './RollingValidationSection'
 
 type Props = {
   summary: EventBacktestSummary
@@ -38,6 +39,7 @@ export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
   const significant = summary.significant_vs_breakeven === true
   const sensitivity = summary.settlement_sensitivity
   const calibration = summary.calibration_report
+  const fingerprint = summary.strategy_fingerprint
 
   return (
     <Card>
@@ -103,6 +105,11 @@ export function CredibilityCard({ summary, onHoldout, holdoutRunning }: Props) {
           </div>
         )}
       </CardContent>
+      )}
+      {fingerprint && (
+        <CardContent className="pt-0">
+          <RollingValidationSection fingerprint={fingerprint} />
+        </CardContent>
       )}
     </Card>
   )

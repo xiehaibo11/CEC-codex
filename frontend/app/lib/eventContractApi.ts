@@ -797,3 +797,32 @@ export async function getEventPaperTraderStats(traderId: number): Promise<EventP
   const response = await apiRequest(`/event-contract/paper-traders/${traderId}/stats`)
   return response.json()
 }
+
+// -- Rolling out-of-sample validation progress (spec module 4) ----------
+
+export interface EventValidationSegment {
+  window_start: string | null
+  window_end: string | null
+  decided: number
+  wins: number
+  status: 'pending' | 'recorded' | 'failed'
+  holdout_run_id: number | null
+}
+
+export interface EventValidationProgress {
+  fingerprint: string
+  segments: EventValidationSegment[]
+  n: number
+  wins: number
+  decided_win_rate: number
+  ci_low: number
+  ci_high: number
+  p_value: number
+  break_even_win_rate: number
+  target_n: number
+}
+
+export async function getEventContractValidationProgress(fingerprint: string): Promise<EventValidationProgress> {
+  const response = await apiRequest(`/event-contract/validation/${encodeURIComponent(fingerprint)}`)
+  return response.json()
+}

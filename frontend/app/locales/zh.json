@@ -1908,7 +1908,20 @@
     "calibrationBucket": "预测 {{range}}% → 实际 {{actual}}%（n={{n}}）",
     "holdoutStarted": "已用冻结参数在新时段启动验证",
     "holdoutFailed": "验证启动失败",
-    "holdoutNoData": "测试区间之后暂无未见过的数据时段"
+    "holdoutNoData": "测试区间之后暂无未见过的数据时段",
+    "rollingValidation": "滚动验证进度",
+    "rollingValidationError": "加载滚动验证进度失败：{{error}}",
+    "rollingValidationProgressLabel": "累计样本",
+    "rollingValidationProgressCount": "{{n}} / {{target}}",
+    "rollingValidationBreakeven": "盈亏平衡线 {{be}}%（p={{p}}）",
+    "rollingValidationNoSample": "已判定的验证交易样本还不够，暂无法给出置信区间。",
+    "rollingValidationEmpty": "暂无滚动验证记录",
+    "rollingValidationSegmentStat": "{{wins}}/{{decided}} 胜",
+    "rollingValidationStatus": {
+      "recorded": "已记录",
+      "pending": "进行中",
+      "failed": "失败"
+    }
   },
   "traderData": {
     "export": "导出数据",
