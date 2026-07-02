@@ -485,6 +485,15 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             }
         )
         run_id = self._persist_backtest(db, cfg, summary, trades, equity_curve)
+        # New trades just landed - drop the "__latest__" learning cache entry so
+        # get_reviewer_evolution_snapshot / unsafe_legacy mode refit against the
+        # freshest outcomes. before_ts-keyed (pre_window) entries are left alone -
+        # refitting them from in-window trades would reintroduce leakage.
+        try:
+            from services.event_contract.reviewer_learning import invalidate_latest_reviewer_cache
+            invalidate_latest_reviewer_cache()
+        except Exception as exc:  # noqa: BLE001 - cache reset is best-effort
+            logger.warning("reviewer_learning cache reset failed: %s", exc)
 
         return {
             "run_id": run_id,

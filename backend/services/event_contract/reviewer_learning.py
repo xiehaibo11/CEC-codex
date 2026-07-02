@@ -12,8 +12,13 @@ Mechanics:
 The same posterior also produces an "evolution score" used by the panel:
   reviewer score = (long_accuracy + short_accuracy) / 2 - hold_drag.
 Reviewers below a floor (default 0.45) get their vote weight halved; consistent
-out-performers (> 0.65) get up to 2x. Weights are loaded once per backtest /
-predict call and re-cached after each run.
+out-performers (> 0.65) get up to 2x. Weights are cached per `before_ts` value
+(one entry per distinct window-start / "__latest__" for the no-isolation case),
+capped at 32 entries with oldest-first eviction so unbounded `predict()` calls
+can't leak memory. The `"__latest__"` entry is invalidated after every backtest
+run via `invalidate_latest_reviewer_cache()` so the Dashboard still sees fresh
+posteriors; `before_ts`-keyed entries are never refit from in-window trades,
+which is what prevents the original leakage loop.
 
 Output of `compute_reviewer_weights(...)` is a dict {ai_name: weight}, suitable
 for `weighted_consensus(...)` which folds it into rule_only or ai_confirmed
@@ -144,18 +149,40 @@ class ReviewerStats:
 
 
 # ---------------------------------------------------------------------------
-# Cache (thread-safe; invalidated by `clear_reviewer_cache()` after a backtest)
+# Cache (thread-safe). Keyed per `before_ts` (or "__latest__" when unset), so
+# pre_window fits for different backtest windows never refit each other. The
+# "__latest__" entry is popped after every backtest via
+# `invalidate_latest_reviewer_cache()`; before_ts-keyed entries are left alone
+# (refitting them from in-window trades would reintroduce leakage). Capped at
+# `_CACHE_MAX_ENTRIES` with oldest-inserted-first eviction, since `predict()`
+# generates a near-unique before_ts on every call.
 # ---------------------------------------------------------------------------
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: Dict[Any, Dict[str, Any]] = {}
+_CACHE_MAX_ENTRIES = 32
 _LOOKBACK_TRADES = 1500
+
+_LATEST_CACHE_KEY = "__latest__"
 
 
 def clear_reviewer_cache() -> None:
-    """Force a refit on next access."""
+    """Force a refit on next access for every cached key. Mainly useful for tests."""
     with _CACHE_LOCK:
         _CACHE.clear()
+
+
+def invalidate_latest_reviewer_cache() -> None:
+    """Pop only the `"__latest__"` cache entry (no before_ts).
+
+    Call this after a backtest persists new trades so `get_reviewer_evolution_snapshot`
+    and `unsafe_legacy` mode see the fresh posterior on next access. before_ts-keyed
+    entries (pre_window fits) are intentionally left untouched - refitting them from
+    trades inside the backtest window would reintroduce the leakage this module was
+    changed to prevent.
+    """
+    with _CACHE_LOCK:
+        _CACHE.pop(_LATEST_CACHE_KEY, None)
 
 
 def _winning_direction(entry_price: float, expiry_price: float) -> Optional[str]:
@@ -257,9 +284,14 @@ def compute_reviewer_weights(db: Session, before_ts: Optional[Any] = None) -> Di
     """Return {ai_name: weight} folding base expertise weight with learning.
 
     before_ts: only trades before this datetime are used to compute weights.
-    Cached per before_ts value; clear with `clear_reviewer_cache()` to force a refit.
+    Cached per before_ts value (capped at `_CACHE_MAX_ENTRIES`, oldest evicted
+    first). The no-before_ts case is cached under `"__latest__"`, which gets
+    invalidated after each backtest via `invalidate_latest_reviewer_cache()`;
+    before_ts-keyed entries persist for the life of the cache (or until
+    `clear_reviewer_cache()` is called) since refitting them from in-window
+    trades would reintroduce leakage.
     """
-    cache_key = before_ts.isoformat() if before_ts is not None else "__latest__"
+    cache_key = before_ts.isoformat() if before_ts is not None else _LATEST_CACHE_KEY
     with _CACHE_LOCK:
         cached = _CACHE.get(cache_key)
         if cached is not None:
@@ -282,6 +314,9 @@ def compute_reviewer_weights(db: Session, before_ts: Optional[Any] = None) -> Di
             weights[name] = max(WEIGHT_FLOOR, weights[name] * 0.5)
 
     with _CACHE_LOCK:
+        if cache_key not in _CACHE and len(_CACHE) >= _CACHE_MAX_ENTRIES:
+            oldest_key = next(iter(_CACHE))
+            _CACHE.pop(oldest_key, None)
         _CACHE[cache_key] = {"weights": dict(weights), "stats": stats}
     return weights
 
