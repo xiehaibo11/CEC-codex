@@ -453,7 +453,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
                 "ai_decision_snapshot": analysis["ai_decisions"],
             }
             trades.append(trade)
-            equity_curve.append({"timestamp": self._decision_timestamp(klines[expiry_idx], cfg) * 1000, "equity": round(equity, 4)})
+            equity_curve.append({"timestamp": klines[expiry_idx]["timestamp"] * 1000, "equity": round(equity, 4)})
 
         ai_trader_team_report = finalize_ai_trader_team_report(ai_trader_team_state, cfg)
         summary = self._build_summary(

@@ -229,6 +229,8 @@ class EventContractBacktestHelperMixin:
             entry_idx += 1
         if entry_idx >= len(klines):
             return None, 0
+        if klines[entry_idx]["timestamp"] + interval <= target_ts:
+            return None, int(target_ts - klines[entry_idx]["timestamp"])
         lag = int(klines[entry_idx]["timestamp"] - decision_ts)
         if lag > max_entry_lag_seconds:
             return None, lag

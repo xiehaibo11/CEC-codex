@@ -1,5 +1,7 @@
 """Strike must come from the first observable bar OPEN at/after the decision."""
-from services.event_contract_service import event_contract_service
+from datetime import datetime, timezone
+
+from services.event_contract_service import EventContractService, event_contract_service
 
 
 def _klines(start=1000, interval=60, count=10, open_base=100.0):
@@ -31,3 +33,107 @@ def test_gap_exceeding_lag_tolerance_returns_none():
     idx, lag = event_contract_service._resolve_entry_bar(klines, 1120, 3, 60, 60)
     assert idx is None
     assert lag > 60
+
+
+def test_delay_beyond_last_bar_returns_none_with_positive_lag():
+    """Regression for end-of-data truncation: target_ts lands past the last bar's
+    close, but the walk loop stops at len(klines)-1 and must not silently accept
+    that bar as the strike. A large lag tolerance isolates this from the
+    lag-vs-decision_ts tolerance check."""
+    klines = [{"timestamp": 0}, {"timestamp": 60}]
+    idx, lag = event_contract_service._resolve_entry_bar(klines, 60, 170, 60, 1000)
+    assert idx is None
+    assert lag > 0
+    assert lag == 170
+
+
+def _long_allow_trade_analysis():
+    return {
+        "allow_trade": True,
+        "fake_breakout_risk": 0,
+        "trap_risk": 0,
+        "blocked_reasons": [],
+        "final_direction": "long",
+        "ai_participated": True,
+        "ai_decisions": [],
+        "factors": [],
+        "ai_consensus": {
+            "consensus_rate": 100,
+            "consensus_source": "system_panel",
+            "long_votes": 30,
+            "short_votes": 0,
+            "hold_votes": 0,
+        },
+        "event_signal": {"signal_type": "LONG_BREAKOUT"},
+        "signal_strength": 80,
+        "market_state": "trend",
+        "reason_summary": "test long",
+    }
+
+
+def test_backtest_trade_prices_are_strike_and_expiry_bar_opens(monkeypatch):
+    """End-to-end: with every bar having open != close, the resulting trade must
+    price off the strike (entry) bar's OPEN and the expiry bar's OPEN, not any
+    close, and entry_time must be the strike bar's open timestamp."""
+    base_ts = 1_700_000_000
+    interval = 60
+    klines = _klines(start=base_ts, interval=interval, count=40)
+
+    service = EventContractService()
+    monkeypatch.setattr(service, "_load_klines", lambda *args, **kwargs: klines)
+    monkeypatch.setattr(service, "_audit_kline_series", lambda *args, **kwargs: {"warnings": [], "coverage_pct": 100})
+    monkeypatch.setattr(service, "_validate_data_quality", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_load_coinglass_feature_bundle",
+        lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_l2_feature_bundle",
+        lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
+    )
+    monkeypatch.setattr(service, "_analyze_snapshot", lambda history, cfg, **kwargs: _long_allow_trade_analysis())
+    monkeypatch.setattr(service, "_persist_backtest", lambda *args, **kwargs: 1)
+
+    warmup_bars = 5
+    # decision_ts for klines[warmup_bars] = its timestamp + interval; narrow the
+    # window to exactly that instant so only a single decision bar fires.
+    decision_ts = klines[warmup_bars]["timestamp"] + interval
+    start_iso = datetime.fromtimestamp(decision_ts, tz=timezone.utc).isoformat()
+    end_iso = datetime.fromtimestamp(decision_ts + 1, tz=timezone.utc).isoformat()
+
+    cfg = {
+        "symbol": "BTC",
+        "exchange": "binance",
+        "environment": "mainnet",
+        "period": "1m",
+        "expiry_minutes": 5,
+        "consensus_mode": "rule_only",
+        "delay_seconds": 0,
+        "warmup_bars": warmup_bars,
+        "max_bars": 50,
+        "start_time": start_iso,
+        "end_time": end_iso,
+    }
+
+    result = service.run_backtest(object(), cfg)
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+
+    entry_idx = warmup_bars + 1  # decision_ts == klines[warmup_bars + 1]["timestamp"]
+    expiry_idx = entry_idx + 5  # expiry_minutes=5 on a 1m period => +5 bars
+
+    assert klines[entry_idx]["open"] != klines[entry_idx]["close"]
+    assert klines[expiry_idx]["open"] != klines[expiry_idx]["close"]
+
+    assert trade["entry_price"] == klines[entry_idx]["open"]
+    assert trade["expiry_price"] == klines[expiry_idx]["open"]
+    assert trade["entry_time"] == (
+        datetime.fromtimestamp(klines[entry_idx]["timestamp"], tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+    assert result["equity_curve"][-1]["timestamp"] == klines[expiry_idx]["timestamp"] * 1000
