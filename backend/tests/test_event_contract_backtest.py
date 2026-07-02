@@ -939,7 +939,10 @@ def test_summary_quality_gate_warns_when_fee_and_slippage_are_zero():
 
     quality_gate = summary["quality_gate"]
     checks = {check["id"]: check for check in quality_gate["checks"]}
-    assert quality_gate["status"] == "warning"
+    # Now expects "fail" because 2/2 wins (CI lower bound 34.24%) is below breakeven (50%),
+    # so target_win_rate_status is "not_met" and target_edge check fails. Combined with
+    # execution_costs warning, overall status becomes "fail" per new stricter semantics.
+    assert quality_gate["status"] == "fail"
     assert checks["execution_costs"]["status"] == "warning"
     assert any("Set non-zero fee and slippage" in item for item in quality_gate["recommendations"])
 
@@ -1025,8 +1028,12 @@ def test_summary_quality_gate_preserves_zero_target_win_rate_message():
         check for check in summary["quality_gate"]["checks"] if check["id"] == "target_edge"
     )
     assert summary["target_win_rate"] == 0
-    assert summary["target_win_rate_met"] is True
-    assert "target 0.00%" in target_edge["message"]
+    # Now expects False because with 0 wins out of 1 decided trade, CI lower bound is 0%
+    # which is below breakeven (~50%). New semantics require CI lower bound >= breakeven.
+    assert summary["target_win_rate_met"] is False
+    assert summary["target_win_rate_status"] == "not_met"
+    # The target_edge check status reflects the new stricter semantics
+    assert target_edge["status"] == "fail"
 
 
 def test_large_stake_fee_summary_matches_event_contract_pnl_formula():
@@ -1099,7 +1106,10 @@ def test_large_stake_fee_summary_matches_event_contract_pnl_formula():
     assert summary["expectancy"] == round(expected_total_pnl / 14, 4)
     assert summary["break_even_win_rate"] == 55.58
     assert summary["target_sample_met"] is True
-    assert summary["target_win_rate_met"] is True
+    # Now expects False: CI lower bound (52.41%) is below breakeven (55.58%), so target_status
+    # is "not_met" per new stricter semantics requiring CI lower bound >= breakeven.
+    assert summary["target_win_rate_met"] is False
+    assert summary["target_win_rate_status"] == "not_met"
 
 
 class _InsertResult:

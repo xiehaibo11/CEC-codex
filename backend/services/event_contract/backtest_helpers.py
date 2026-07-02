@@ -6,6 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from services.event_contract.backtest_quality import build_backtest_quality_gate
 from services.event_contract.backtest_research import build_backtest_research_report
+from services.event_contract.backtest_stats import (
+    binomial_p_value,
+    settlement_sensitivity,
+    wilson_interval,
+)
 from services.event_contract.backtest_validation import build_backtest_validation_report
 from services.event_contract.constants import ENGINE_VERSION
 
@@ -53,9 +58,19 @@ class EventContractBacktestHelperMixin:
             or nested_quality_warnings
         )
         win_rate = round(wins / total * 100, 2) if total else 0
+        decided = wins + losses
+        decided_win_rate = round(wins / decided * 100, 2) if decided else 0
+        ci_low, ci_high = wilson_interval(wins, decided)
+        p_value = binomial_p_value(wins, decided, break_even_win_rate / 100)
         target_min_trades = int(cfg.get("target_min_trades", 10))
-        target_sample_met = total >= target_min_trades
-        target_win_rate_met = not partial and target_sample_met and win_rate >= target_win_rate
+        target_sample_met = decided >= target_min_trades
+        if not target_sample_met:
+            target_status = "insufficient_sample"
+        elif ci_low >= break_even_win_rate and decided_win_rate >= target_win_rate and not partial:
+            target_status = "met"
+        else:
+            target_status = "not_met"
+        target_win_rate_met = target_status == "met"
 
         streak_w = streak_l = max_w = max_l = 0
         for trade in trades:
@@ -84,6 +99,14 @@ class EventContractBacktestHelperMixin:
             "target_sample_met": target_sample_met,
             "target_win_rate_met": target_win_rate_met,
             "break_even_win_rate": round(break_even_win_rate, 2),
+            "decided_trades": decided,
+            "decided_win_rate": decided_win_rate,
+            "win_rate_ci_low": ci_low,
+            "win_rate_ci_high": ci_high,
+            "p_value_vs_breakeven": round(p_value, 6),
+            "significant_vs_breakeven": bool(decided and p_value < 0.05),
+            "target_win_rate_status": target_status,
+            "settlement_sensitivity": settlement_sensitivity(trades),
             "partial": partial,
             "audit_status": "partial" if partial else "complete",
             "total_trades": total,
