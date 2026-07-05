@@ -326,6 +326,12 @@ def setup_system_logger():
     handler = SystemLogHandler()
     handler.setLevel(logging.WARNING)  # 只收集WARNING及以上
 
+    # urllib3 logs each transparent retry ("Retrying ... RemoteDisconnected")
+    # at WARNING; that is recovery working, not a fault. Keep it out of the
+    # user-facing System Logs page but leave it in stdout/container logs —
+    # exhausted retries still surface here as app-level ERRORs.
+    handler.addFilter(lambda record: not record.name.startswith("urllib3"))
+
     # 添加到根logger
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
