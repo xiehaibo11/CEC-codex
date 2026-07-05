@@ -456,6 +456,8 @@ class HyperliquidClient:
             klines.append({
                 'timestamp': int(ts_ms / 1000),
                 'datetime': datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat(),
+                # keep key parity with kline_data_service and the Binance path
+                'datetime_str': datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                 'open': open_price,
                 'high': high_price,
                 'low': low_price,

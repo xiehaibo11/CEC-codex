@@ -66,6 +66,8 @@ def get_kline_data(symbol: str, market: str = "CRYPTO", period: str = "1d", coun
                 data.append({
                     'timestamp': kline.timestamp,  # Already in seconds from adapter
                     'datetime': datetime.fromtimestamp(kline.timestamp),
+                    # keep key parity with the Hyperliquid path (kline_data_service)
+                    'datetime_str': datetime.utcfromtimestamp(kline.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
                     'open': float(kline.open_price),
                     'high': float(kline.high_price),
                     'low': float(kline.low_price),

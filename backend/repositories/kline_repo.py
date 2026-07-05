@@ -57,7 +57,10 @@ class KlineRepository:
                 'market': market,
                 'period': period,
                 'timestamp': timestamp,
-                'datetime_str': item.get('datetime', ''),
+                # naive UTC string, same format kline_data_service writes — storing the
+                # tz-aware ISO 'datetime' here mixes formats in the column and breaks
+                # pd.to_datetime(format='mixed') readers
+                'datetime_str': item.get('datetime_str') or item.get('datetime', ''),
                 'environment': environment,
                 'open_price': item.get('open'),
                 'high_price': item.get('high'),

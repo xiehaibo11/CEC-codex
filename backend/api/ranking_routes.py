@@ -98,7 +98,10 @@ async def get_ranking_table(
     for symbol, data in history.items():
         if len(data) >= 10:  # Minimum data requirement
             df = pd.DataFrame(data)
-            df["Date"] = pd.to_datetime(df["Date"], format='mixed')
+            # utc=True: stored datetime_str rows mix naive UTC and tz-aware ISO
+            # strings (two historical writers); without it pandas raises
+            # "Mixed timezones detected"
+            df["Date"] = pd.to_datetime(df["Date"], format='mixed', utc=True)
             history_dfs[symbol] = df.sort_values("Date")
     
     if not history_dfs:

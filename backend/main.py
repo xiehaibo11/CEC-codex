@@ -184,6 +184,7 @@ async def shutdown_discord_gateway():
 
 
 # API routes
+from api.auth_dependencies import get_current_user
 from api.local_auth_routes import router as local_auth_router
 from api.market_data_routes import router as market_data_router
 from api.order_routes import router as order_router
@@ -264,20 +265,29 @@ def get_db():
         db.close()
 
 @app.get("/api/accounts/{account_id}/strategy")
-async def get_account_strategy_alias(account_id: int, db: Session = Depends(get_db)):
+async def get_account_strategy_alias(
+    account_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Alias for strategy config endpoint"""
     from api.account_routes import get_account_strategy
-    return await get_account_strategy(account_id, db)
+    return get_account_strategy(account_id, current_user, db)
 
 @app.put("/api/accounts/{account_id}/strategy")
-async def update_account_strategy_alias(account_id: int, payload: dict, db: Session = Depends(get_db)):
+async def update_account_strategy_alias(
+    account_id: int,
+    payload: dict,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Alias for strategy config endpoint"""
     from api.account_routes import update_account_strategy
     from schemas.account import StrategyConfigUpdate
     from pydantic import ValidationError
     try:
         strategy_update = StrategyConfigUpdate(**payload)
-        return await update_account_strategy(account_id, strategy_update, db)
+        return update_account_strategy(account_id, strategy_update, current_user, db)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

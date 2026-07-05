@@ -697,6 +697,9 @@ def get_account_rate_limit(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        # e.g. no wallet configured for this account — client error, not server fault
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to get rate limit for account {account_id}: {e}", exc_info=True)
         raise HTTPException(
@@ -756,6 +759,9 @@ def get_account_trading_stats(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        # e.g. no wallet configured for this account — client error, not server fault
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to get trading stats for account {account_id}: {e}", exc_info=True)
         raise HTTPException(

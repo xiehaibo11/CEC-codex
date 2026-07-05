@@ -4,6 +4,8 @@ Provides RESTful API interfaces for crypto market data
 """
 
 import asyncio
+import time
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any, Optional
@@ -242,12 +244,14 @@ async def get_crypto_market_status(symbol: str, market: str = "US"):
     try:
         status_data = await run_in_threadpool(get_market_status, symbol, market)
 
+        # Hyperliquid's status dict carries no timestamp/current_time; the
+        # market is 24/7 so "now" is the honest as-of time for the response
         return MarketStatusResponse(
             symbol=status_data.get('symbol', symbol),
             market=status_data.get('market', market),
             market_status=status_data.get('market_status', 'UNKNOWN'),
-            timestamp=status_data.get('timestamp'),
-            current_time=status_data.get('current_time', '')
+            timestamp=status_data.get('timestamp') or int(time.time()),
+            current_time=status_data.get('current_time') or datetime.now(timezone.utc).isoformat()
         )
     except Exception as e:
         logger.error(f"Failed to get market status: {e}")
