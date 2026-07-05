@@ -149,3 +149,156 @@ def test_api_error_raises_structured_exception():
 
     assert exc.value.code == 220008
     assert "Signature verification failed" in str(exc.value)
+
+
+def test_public_market_endpoints_use_documented_paths():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": []}))
+    client = HibtTradingClient("access", "secret", session=session)
+
+    client.get_deals("BTC")
+    client.get_mark_prices("BTC")
+    client.get_funding_rate("BTC", start_time=1, end_time=2, limit=10)
+    client.get_risk_limit("BTC")
+    client.get_contracts()
+    client.get_contract_specifications()
+    client.get_order_book("BTC", depth=50)
+
+    paths = [call[1].removeprefix(client.base_url) for call in session.calls]
+    assert paths == [
+        "/v2/market/deals",
+        "/v2/market/index",
+        "/v2/market/fundingRate",
+        "/v2/market/riskLimit",
+        "/v2/market/contracts",
+        "/v2/market/contractSpecifications",
+        "/v2/market/orderBook",
+    ]
+    funding_params = session.calls[2][2]
+    assert funding_params == {"symbol": "btc_usdt", "startTime": 1, "endTime": 2, "limit": 10}
+    assert session.calls[6][2] == {"symbol": "btc_usdt", "depth": 50}
+    assert all(call[3] == {} for call in session.calls)  # public endpoints stay unsigned
+
+
+def test_order_queries_are_signed_and_map_parameters():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": {"total": 1, "page": 1, "data": []}}))
+    client = HibtTradingClient("access", "secret", session=session)
+    client._get_timestamp = lambda: 1724916869475
+
+    result = client.get_order_history("BTC", start_time=1700000000, end_time=1700003600, page_index=2, page_size=50)
+
+    assert result["total"] == 1
+    method, url, params, headers, _ = session.calls[0]
+    assert method == "GET"
+    assert url.endswith("/v2/order/finished")
+    assert params["symbol"] == "btc_usdt"
+    assert params["startTime"] == 1700000000
+    assert params["pageIndex"] == 2
+    assert params["pageSize"] == 50
+    assert headers["X-ACCESS-KEY"] == "access"
+
+    client.get_open_orders(symbol="ETH", order_id="oid-1")
+    _, url, params, headers, _ = session.calls[1]
+    assert url.endswith("/v2/order/unFinish")
+    assert params == {"symbol": "eth_usdt", "orderID": "oid-1", "timestamp": 1724916869475}
+    assert "X-SIGNATURE" in headers
+
+
+def test_batch_open_builds_items_from_friendly_orders():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": {"success": {}, "fail": {}}}))
+    client = HibtTradingClient("access", "secret", session=session)
+    client._get_timestamp = lambda: 1724916869475
+
+    client.place_batch_orders(
+        [
+            {"symbol": "BTC", "side": "BUY", "quantity": 0.01, "leverage": 5, "custom_id": "c1"},
+            {"symbol": "ETH", "side": "SELL", "quantity": 1, "order_type": "LIMIT", "price": 2500, "custom_id": "c2"},
+        ]
+    )
+
+    method, url, payload, headers, _ = session.calls[0]
+    assert method == "POST"
+    assert url.endswith("/v2/order/batchOpen")
+    items = payload["items"]
+    assert items[0]["symbol"] == "btc_usdt" and items[0]["side"] == 1 and items[0]["type"] == 2
+    assert items[1]["symbol"] == "eth_usdt" and items[1]["side"] == 2 and items[1]["type"] == 1
+    assert items[1]["price"] == "2500"
+    assert "X-SIGNATURE" in headers
+
+
+def test_batch_cancel_requires_exactly_one_id_list():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": {}}))
+    client = HibtTradingClient("access", "secret", session=session)
+
+    with pytest.raises(ValueError):
+        client.cancel_batch_orders("BTC")
+    with pytest.raises(ValueError):
+        client.cancel_batch_orders("BTC", order_ids=["1"], custom_ids=["2"])
+
+    client.cancel_batch_orders("BTC", order_ids=["1", "2"])
+    _, url, payload, _, _ = session.calls[0]
+    assert url.endswith("/v2/order/batchCancel")
+    assert payload["listOrderID"] == ["1", "2"]
+
+
+def test_close_all_positions_returns_order_ids():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": {"listOrderID": ["a", "b"]}}))
+    client = HibtTradingClient("access", "secret", session=session)
+
+    order_ids = client.close_all_positions("BTC")
+
+    assert order_ids == ["a", "b"]
+    _, url, payload, _, _ = session.calls[0]
+    assert url.endswith("/v2/order/closeAll")
+    assert payload["symbol"] == "btc_usdt"
+
+
+def test_conditional_order_uses_documented_field_casing():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": {"id": "e1"}}))
+    client = HibtTradingClient("access", "secret", session=session)
+    client._get_timestamp = lambda: 1724916869475
+
+    client.place_conditional_order(
+        "BTC",
+        side="BUY",
+        quantity=0.5,
+        trigger_price=60000,
+        price=60100,
+        leverage=3,
+        trigger_type=2,
+        take_profit_price=65000,
+        stop_loss_price=58000,
+        sp_sl_trigger_type=1,
+    )
+
+    _, url, payload, _, _ = session.calls[0]
+    assert url.endswith("/v2/entrust/add")
+    assert payload["triggerType"] == 2
+    assert payload["triggerPrice"] == "60000"
+    assert payload["IsSetSp"] is True and payload["spPrice"] == "65000"
+    assert payload["IsSetSl"] is True and payload["slPrice"] == "58000"
+    assert payload["spSlTriggerType"] == 1
+
+    with pytest.raises(ValueError):
+        client.cancel_conditional_order("BTC")
+
+
+def test_account_history_endpoints_map_parameters():
+    session = FakeSession(FakeResponse({"code": 0, "msg": "success", "data": []}))
+    client = HibtTradingClient("access", "secret", session=session)
+    client._get_timestamp = lambda: 1724916869475
+
+    client.get_trade_history("BTC", start_time=1700000000, end_time=1700003600, limit=100)
+    client.get_balance_records(symbol="BTC", event=9, limit=50)
+    client.get_forced_liquidations(action=4)
+
+    _, url, params, _, _ = session.calls[0]
+    assert url.endswith("/v2/account/order")
+    assert params["startTime"] == 1700000000 and params["limit"] == 100
+
+    _, url, params, _, _ = session.calls[1]
+    assert url.endswith("/v2/account/balanceRecord")
+    assert params["event"] == 9 and params["symbol"] == "btc_usdt"
+
+    _, url, params, _, _ = session.calls[2]
+    assert url.endswith("/v2/account/orderForced")
+    assert params["action"] == 4

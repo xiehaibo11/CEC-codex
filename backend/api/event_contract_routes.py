@@ -83,6 +83,7 @@ class BacktestRequest(PredictRequest):
     win_payout_ratio: Optional[float] = Field(default=None, ge=0)
     fee_rate: Optional[float] = Field(default=None, ge=0)
     slippage_bps: float = Field(default=0, ge=0)
+    impact_cost_bps: Optional[float] = Field(default=None, ge=0)
     delay_seconds: int = Field(default=3, ge=0)
     draw_result: Optional[str] = Field(default=None, pattern="^(loss|draw|refund)$")
     max_bars: int = Field(default=50000, ge=100, le=200000)
@@ -126,6 +127,20 @@ def backtest_event_contract(request: Request, payload_model: BacktestRequest, db
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
+
+
+@router.post("/backtest/data-quality-preview")
+def preview_backtest_data_quality(request: Request, payload_model: BacktestRequest, db: Session = Depends(get_db)):
+    """Audit kline/L2/CoinGlass coverage for the requested window without running a backtest."""
+    try:
+        payload: Dict[str, Any] = _attach_user_coinglass_key(payload_model.model_dump(), request, db)
+        return event_contract_service.preview_data_quality(db, payload)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Data quality preview failed: {exc}")
 
 
 @router.post("/backtest/tasks")

@@ -7,6 +7,8 @@ import type { WatchlistSettingsTabProps } from './types'
 
 export function WatchlistSettingsTab({
   t,
+  exchangeId = 'binance',
+  title = 'Binance',
   availableSymbols,
   watchlistSymbols,
   maxSymbols,
@@ -28,12 +30,12 @@ export function WatchlistSettingsTab({
 
   return (
     <div className="space-y-6">
-      {/* Binance Watchlist */}
+      {/* Watchlist card (per-exchange) */}
       <Card>
         <CardHeader className="shrink-0 pb-3">
           <div className="flex items-center gap-2">
-            <ExchangeIcon exchangeId="binance" size={24} />
-            <CardTitle className="text-base">Binance</CardTitle>
+            <ExchangeIcon exchangeId={exchangeId} size={24} />
+            <CardTitle className="text-base">{title}</CardTitle>
           </div>
           <CardDescription className="text-xs">
             {t('settings.selectedCount', 'Selected')}: {watchlistSymbols.length} / {maxSymbols}

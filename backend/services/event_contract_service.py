@@ -12,6 +12,7 @@ from services.event_contract.backtest import EventContractBacktestMixin
 from services.event_contract.coinglass_features import EventContractCoinGlassMixin
 from services.event_contract.config import EventContractConfigMixin
 from services.event_contract.data import EventContractDataMixin
+from services.event_contract.flow_features import EventContractFlowMixin
 from services.event_contract.l2_features import EventContractL2Mixin
 from services.event_contract.llm import EventContractLlmMixin
 from services.event_contract.quality import EventContractQualityMixin
@@ -22,6 +23,7 @@ from services.event_contract.signal import EventContractSignalMixin
 class EventContractService(
     EventContractBacktestMixin,
     EventContractCoinGlassMixin,
+    EventContractFlowMixin,
     EventContractL2Mixin,
     EventContractConfigMixin,
     EventContractDataMixin,

@@ -4,9 +4,11 @@ from fastapi import APIRouter
 
 from api.system.backfill import (
     get_binance_backfill_status,
+    get_hibt_backfill_status,
     get_hyperliquid_backfill_status,
     router as backfill_router,
     start_binance_backfill,
+    start_hibt_backfill,
     start_hyperliquid_backfill,
 )
 from api.system.coverage import (
@@ -45,6 +47,7 @@ __all__ = [
     "get_collection_days",
     "get_data_coverage",
     "get_expected_kline_records_per_day",
+    "get_hibt_backfill_status",
     "get_hyperliquid_backfill_status",
     "get_retention_days",
     "get_retention_days_api",
@@ -53,6 +56,7 @@ __all__ = [
     "router",
     "set_retention_days",
     "start_binance_backfill",
+    "start_hibt_backfill",
     "start_hyperliquid_backfill",
     "update_retention_days",
 ]

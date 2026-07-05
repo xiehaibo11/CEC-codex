@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -56,9 +57,9 @@ export default function AiAttributionChatModal({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <DialogTitle>{t('attribution.aiAnalysis.title', 'AI Strategy Diagnosis')}</DialogTitle>
-              <span className="text-xs text-muted-foreground">
+              <DialogDescription className="text-xs text-muted-foreground">
                 {t('attribution.aiAnalysis.subtitle', '(Analyze trading performance and get improvement suggestions)')}
-              </span>
+              </DialogDescription>
             </div>
             {(loadingConversations || accountsLoading) && <PacmanLoader className="w-8 h-4" />}
           </div>

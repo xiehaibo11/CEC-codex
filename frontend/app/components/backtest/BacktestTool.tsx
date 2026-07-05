@@ -21,7 +21,9 @@ import {
   isAuthenticated,
   pauseEventContractBacktestTask,
   predictEventContract,
+  previewEventBacktestDataQuality,
   type CoinGlassEventContractCapability,
+  type DataQualityPreview,
   type EventAiDecision,
   type EventBacktestResponse,
   type EventBacktestTaskStatus,
@@ -60,8 +62,12 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     initial_balance: 10000,
     stake_amount: 100,
     win_payout_ratio: 0.8,
-    fee_rate: 0,
-    slippage_bps: 0,
+    // Backend enforces execution-cost floors (fee >= 0.1%, slippage >= 2bps,
+    // impact >= 0.5bps, delay >= 3s); defaults mirror the floors so the form
+    // shows what actually runs.
+    fee_rate: 0.001,
+    slippage_bps: 2,
+    impact_cost_bps: 1,
     delay_seconds: 3,
     consensus_threshold: 5,
     reviewer_panel_size: 25,
@@ -160,10 +166,24 @@ export default function BacktestTool() {
   const [form, setForm] = useState<FormState>(() => loadSavedForm(buildDefaultForm(start, end)))
   const [coinglassCapability, setCoinGlassCapability] = useState<CoinGlassEventContractCapability | null>(null)
   const [loadingCoinGlassCapability, setLoadingCoinGlassCapability] = useState(false)
+  const [qualityPreview, setQualityPreview] = useState<DataQualityPreview | null>(null)
+  const [checkingQuality, setCheckingQuality] = useState(false)
   const coinGlassAvailable = coinglassCapability?.available === true
   const runningBacktest = taskStatus ? ACTIVE_TASK_STATUSES.has(taskStatus.status) : false
 
+  const QUALITY_SENSITIVE_KEYS: Array<keyof FormState> = [
+    'symbol', 'exchange', 'environment', 'period', 'start_time', 'end_time', 'expiry_minutes',
+    'enable_l2_features', 'min_l2_coverage_pct', 'strict_l2_quality',
+    'enable_coinglass_features', 'min_coinglass_coverage_pct', 'strict_coinglass_quality', 'platform',
+  ]
+
   const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    if (key === 'decision_policy' && value === 'professional_v1' && form.consensus_mode === 'ai_confirmed') {
+      toast(t('backtestTool.aiConfirmDroppedNotice', 'Professional workflow replaces the shared AI vote gate with rule prefilter + 30 independent AI traders. AI confirmation setting was reset.'), { icon: 'ℹ️', duration: 6000 })
+    }
+    if (QUALITY_SENSITIVE_KEYS.includes(key)) {
+      setQualityPreview(null)
+    }
     setForm(prev => {
       const next = { ...prev, [key]: value }
       if (key === 'decision_policy') {
@@ -283,6 +303,7 @@ export default function BacktestTool() {
     win_payout_ratio: Number(form.win_payout_ratio),
     fee_rate: Number(form.fee_rate),
     slippage_bps: Number(form.slippage_bps),
+    impact_cost_bps: Number(form.impact_cost_bps),
     delay_seconds: Number(form.delay_seconds),
     draw_result: form.draw_result,
     max_bars: 50000,
@@ -303,9 +324,36 @@ export default function BacktestTool() {
     }
   }, [form, coinGlassAvailable, t])
 
+  const checkDataQuality = async (): Promise<DataQualityPreview | null> => {
+    try {
+      setCheckingQuality(true)
+      const preview = await previewEventBacktestDataQuality(buildBacktestPayload())
+      setQualityPreview(preview)
+      return preview
+    } catch (error: any) {
+      console.error('Data quality preview failed:', error)
+      toast.error(error?.message || t('backtestTool.qualityPreviewFailed', 'Data quality check failed'))
+      return null
+    } finally {
+      setCheckingQuality(false)
+    }
+  }
+
   const runBacktest = async () => {
     try {
       setStartingBacktest(true)
+      // Preflight: surface strict-quality failures before launching a task that
+      // would abort mid-run. A preview infra error does not block the run.
+      // A still-valid preview (config unchanged since it ran) is reused so the
+      // run starts instantly after a manual coverage check.
+      const preview = qualityPreview ?? await checkDataQuality()
+      if (preview && !preview.ok) {
+        toast.error(
+          t('backtestTool.qualityBlockedToast', 'Data coverage is below the strict quality thresholds — the run would abort. Adjust the window, lower the threshold, or disable strict mode.'),
+          { duration: 8000 },
+        )
+        return
+      }
       setSelectedTrade(null)
       setBacktest(null)
       window.localStorage.removeItem(BACKTEST_LAST_TASK_STORAGE_KEY)
@@ -580,11 +628,30 @@ export default function BacktestTool() {
             ) : (
               <Button onClick={runBacktest} disabled={startingBacktest}>
                 {startingBacktest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {t('backtestTool.runBacktest', 'Run Event Backtest')}
+                {startingBacktest && checkingQuality
+                  ? t('backtestTool.preflighting', 'Checking data quality…')
+                  : startingBacktest
+                    ? t('backtestTool.startingBacktest', 'Starting…')
+                    : t('backtestTool.runBacktest', 'Run Event Backtest')}
               </Button>
             )}
           </div>
         </div>
+        {qualityPreview && !qualityPreview.ok && !runningBacktest && !startingBacktest && (
+          <div className="mt-3 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+            <div className="font-medium">
+              {t('backtestTool.preflightBlockedTitle', 'Run blocked by the data-quality precheck')}
+            </div>
+            <div className="mt-1">
+              {qualityPreview.would_block
+                .map(item => `${item.source}: ${item.warnings.join('; ')}`)
+                .join(' · ')}
+            </div>
+            <div className="mt-1">
+              {t('backtestTool.qualitySuggestion', 'Options: pick a window with better coverage, lower the min coverage threshold, or turn off strict quality mode (results will be labeled lower-credibility).')}
+            </div>
+          </div>
+        )}
         {binanceProbeResult && (
           <div className="mt-3 rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-xs text-green-700 dark:text-green-300">
             {t('backtestTool.binanceProbeResult', 'Binance Testnet order {{orderId}}: placed={{placeStatus}}, queried={{queryStatus}}, cancelled={{cancelStatus}}, price={{price}}', {
@@ -611,6 +678,9 @@ export default function BacktestTool() {
               loadingCoinGlassCapability={loadingCoinGlassCapability}
               loadingSymbols={loadingSymbols}
               updateForm={updateForm}
+              qualityPreview={qualityPreview}
+              checkingQuality={checkingQuality}
+              onCheckDataQuality={checkDataQuality}
             />
           </div>
 

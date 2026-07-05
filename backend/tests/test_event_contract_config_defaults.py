@@ -17,8 +17,9 @@ def test_explicit_zero_payout_kept():
     assert _norm({"win_payout_ratio": 0})["win_payout_ratio"] == 0
 
 
-def test_explicit_zero_delay_kept():
-    assert _norm({"delay_seconds": 0})["delay_seconds"] == 0
+def test_explicit_zero_delay_floored():
+    # Execution-cost floors override explicit zero to enforce realistic assumptions.
+    assert _norm({"delay_seconds": 0})["delay_seconds"] == 3
 
 
 def test_delay_defaults_to_three_seconds():

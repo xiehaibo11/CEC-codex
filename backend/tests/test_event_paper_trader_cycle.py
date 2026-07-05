@@ -152,7 +152,8 @@ def test_next_bar_fills_entry_at_its_open(monkeypatch, session):
 
     session.refresh(bet)
     assert bet.status == "open"
-    assert bet.entry_price == 12345.6
+    # Cost floor enforces min 2bps slippage: 12345.6 * 1.0002 = 12348.06912
+    assert bet.entry_price == 12348.06912
     assert bet.entry_time == _naive_utc(decision_ts)
     assert bet.expiry_time == _naive_utc(decision_ts + 5 * 60)
 
@@ -193,10 +194,11 @@ def test_expiry_settles_win_and_updates_balance(monkeypatch, session):
     assert bet.status == "settled"
     assert bet.result == "win"
     assert bet.expiry_price == 110.0
-    assert bet.pnl == pytest.approx(100.0 * 0.8)  # fee_rate defaults to 0
+    # Cost floor enforces min 0.1% fee: 100.0 * 0.8 - 100.0 * 0.001 = 79.9
+    assert bet.pnl == pytest.approx(79.9)
 
     session.refresh(trader)
-    assert trader.current_balance == pytest.approx(10000.0 + 80.0)
+    assert trader.current_balance == pytest.approx(10079.9)
 
 
 def test_open_bet_blocks_new_decisions(monkeypatch, session):
@@ -356,7 +358,8 @@ def test_settlement_survives_later_trader_failure(monkeypatch, session):
         f"settlement was discarded by later trader's rollback (status={settled.status})"
     )
     assert settled.result == "win"
-    assert t1_fresh.current_balance == pytest.approx(10080.0), (
+    # Cost floor enforces min 0.1% fee on settlement
+    assert t1_fresh.current_balance == pytest.approx(10079.9), (
         f"balance update lost: {t1_fresh.current_balance}"
     )
 

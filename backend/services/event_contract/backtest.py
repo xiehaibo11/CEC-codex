@@ -58,6 +58,7 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             cfg["environment"],
             min_bars=cfg["warmup_bars"] + 5,
         )
+        klines, sanitize_report = self._sanitize_klines(klines)
         original_count = len(klines)
         klines = self._closed_klines(klines, cfg["period"], now_ts)
         if len(klines) < cfg["warmup_bars"]:
@@ -73,6 +74,8 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             self._decision_timestamp(klines[-1], cfg),
         )
         data_quality["unclosed_bars_dropped"] = original_count - len(klines)
+        data_quality["sanitize"] = sanitize_report
+        data_quality["warnings"].extend(sanitize_report["warnings"])
         self._validate_data_quality(data_quality, cfg)
         coinglass_bundle = self._load_coinglass_feature_bundle(
             cfg,
@@ -96,6 +99,22 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             data_quality["l2"] = self._audit_l2_features(
                 klines,
                 l2_bundle,
+                cfg,
+                latest_decision_ts,
+                latest_decision_ts,
+            )
+        flow_bundle = self._load_flow_feature_bundle(
+            db,
+            cfg,
+            klines[0]["timestamp"],
+            self._decision_timestamp(klines[-1], cfg),
+        )
+        if flow_bundle.get("enabled"):
+            klines = self._attach_flow_features(klines, flow_bundle, cfg)
+            latest_decision_ts = self._decision_timestamp(klines[-1], cfg)
+            data_quality["flow"] = self._audit_flow_features(
+                klines,
+                flow_bundle,
                 cfg,
                 latest_decision_ts,
                 latest_decision_ts,
@@ -195,7 +214,10 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             cfg["environment"],
             min_bars=cfg["warmup_bars"] + cfg["expiry_bars"] + 1,
         )
+        klines, sanitize_report = self._sanitize_klines(klines)
         data_quality = self._audit_kline_series(klines, cfg, start_ts, end_ts)
+        data_quality["sanitize"] = sanitize_report
+        data_quality["warnings"].extend(sanitize_report["warnings"])
         self._validate_data_quality(data_quality, cfg)
         if len(klines) < cfg["warmup_bars"] + cfg["expiry_bars"] + 1:
             raise ValueError(
@@ -221,6 +243,15 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         if l2_bundle.get("enabled"):
             klines = self._attach_l2_features(klines, l2_bundle, cfg)
             data_quality["l2"] = self._audit_l2_features(klines, l2_bundle, cfg, start_ts, end_ts)
+        flow_bundle = self._load_flow_feature_bundle(
+            db,
+            cfg,
+            load_start,
+            self._decision_timestamp(klines[-1], cfg),
+        )
+        if flow_bundle.get("enabled"):
+            klines = self._attach_flow_features(klines, flow_bundle, cfg)
+            data_quality["flow"] = self._audit_flow_features(klines, flow_bundle, cfg, start_ts, end_ts)
 
         decision_candles = [k for k in klines if start_ts <= self._decision_timestamp(k, cfg) <= end_ts]
         total_decision_bars = len(decision_candles)
@@ -419,7 +450,11 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
 
             raw_entry_price = klines[entry_idx]["open"]
             raw_expiry_price = klines[expiry_idx]["open"]
-            entry_price = self._apply_slippage(raw_entry_price, direction, cfg["slippage_bps"])
+            # Entry shifts adversely by slippage + market impact - both move
+            # the strike against the taken direction before settlement.
+            entry_price = self._apply_slippage(
+                raw_entry_price, direction, cfg["slippage_bps"] + cfg.get("impact_cost_bps", 0)
+            )
             expiry_price = raw_expiry_price
             result = self._settle_event_contract(direction, entry_price, expiry_price, cfg["draw_result"])
             fee = cfg["stake_amount"] * cfg["fee_rate"]
@@ -490,6 +525,9 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             ai_trader_team_report=ai_trader_team_report,
         )
         summary["execution_time_ms"] = int((time.perf_counter() - started) * 1000)
+        # Data-snooping audit: how many configs were already tried on this window
+        # (counts runs persisted BEFORE this one, so the current run is excluded).
+        summary["research_report"]["window_reuse"] = self._window_reuse_report(db, cfg)
         report(
             {
                 "phase": "saving",

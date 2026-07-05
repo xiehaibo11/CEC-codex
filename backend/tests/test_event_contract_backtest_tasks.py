@@ -58,6 +58,7 @@ def _patch_fast_backtest(monkeypatch, service):
     monkeypatch.setattr(service, "_validate_data_quality", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_load_coinglass_feature_bundle", lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}})
     monkeypatch.setattr(service, "_load_l2_feature_bundle", lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}})
+    monkeypatch.setattr(service, "_load_flow_feature_bundle", lambda *args, **kwargs: {"enabled": False, "warnings": []})
     monkeypatch.setattr(
         service,
         "_analyze_snapshot",

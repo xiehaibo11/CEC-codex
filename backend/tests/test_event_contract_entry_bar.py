@@ -81,6 +81,7 @@ def test_backtest_trade_prices_are_strike_and_expiry_bar_opens(monkeypatch):
 
     service = EventContractService()
     monkeypatch.setattr(service, "_load_klines", lambda *args, **kwargs: klines)
+    monkeypatch.setattr(service, "_sanitize_klines", lambda kls: (kls, {"input_bars": len(kls), "output_bars": len(kls), "dropped_invalid_bars": 0, "dropped_duplicate_bars": 0, "extreme_move_bars": 0, "max_abs_move_pct": 0.0, "warnings": []}))
     monkeypatch.setattr(service, "_audit_kline_series", lambda *args, **kwargs: {"warnings": [], "coverage_pct": 100})
     monkeypatch.setattr(service, "_validate_data_quality", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -93,6 +94,7 @@ def test_backtest_trade_prices_are_strike_and_expiry_bar_opens(monkeypatch):
         "_load_l2_feature_bundle",
         lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
     )
+    monkeypatch.setattr(service, "_load_flow_feature_bundle", lambda *args, **kwargs: {"enabled": False, "warnings": []})
     monkeypatch.setattr(service, "_analyze_snapshot", lambda history, cfg, **kwargs: _long_allow_trade_analysis())
     monkeypatch.setattr(service, "_persist_backtest", lambda *args, **kwargs: 1)
 
@@ -128,7 +130,10 @@ def test_backtest_trade_prices_are_strike_and_expiry_bar_opens(monkeypatch):
     assert klines[entry_idx]["open"] != klines[entry_idx]["close"]
     assert klines[expiry_idx]["open"] != klines[expiry_idx]["close"]
 
-    assert trade["entry_price"] == klines[entry_idx]["open"]
+    # Entry price = strike bar OPEN + cost-floor slippage (min 2bps + 1bp impact).
+    # Expiry price = raw expiry bar OPEN with no slippage applied.
+    assert abs(trade["entry_price"] - klines[entry_idx]["open"]) < 0.05
+    assert trade["entry_price"] != klines[entry_idx]["close"]
     assert trade["expiry_price"] == klines[expiry_idx]["open"]
     assert trade["entry_time"] == (
         datetime.fromtimestamp(klines[entry_idx]["timestamp"], tz=timezone.utc)
@@ -144,6 +149,7 @@ def _stub_service_for_multi_trade(monkeypatch, klines):
     factored out so multiple decision bars can be exercised across trade constraints."""
     service = EventContractService()
     monkeypatch.setattr(service, "_load_klines", lambda *args, **kwargs: klines)
+    monkeypatch.setattr(service, "_sanitize_klines", lambda kls: (kls, {"input_bars": len(kls), "output_bars": len(kls), "dropped_invalid_bars": 0, "dropped_duplicate_bars": 0, "extreme_move_bars": 0, "max_abs_move_pct": 0.0, "warnings": []}))
     monkeypatch.setattr(service, "_audit_kline_series", lambda *args, **kwargs: {"warnings": [], "coverage_pct": 100})
     monkeypatch.setattr(service, "_validate_data_quality", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -156,6 +162,7 @@ def _stub_service_for_multi_trade(monkeypatch, klines):
         "_load_l2_feature_bundle",
         lambda *args, **kwargs: {"enabled": False, "audit": {"enabled": False, "warnings": []}},
     )
+    monkeypatch.setattr(service, "_load_flow_feature_bundle", lambda *args, **kwargs: {"enabled": False, "warnings": []})
     monkeypatch.setattr(service, "_analyze_snapshot", lambda history, cfg, **kwargs: _long_allow_trade_analysis())
     monkeypatch.setattr(service, "_persist_backtest", lambda *args, **kwargs: 1)
     return service

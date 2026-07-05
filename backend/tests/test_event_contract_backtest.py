@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
 from services.event_contract_service import EventContractService
+from services.event_contract.backtest_validation import (
+    _edge_monotonicity_report,
+    _threshold_sensitivity_report,
+)
 from api.event_contract_routes import BacktestRequest
 
 
@@ -823,7 +827,8 @@ def test_ai_trader_team_report_tracks_30_independent_traders_without_consensus()
     assert first["trade_count"] == 2
     assert first["wins"] == 1
     assert first["win_rate"] == 50.0
-    assert first["pnl"] == -20
+    # -20.2 = win(+80) + loss(-100) minus the floored 0.1% fee on both bets.
+    assert first["pnl"] == -20.2
     assert first["train_trade_count"] == 1
     assert first["train_win_rate"] == 100.0
     assert first["oos_trade_count"] == 1
@@ -939,12 +944,16 @@ def test_summary_quality_gate_warns_when_fee_and_slippage_are_zero():
 
     quality_gate = summary["quality_gate"]
     checks = {check["id"]: check for check in quality_gate["checks"]}
-    # Now expects "fail" because 2/2 wins (CI lower bound 34.24%) is below breakeven (50%),
-    # so target_win_rate_status is "not_met" and target_edge check fails. Combined with
-    # execution_costs warning, overall status becomes "fail" per new stricter semantics.
+    # Requested zero costs are FLOORED at normalization (fee 0.1%, slippage
+    # 2bps), so the execution-costs check now passes instead of warning; the
+    # floor audit is carried in the summary. Overall status stays "fail"
+    # because 2/2 wins is still below the break-even CI requirement.
     assert quality_gate["status"] == "fail"
-    assert checks["execution_costs"]["status"] == "warning"
-    assert any("Set non-zero fee and slippage" in item for item in quality_gate["recommendations"])
+    assert checks["execution_costs"]["status"] == "pass"
+    assert cfg["fee_rate"] == 0.001
+    assert cfg["slippage_bps"] == 2.0
+    floored = {item["param"] for item in summary["enforced_cost_floors"]}
+    assert {"fee_rate", "slippage_bps"} <= floored
 
 
 def test_summary_quality_gate_passes_complete_costed_backtest():
@@ -1228,3 +1237,663 @@ def test_persist_backtest_marks_partial_run_status():
     assert run_id == 42
     assert db.calls[0][1]["status"] == "partial"
     assert db.committed is True
+
+
+def _preview_config(**overrides):
+    cfg = {
+        "symbol": "BTC",
+        "exchange": "binance",
+        "environment": "mainnet",
+        "period": "1m",
+        "expiry_minutes": 5,
+        "start_time": "2026-06-27T00:00:00Z",
+        "end_time": "2026-06-27T01:00:00Z",
+        "enable_l2_features": True,
+        "strict_l2_quality": True,
+        "min_l2_coverage_pct": 96,
+        "enable_coinglass_features": False,
+        "strict_data_quality": True,
+    }
+    cfg.update(overrides)
+    return cfg
+
+
+def _install_preview_data(monkeypatch, service, *, l2_coverage_ratio):
+    start_ts = int(datetime(2026, 6, 27, 0, 0, tzinfo=timezone.utc).timestamp())
+    end_ts = int(datetime(2026, 6, 27, 1, 0, tzinfo=timezone.utc).timestamp())
+    total_bars = int((end_ts - start_ts) // 60) + 1
+
+    def fake_load_klines(db, exchange, symbol, period, load_start, load_end, environment="mainnet", min_bars=0):
+        return [
+            {"timestamp": start_ts - 60 + offset * 60, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 1}
+            for offset in range(total_bars + 10)
+        ]
+
+    covered = int(total_bars * l2_coverage_ratio)
+
+    def fake_l2_bundle(db, cfg, fetch_start_ts, fetch_end_ts):
+        features_by_ts = {
+            (start_ts + offset * 60) * 1000: {"timestamp_ms": (start_ts + offset * 60) * 1000, "spread": 0.1}
+            for offset in range(covered)
+        }
+        return {
+            "enabled": True,
+            "source": "local_orderbook_snapshots",
+            "records_loaded": len(features_by_ts),
+            "features_by_ts": features_by_ts,
+            "timestamps": sorted(features_by_ts),
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(service, "_load_klines", fake_load_klines)
+    monkeypatch.setattr(service, "_load_l2_feature_bundle", fake_l2_bundle)
+    # These tests target kline/L2 auditing; the local-flow loader needs a real
+    # DB session, so stub it out as disabled here.
+    monkeypatch.setattr(
+        service,
+        "_load_flow_feature_bundle",
+        lambda db, cfg, fetch_start_ts, fetch_end_ts: {"enabled": False, "warnings": []},
+    )
+
+
+def test_preview_data_quality_reports_l2_block_without_raising(monkeypatch):
+    service = EventContractService()
+    _install_preview_data(monkeypatch, service, l2_coverage_ratio=0.9)
+
+    preview = service.preview_data_quality(object(), _preview_config())
+
+    assert preview["ok"] is False
+    assert [item["source"] for item in preview["would_block"]] == ["l2"]
+    assert preview["l2"]["coverage_pct"] < 96
+    assert preview["strict"]["l2"] is True
+    assert any("L2 coverage" in warning for warning in preview["l2"]["warnings"])
+
+
+def test_preview_data_quality_passes_when_coverage_meets_threshold(monkeypatch):
+    service = EventContractService()
+    _install_preview_data(monkeypatch, service, l2_coverage_ratio=1.0)
+
+    preview = service.preview_data_quality(object(), _preview_config())
+
+    assert preview["ok"] is True
+    assert preview["would_block"] == []
+    assert preview["l2"]["coverage_pct"] >= 96
+
+
+def test_preview_data_quality_ignores_warnings_when_strict_disabled(monkeypatch):
+    service = EventContractService()
+    _install_preview_data(monkeypatch, service, l2_coverage_ratio=0.9)
+
+    preview = service.preview_data_quality(
+        object(), _preview_config(strict_l2_quality=False)
+    )
+
+    assert preview["ok"] is True
+    assert preview["would_block"] == []
+    assert preview["l2"]["coverage_pct"] < 96
+
+
+class _WindowReuseDb:
+    def __init__(self, runs, configs, fingerprints):
+        self._row = {"runs": runs, "configs": configs, "fingerprints": fingerprints}
+        self.params = None
+
+    def execute(self, statement, params=None):
+        self.params = params
+        row = self._row
+
+        class _Result:
+            def mappings(self):
+                return self
+
+            def first(self):
+                return row
+
+        return _Result()
+
+
+def test_window_reuse_report_flags_reoptimized_window():
+    service = EventContractService()
+    cfg = _base_cfg()
+    cfg["start_time"] = datetime(2026, 6, 27, 0, 0, tzinfo=timezone.utc)
+    cfg["end_time"] = datetime(2026, 6, 28, 0, 0, tzinfo=timezone.utc)
+    db = _WindowReuseDb(runs=12, configs=11, fingerprints=11)
+
+    report = service._window_reuse_report(db, cfg)
+
+    assert report["available"] is True
+    assert report["prior_runs"] == 12
+    assert report["distinct_configs"] == 11
+    assert report["distinct_fingerprints"] == 11
+    assert report["overfit_risk"] == "high"
+    # Overlap threshold is half the tested window
+    assert db.params["half_window"] == 24 * 3600 * 0.5
+
+
+def test_window_reuse_report_low_risk_on_fresh_window():
+    service = EventContractService()
+    cfg = _base_cfg()
+    cfg["start_time"] = datetime(2026, 6, 27, 0, 0, tzinfo=timezone.utc)
+    cfg["end_time"] = datetime(2026, 6, 28, 0, 0, tzinfo=timezone.utc)
+
+    report = service._window_reuse_report(_WindowReuseDb(0, 0, 0), cfg)
+
+    assert report["overfit_risk"] == "low"
+    assert report["prior_runs"] == 0
+
+
+def test_window_reuse_report_never_breaks_the_run():
+    service = EventContractService()
+    cfg = _base_cfg()
+    cfg["start_time"] = datetime(2026, 6, 27, 0, 0, tzinfo=timezone.utc)
+    cfg["end_time"] = datetime(2026, 6, 28, 0, 0, tzinfo=timezone.utc)
+
+    class _BrokenDb:
+        def execute(self, *args, **kwargs):
+            raise RuntimeError("db down")
+
+    report = service._window_reuse_report(_BrokenDb(), cfg)
+
+    assert report == {"available": False}
+
+
+def test_window_reuse_frozen_param_reruns_are_not_snooping():
+    """Rolling-validation/holdout reruns share a strategy fingerprint - many
+    runs with few fingerprints must NOT raise the overfit alarm."""
+    service = EventContractService()
+    cfg = _base_cfg()
+    cfg["start_time"] = datetime(2026, 6, 27, 0, 0, tzinfo=timezone.utc)
+    cfg["end_time"] = datetime(2026, 6, 28, 0, 0, tzinfo=timezone.utc)
+
+    report = service._window_reuse_report(_WindowReuseDb(31, 15, 2), cfg)
+
+    assert report["overfit_risk"] == "low"
+    assert report["distinct_fingerprints"] == 2
+
+
+def _bar(ts, o=100.0, h=101.0, lo=99.0, c=100.5, v=10.0):
+    return {"timestamp": ts, "open": o, "high": h, "low": lo, "close": c, "volume": v}
+
+
+def test_sanitize_klines_drops_duplicates_and_corrupt_bars():
+    service = EventContractService()
+    raw = [
+        _bar(300),                      # out of order - must be re-sorted
+        _bar(60),
+        _bar(60, c=200.0),              # duplicate timestamp - keep first
+        _bar(120, h=98.0, lo=99.5),     # high < low - corrupt
+        _bar(180, c=-5.0),              # non-positive price - corrupt
+        _bar(240, v=-1.0),              # negative volume - corrupt
+    ]
+
+    clean, report = service._sanitize_klines(raw)
+
+    assert [item["timestamp"] for item in clean] == [60, 300]
+    assert clean[0]["close"] == 100.5  # first duplicate kept
+    assert report["input_bars"] == 6
+    assert report["output_bars"] == 2
+    assert report["dropped_duplicate_bars"] == 1
+    assert report["dropped_invalid_bars"] == 3
+    assert report["warnings"] == ["corrupt bars dropped: 3"]
+
+
+def test_sanitize_klines_clean_series_passes_through_silently():
+    service = EventContractService()
+    raw = [_bar(60), _bar(120), _bar(180)]
+
+    clean, report = service._sanitize_klines(raw)
+
+    assert len(clean) == 3
+    assert report["dropped_invalid_bars"] == 0
+    assert report["dropped_duplicate_bars"] == 0
+    assert report["warnings"] == []
+
+
+def test_preview_data_quality_includes_sanitize_report(monkeypatch):
+    service = EventContractService()
+    _install_preview_data(monkeypatch, service, l2_coverage_ratio=1.0)
+
+    preview = service.preview_data_quality(object(), _preview_config())
+
+    sanitize = preview["kline"]["sanitize"]
+    assert sanitize["dropped_invalid_bars"] == 0
+    assert sanitize["input_bars"] == sanitize["output_bars"]
+
+
+def _decided_trade(edge, won, range_risk=30.0, expected_win_rate=80.0, pnl=None):
+    return {
+        "result": "win" if won else "loss",
+        "profit_loss": pnl if pnl is not None else (80.0 if won else -100.0),
+        "event_signal": {
+            "edge_score": edge,
+            "range_risk": range_risk,
+            "expected_win_rate": expected_win_rate,
+        },
+    }
+
+
+def test_edge_monotonicity_detects_discriminative_score():
+    # Bottom quartile mostly loses, top quartile mostly wins.
+    trades = []
+    for i in range(40):
+        edge = 40 + i  # 40..79 ascending
+        trades.append(_decided_trade(edge, won=(i >= 20)))
+
+    report = _edge_monotonicity_report(trades)
+
+    assert report["status"] == "ok"
+    assert report["verdict"] == "monotonic"
+    assert report["top_minus_bottom"] == 100.0
+    assert len(report["groups"]) == 4
+
+
+def test_edge_monotonicity_flags_noise_score():
+    # Alternating outcomes regardless of edge - score has no signal.
+    trades = [_decided_trade(40 + i, won=(i % 2 == 0)) for i in range(40)]
+
+    report = _edge_monotonicity_report(trades)
+
+    assert report["status"] == "ok"
+    assert report["verdict"] == "flat_or_inverted"
+
+
+def test_edge_monotonicity_requires_min_samples():
+    trades = [_decided_trade(50, won=True) for _ in range(10)]
+
+    report = _edge_monotonicity_report(trades)
+
+    assert report["status"] == "insufficient_sample"
+
+
+def test_threshold_sensitivity_reports_tightened_subsets():
+    # 10 low-risk winners + 10 high-risk losers: tightening range risk to 36
+    # keeps only the winners, a +50pp win-rate swing.
+    trades = (
+        [_decided_trade(60, won=True, range_risk=20.0) for _ in range(10)]
+        + [_decided_trade(60, won=False, range_risk=44.0) for _ in range(10)]
+    )
+    cfg = {"max_trade_range_risk": 45, "target_win_rate": 75}
+
+    report = _threshold_sensitivity_report(cfg, trades)
+
+    assert report["status"] == "ok"
+    assert report["direction"] == "tighten_only"
+    dim = next(d for d in report["dimensions"] if d["param"] == "max_trade_range_risk")
+    assert dim["tightened_value"] == 36.0
+    assert dim["trades_kept"] == 10
+    assert dim["win_rate"] == 100.0
+    assert dim["win_rate_delta"] == 50.0
+
+
+def test_professional_decision_records_unclamped_raw_edge():
+    service = EventContractService()
+    cfg = _base_cfg(decision_policy="professional_v1")
+    features = _trade_ready_features()
+
+    professional = service._build_professional_decision(
+        cfg=cfg,
+        features=features,
+        top_direction="long",
+        top_votes=25,
+        reviewer_count=25,
+        avg_confidence=90.0,
+        veto_reasons=[],
+        edge_quality_blocked=False,
+    )
+
+    # Strong setup saturates the gated score but the raw score keeps the spread.
+    assert professional["edge_score"] == 100.0
+    assert professional["edge_score_raw"] > 100.0
+
+
+def test_edge_monotonicity_prefers_raw_score_over_saturated_score():
+    # All clamped scores identical (100) - only the raw score can rank.
+    trades = []
+    for i in range(40):
+        raw = 100 + i  # 100..139 ascending
+        trade = _decided_trade(100.0, won=(i >= 20))
+        trade["event_signal"]["edge_score_raw"] = raw
+        trades.append(trade)
+
+    report = _edge_monotonicity_report(trades)
+
+    assert report["status"] == "ok"
+    assert report["verdict"] == "monotonic"
+    assert report["groups"][0]["avg_score"] > 100  # proves raw was used
+
+
+def test_cost_floors_are_enforced_in_normalize_config():
+    cfg = EventContractService()._normalize_config(
+        {
+            "start_time": "2026-06-27T00:00:00+00:00",
+            "end_time": "2026-06-28T00:00:00+00:00",
+            "fee_rate": 0,
+            "slippage_bps": 0,
+            "impact_cost_bps": 0,
+            "delay_seconds": 0,
+        },
+        prediction=False,
+    )
+
+    assert cfg["fee_rate"] == 0.001
+    assert cfg["slippage_bps"] == 2.0
+    assert cfg["impact_cost_bps"] == 0.5
+    assert cfg["delay_seconds"] == 3
+    floored = {item["param"] for item in cfg["_enforced_cost_floors"]}
+    assert floored == {"fee_rate", "slippage_bps", "impact_cost_bps", "delay_seconds"}
+
+
+def test_cost_floors_leave_realistic_values_untouched():
+    cfg = EventContractService()._normalize_config(
+        {
+            "start_time": "2026-06-27T00:00:00+00:00",
+            "end_time": "2026-06-28T00:00:00+00:00",
+            "fee_rate": 0.002,
+            "slippage_bps": 5,
+            "impact_cost_bps": 2,
+            "delay_seconds": 5,
+        },
+        prediction=False,
+    )
+
+    assert cfg["fee_rate"] == 0.002
+    assert cfg["slippage_bps"] == 5.0
+    assert cfg["impact_cost_bps"] == 2.0
+    assert cfg["delay_seconds"] == 5
+    assert cfg["_enforced_cost_floors"] == []
+
+
+def test_cost_floor_audit_does_not_change_fingerprint():
+    service = EventContractService()
+    base = {
+        "start_time": "2026-06-27T00:00:00+00:00",
+        "end_time": "2026-06-28T00:00:00+00:00",
+    }
+    floored = service._normalize_config({**base, "fee_rate": 0, "slippage_bps": 0}, prediction=False)
+    explicit = service._normalize_config(
+        {**base, "fee_rate": 0.001, "slippage_bps": 2, "impact_cost_bps": 1}, prediction=False
+    )
+
+    assert service._strategy_fingerprint(floored) == service._strategy_fingerprint(explicit)
+
+
+def _flow_bundle(taker, metrics_rows):
+    taker_ts, buy_prefix, sell_prefix = [], [0.0], [0.0]
+    for ts_ms, buy, sell in taker:
+        taker_ts.append(ts_ms)
+        buy_prefix.append(buy_prefix[-1] + buy)
+        sell_prefix.append(sell_prefix[-1] + sell)
+    metric_ts = [row[0] for row in metrics_rows]
+    metrics = [{"open_interest": row[1], "funding_rate": row[2]} for row in metrics_rows]
+    return {
+        "enabled": True,
+        "source": "local_market_flow",
+        "taker_exchange": "binance",
+        "metrics_exchange": "binance",
+        "taker_records": len(taker_ts),
+        "metric_records": len(metric_ts),
+        "taker_ts": taker_ts,
+        "buy_prefix": buy_prefix,
+        "sell_prefix": sell_prefix,
+        "metric_ts": metric_ts,
+        "metrics": metrics,
+        "warnings": [],
+    }
+
+
+def test_attach_flow_features_uses_only_past_records():
+    service = EventContractService()
+    cfg = _base_cfg(period="1m")
+    bar_ts = 6000  # decision at 6060s -> 6_060_000 ms
+    klines = [_bar(bar_ts)]
+    bundle = _flow_bundle(
+        taker=[
+            (6_045_000, 30.0, 10.0),   # before decision: buy-heavy
+            (6_060_000, 10.0, 10.0),   # exactly at decision close: included
+            (6_075_000, 0.0, 900.0),   # AFTER decision: must be ignored
+        ],
+        metrics_rows=[
+            (6_050_000, 1000.0, 0.0001),
+            (6_070_000, 5000.0, -0.01),  # after decision: must be ignored
+        ],
+    )
+
+    service._attach_flow_features(klines, bundle, cfg)
+
+    flow = klines[0]["flow"]
+    # (30+10 buy - 10+10 sell) / 60 total = +0.333... - the 900-sell future
+    # record would flip this negative if leaked.
+    assert round(flow["cvd_delta_norm"], 4) == 0.3333
+    assert flow["open_interest"] == 1000.0
+    assert flow["funding_rate"] == 0.0001
+    assert "pair_taker_volume" in flow["available_metrics"]
+    assert "open_interest" in flow["available_metrics"]
+
+
+def test_attach_flow_features_respects_max_lag():
+    service = EventContractService()
+    cfg = _base_cfg(period="1m")
+    cfg["max_flow_lag_seconds"] = 60
+    bar_ts = 6000  # decision at 6060s
+    klines = [_bar(bar_ts)]
+    bundle = _flow_bundle(
+        taker=[(5_900_000, 30.0, 10.0)],       # 160s stale - beyond 60s lag
+        metrics_rows=[(5_900_000, 1000.0, 0.0)],
+    )
+
+    service._attach_flow_features(klines, bundle, cfg)
+
+    assert "flow" not in klines[0]
+
+
+def test_audit_flow_features_reports_coverage():
+    service = EventContractService()
+    cfg = _base_cfg(period="1m")
+    bars = [_bar(6000), _bar(6060)]
+    bars[0]["flow"] = {"available_metrics": ["pair_taker_volume"]}
+    bundle = _flow_bundle(taker=[(6_045_000, 1.0, 1.0)], metrics_rows=[])
+
+    audit = service._audit_flow_features(bundle=bundle, cfg=cfg, klines=bars, start_ts=6060, end_ts=6180)
+
+    assert audit["enabled"] is True
+    assert audit["expected_decision_records"] == 2
+    assert audit["decision_records"] == 1
+    assert audit["coverage_pct"] == 50.0
+    assert audit["liquidation_available"] is False
+    assert any("flow coverage" in w for w in audit["warnings"])
+
+
+def test_ma_cross_golden_triple_confirmed():
+    # Flat base then an accelerating rally: fast EMA crosses above slow with
+    # a sharp angle, holds for >=2 bars, and its slope keeps accelerating.
+    service = EventContractService()
+    closes = [100.0] * 40 + [100.2, 100.6, 101.4, 102.6, 104.4, 106.9]
+
+    state = service._ma_cross_state(closes, atr_pct=0.05)
+
+    assert state["direction"] == "long"
+    assert state["whipsaw"] is False
+    assert state["bars_since"] >= 2
+    assert state["confirmations"] == 3
+    assert state["confirmed"] is True
+    assert state["score"] == 30.0
+
+
+def test_ma_cross_whipsaw_two_crosses_in_lookback():
+    # Pop up then dump straight back down: two opposite crosses inside the
+    # lookback window mean the direction is undecidable.
+    service = EventContractService()
+    closes = [100.0] * 40 + [103.0, 104.0, 105.0, 96.0, 94.0, 92.0]
+
+    state = service._ma_cross_state(closes, atr_pct=0.05)
+
+    assert state["whipsaw"] is True
+    assert state["direction"] is None
+    assert state["confirmed"] is False
+    assert state["score"] == 0.0
+
+
+def test_ma_cross_short_history_is_neutral():
+    service = EventContractService()
+
+    state = service._ma_cross_state([100.0] * 10, atr_pct=0.05)
+
+    assert state["direction"] is None
+    assert state["whipsaw"] is False
+    assert state["score"] == 0.0
+
+
+def test_professional_decision_ma_cross_alignment():
+    service = EventContractService()
+    cfg = _base_cfg(decision_policy="professional_v1")
+
+    def _raw(**ma_overrides):
+        return service._build_professional_decision(
+            cfg=cfg,
+            features=_trade_ready_features(**ma_overrides),
+            top_direction="long",
+            top_votes=25,
+            reviewer_count=25,
+            avg_confidence=90.0,
+            veto_reasons=[],
+            edge_quality_blocked=False,
+        )["edge_score_raw"]
+
+    baseline = _raw()
+    aligned = _raw(ma_cross_confirmed=True, ma_cross_direction="long")
+    opposing = _raw(ma_cross_confirmed=True, ma_cross_direction="short")
+    whipsaw = _raw(ma_cross_whipsaw=True)
+
+    assert abs(aligned - (baseline + 6.0)) < 0.01
+    assert abs(opposing - (baseline - 10.0)) < 0.01
+    # Whipsaw docks the edge component AND raises the risk score.
+    assert whipsaw < baseline - 6.0
+
+
+def test_sanitize_klines_drops_null_field_bars():
+    service = EventContractService()
+    broken = _bar(120)
+    broken["close"] = None
+
+    clean, report = service._sanitize_klines([_bar(60), broken, _bar(180)])
+
+    assert [item["timestamp"] for item in clean] == [60, 180]
+    assert report["dropped_invalid_bars"] == 1
+
+
+def test_sanitize_klines_flags_extreme_move_but_keeps_bar():
+    # A >10% single-bar move is real market data until proven otherwise:
+    # flag it for review, never drop it.
+    service = EventContractService()
+    spike = _bar(120, o=100.0, h=116.0, lo=99.0, c=115.5)
+
+    clean, report = service._sanitize_klines([_bar(60), spike, _bar(180)])
+
+    assert len(clean) == 3
+    assert report["extreme_move_bars"] >= 1
+    assert report["max_abs_move_pct"] > 10.0
+    assert any("extreme single-bar moves" in w for w in report["warnings"])
+
+
+def test_macd_golden_cross_on_momentum_shift():
+    # Long decline then a sharp rally: histogram flips negative -> positive.
+    service = EventContractService()
+    closes = [200.0 - i * 0.5 for i in range(50)] + [175.0 + i * 1.2 for i in range(4)]
+
+    state = service._macd_state(closes)
+
+    assert state["cross"] == "golden"
+    assert state["hist"] > 0
+
+
+def test_bollinger_band_walk_upper_on_strong_rally():
+    service = EventContractService()
+    closes = [100.0] * 30 + [100.0 + i * 1.5 for i in range(1, 7)]
+
+    state = service._bollinger_state(closes)
+
+    assert state["band_walk"] == "upper"
+    assert state["percent_b"] > 0.9
+
+
+def test_bollinger_flat_series_has_no_band_walk():
+    service = EventContractService()
+    closes = [100.0 + (0.1 if i % 2 else -0.1) for i in range(40)]
+
+    state = service._bollinger_state(closes)
+
+    assert state["band_walk"] is None
+    assert 0.0 <= state["percent_b"] <= 1.0
+
+
+def test_rsi_bullish_divergence_price_ll_rsi_hl():
+    # Steep first sell-off to a swing low, weak bounce, then a *shallow* drift
+    # to a marginally lower low: price LL while RSI makes a higher low.
+    service = EventContractService()
+    closes = (
+        [100.0] * 4
+        + [100.0 - 1.5 * i for i in range(1, 13)]  # steep drop to 82.0
+        + [81.0]                                   # first swing low (RSI ~0)
+        + [81.0 + 0.8 * i for i in range(1, 8)]    # bounce to 86.6
+        + [86.6 - 0.5 * i for i in range(1, 13)]   # gentle drift to 80.6
+        + [80.5]                                   # marginally lower low, RSI higher
+        + [81.2, 82.0, 82.6]                       # turn up (marks the swing low)
+    )
+
+    assert service._rsi_divergence(closes) == "bullish"
+
+
+def test_obv_cross_up_when_volume_backs_the_turn():
+    # Sellers dominate volume, then heavy buy-side bars flip OBV over its MA.
+    service = EventContractService()
+    closes = [100.0 - i * 0.2 for i in range(30)] + [94.2 + i * 0.5 for i in range(1, 4)]
+    volumes = [10.0] * 30 + [80.0, 90.0, 100.0]
+
+    state = service._obv_state(closes, volumes)
+
+    assert state["cross"] == "up"
+    assert state["above_ma"] is True
+
+
+def test_double_bottom_confirmed_after_neckline_break():
+    service = EventContractService()
+    lows, highs, closes = [], [], []
+    # Descend, first bottom at 90, bounce to 96 (neckline), second bottom at
+    # 90.05, then a breakout close above the neckline.
+    path = (
+        [100 - i for i in range(1, 10)]     # 99..91 decline
+        + [90.0, 91.5, 93.0, 95.0, 96.0]    # first bottom + bounce (neckline 96)
+        + [94.5, 93.0, 91.5, 90.05]         # second test of the low
+        + [91.5, 93.5, 95.5, 97.0]          # reclaim and break neckline
+    )
+    for c in path:
+        closes.append(c)
+        highs.append(c + 0.3)
+        lows.append(c - 0.3)
+    closes = [100.0] * 10 + closes
+    highs = [100.3] * 10 + highs
+    lows = [99.7] * 10 + lows
+
+    state = service._double_extreme_state(highs, lows, closes, atr_pct=0.6)
+
+    assert state["pattern"] == "double_bottom"
+    assert state["confirmed"] is True
+    assert state["neckline"] is not None
+
+
+def test_compute_features_exposes_indicator_suite_with_bounded_score():
+    service = EventContractService()
+    history = [
+        _bar(60 * i, o=100.0, h=100.6, lo=99.4, c=100.0 + (0.2 if i % 3 == 0 else -0.1), v=10.0 + i % 5)
+        for i in range(80)
+    ]
+
+    features = service._compute_features(history)
+
+    for key in (
+        "macd_hist", "macd_cross", "bb_percent_b", "bb_band_walk",
+        "rsi_divergence", "obv_above_ma", "obv_cross",
+        "double_pattern", "indicator_reversal_score",
+    ):
+        assert key in features
+    assert -60.0 <= features["indicator_reversal_score"] <= 60.0

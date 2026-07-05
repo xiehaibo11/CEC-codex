@@ -14,6 +14,7 @@ export type FormState = {
   win_payout_ratio: number
   fee_rate: number
   slippage_bps: number
+  impact_cost_bps: number
   delay_seconds: number
   consensus_threshold: number
   reviewer_panel_size: number
@@ -40,8 +41,10 @@ export type FormState = {
 }
 
 export const PLATFORM_FORM_PRESETS: Record<string, Partial<FormState>> = {
-  hibt: { win_payout_ratio: 0.8, fee_rate: 0, draw_result: 'loss' },
-  binance_event: { win_payout_ratio: 0.8, fee_rate: 0, draw_result: 'refund' },
+  // fee_rate 0.001 mirrors the backend-enforced execution-cost floor so the
+  // submitted config matches what actually runs.
+  hibt: { win_payout_ratio: 0.8, fee_rate: 0.001, draw_result: 'loss' },
+  binance_event: { win_payout_ratio: 0.8, fee_rate: 0.001, draw_result: 'refund' },
   custom: {},
 }
 

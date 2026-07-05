@@ -67,7 +67,21 @@ PERIOD_SECONDS = {
     "1h": 3600,
 }
 
-ENGINE_VERSION = "event-contract-v2"
+# v3: records unclamped edge_score_raw alongside the gated edge_score;
+# validation monotonicity ranks by the raw score. Gating behavior unchanged.
+# v4: execution-cost floors enforced (fee/slippage/impact/delay); local
+# market-flow features (real taker CVD replaces the OHLCV proxy, OI/funding
+# feed the reversal-evidence score); exhaustion_reversal + evidence score
+# recorded per trade for attribution.
+# v5: MA-cross triple confirmation (sharp angle / persistence / slope
+# acceleration) feeds edge scoring, whipsaw crosses add risk; kline sanitize
+# drops null-field bars and flags (never drops) extreme single-bar moves.
+# v6: indicator suite from real OHLCV+volume - MACD(12,26,9) cross, Bollinger
+# %B + band walk, RSI divergence, OBV/MA cross, W/M double pattern with
+# neckline confirmation; divergence/OBV/pattern combine into
+# indicator_reversal_score which widens the exhaustion gate additively
+# (same corroborate-never-cancel rule as CoinGlass evidence).
+ENGINE_VERSION = "event-contract-v6"
 
 
 def is_critical_reviewer_name(name: str) -> bool:

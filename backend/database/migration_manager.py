@@ -65,6 +65,7 @@ MIGRATIONS = [
     "migrate_to_multi_wallet.py",
     "add_binance_wallet_tables.py",
     "add_hibt_wallet_tables.py",
+    "add_hibt_backfill_tasks.py",
     "add_exchange_to_trigger_configs.py",
     "add_exchange_to_decision_logs.py",
     "add_rebate_working_to_binance_wallets.py",

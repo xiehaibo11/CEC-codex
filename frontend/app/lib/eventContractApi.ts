@@ -355,6 +355,32 @@ export interface EventBacktestValidationReport {
     verdict: 'pass' | 'warning' | 'fail'
     reasons: string[]
   }
+  edge_monotonicity?: {
+    status: 'ok' | 'insufficient_sample'
+    n: number
+    min_samples?: number
+    groups?: Array<{ group: number; n: number; avg_score: number; win_rate: number }>
+    inversions?: number
+    top_minus_bottom?: number
+    verdict?: 'monotonic' | 'partial' | 'flat_or_inverted'
+  }
+  threshold_sensitivity?: {
+    status: 'ok' | 'insufficient_sample'
+    direction?: string
+    base_win_rate?: number
+    base_pnl?: number
+    base_trades?: number
+    dimensions?: Array<{
+      param: string
+      base_value: number
+      tightened_value: number
+      trades_kept: number
+      kept_ratio: number
+      win_rate: number
+      win_rate_delta: number
+      pnl: number
+    }>
+  }
 }
 
 export interface EventBacktestResearchVerdict {
@@ -465,6 +491,15 @@ export interface EventBacktestAiTraderTeam {
   traders: EventBacktestAiTrader[]
 }
 
+export interface EventBacktestWindowReuse {
+  available: boolean
+  overlap_threshold_pct?: number
+  prior_runs?: number
+  distinct_configs?: number
+  distinct_fingerprints?: number
+  overfit_risk?: 'low' | 'medium' | 'high'
+}
+
 export interface EventBacktestResearchReport {
   version: string
   verdict: EventBacktestResearchVerdict
@@ -474,6 +509,7 @@ export interface EventBacktestResearchReport {
   overfitting_warnings: EventBacktestOverfitWarning[]
   missing_data_recommendations: EventBacktestMissingDataRecommendation[]
   ai_trader_team?: EventBacktestAiTraderTeam
+  window_reuse?: EventBacktestWindowReuse
 }
 
 export interface EventBacktestSummary {
@@ -632,6 +668,49 @@ export async function runEventContractBacktest(
   const response = await apiRequest('/event-contract/backtest', fetchOpts, {
     timeoutMs: 600_000,
   })
+  return response.json()
+}
+
+export interface KlineSanitizeReport {
+  input_bars: number
+  output_bars: number
+  dropped_invalid_bars: number
+  dropped_duplicate_bars: number
+  warnings: string[]
+}
+
+export interface DataQualityAudit {
+  coverage_pct: number
+  records_loaded: number
+  decision_records: number
+  expected_decision_records: number
+  min_required_coverage_pct?: number
+  warnings: string[]
+  strict: boolean
+  sanitize?: KlineSanitizeReport
+}
+
+export interface DataQualityPreview {
+  symbol: string
+  exchange: string
+  period: string
+  start_time: string
+  end_time: string
+  kline: DataQualityAudit | null
+  l2: DataQualityAudit | null
+  coinglass: DataQualityAudit | null
+  strict: { kline: boolean; l2: boolean; coinglass: boolean }
+  would_block: Array<{ source: 'kline' | 'l2' | 'coinglass'; warnings: string[] }>
+  ok: boolean
+}
+
+export async function previewEventBacktestDataQuality(
+  config: EventContractBacktestConfig,
+): Promise<DataQualityPreview> {
+  const response = await apiRequest('/event-contract/backtest/data-quality-preview', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }, { timeoutMs: 120_000 })
   return response.json()
 }
 

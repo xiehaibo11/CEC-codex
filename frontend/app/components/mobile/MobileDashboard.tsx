@@ -19,7 +19,6 @@ import {
 } from '@/lib/api'
 import { useTradingMode } from '@/contexts/TradingModeContext'
 import { getModelLogo } from '@/components/portfolio/logoAssets'
-import EventPaperTraderCard from '@/components/portfolio/EventPaperTraderCard'
 import PositionsSection from './MobilePositionsSection'
 import TradesSection from './MobileTradesSection'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
@@ -141,9 +140,6 @@ export default function MobileDashboard() {
     <div className="flex flex-col h-full pb-16">
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-3">
-          {/* Live Paper Traders */}
-          <EventPaperTraderCard />
-
           {/* Filter Dropdown */}
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase text-muted-foreground">

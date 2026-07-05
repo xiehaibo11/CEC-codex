@@ -6,6 +6,41 @@ import type {
 
 const HIBT_API_BASE = '/hibt';
 
+export interface HibtSymbolMeta {
+  symbol: string;
+  name?: string;
+  type?: string;
+}
+
+export interface HibtAvailableSymbolsResponse {
+  symbols: HibtSymbolMeta[];
+  count: number;
+  max_symbols: number;
+}
+
+export interface HibtWatchlistResponse {
+  symbols: string[];
+  max_symbols: number;
+}
+
+export async function getHibtAvailableSymbols(): Promise<HibtAvailableSymbolsResponse> {
+  const response = await apiRequest(`${HIBT_API_BASE}/symbols/available`);
+  return response.json();
+}
+
+export async function getHibtWatchlist(): Promise<HibtWatchlistResponse> {
+  const response = await apiRequest(`${HIBT_API_BASE}/symbols/watchlist`);
+  return response.json();
+}
+
+export async function updateHibtWatchlist(symbols: string[]): Promise<HibtWatchlistResponse> {
+  const response = await apiRequest(`${HIBT_API_BASE}/symbols/watchlist`, {
+    method: 'PUT',
+    body: JSON.stringify({ symbols }),
+  });
+  return response.json();
+}
+
 export interface HibtSummary {
   account_id: number;
   environment: string;

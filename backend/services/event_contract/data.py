@@ -14,6 +14,11 @@ from services.event_contract.constants import PERIOD_SECONDS
 
 logger = logging.getLogger(__name__)
 
+# Venues whose recent 1m window can be backfilled on-demand in the synchronous
+# predict / live paper-trader path. Event-contract paper traders on these venues
+# settle on the venue's own candles rather than a proxy feed.
+_BACKFILL_EXCHANGES = ("binance", "hibt")
+
 
 class EventContractDataMixin:
     def normalize_symbol(self, symbol: str) -> str:
@@ -112,24 +117,37 @@ class EventContractDataMixin:
             ],
             interval,
         )
-        if (
-            (
-                min_bars > 0
-                and len(klines) < min_bars
-                or stale_recent_window
-                or recent_gap
-            )
-            and str(exchange or "").lower() == "binance"
-            and environment == "mainnet"
-        ):
-            self._backfill_recent_binance_klines(
-                db, symbol, period, requested_bars, environment
+        exchange_key = str(exchange or "").lower()
+        needs_backfill = (
+            min_bars > 0
+            and len(klines) < min_bars
+            or stale_recent_window
+            or recent_gap
+        )
+        if needs_backfill and exchange_key in _BACKFILL_EXCHANGES and environment == "mainnet":
+            self._backfill_recent_klines(
+                db, exchange_key, symbol, period, requested_bars, environment
             )
             klines = self._query_klines(
                 db, exchange, symbol, period, start_ts, end_ts, environment
             )
 
         return klines
+
+    def _backfill_recent_klines(
+        self,
+        db: Session,
+        exchange: str,
+        symbol: str,
+        period: str,
+        min_bars: int,
+        environment: str,
+    ) -> None:
+        """Dispatch a recent-window kline backfill to the venue's data source."""
+        if exchange == "hibt":
+            self._backfill_recent_hibt_klines(db, symbol, period, min_bars, environment)
+        else:
+            self._backfill_recent_binance_klines(db, symbol, period, min_bars, environment)
 
     def _has_kline_gap(self, klines: List[Dict[str, Any]], interval: int) -> bool:
         timestamps = sorted({int(item["timestamp"]) for item in klines})
@@ -234,6 +252,54 @@ class EventContractDataMixin:
                 period,
                 exc,
             )
+
+    def _backfill_recent_hibt_klines(
+        self,
+        db: Session,
+        symbol: str,
+        period: str,
+        min_bars: int,
+        environment: str,
+    ) -> None:
+        """Fetch the most recent bars from HIBT's public candle endpoint and persist
+        them so event-contract paper traders on the HIBT venue settle on HIBT's own
+        prices. Mirrors the Binance backfill: one synchronous request, no pagination,
+        non-fatal on failure. HIBT candles carry no taker split, so CVD-derived
+        features are simply absent for this venue.
+        """
+        try:
+            from services.exchanges.data_persistence import ExchangeDataPersistence
+            from services.hibt_market_data import fetch_hibt_klines
+
+            count = min(max(int(min_bars) + 10, 200), 500)  # HIBT candle cap is 500
+            klines = fetch_hibt_klines(symbol, period, count=count)
+            if klines:
+                # save_klines() commits internally.
+                ExchangeDataPersistence(db).save_klines(klines, environment=environment)
+            logger.info(
+                "[EventContract] HIBT kline backfill %s/%s: fetched %s bars (needed %s)",
+                symbol,
+                period,
+                len(klines),
+                min_bars,
+            )
+        except Exception as exc:  # noqa: BLE001 - backfill must never be fatal
+            logger.warning(
+                "[EventContract] HIBT kline backfill failed for %s/%s: %s",
+                symbol,
+                period,
+                exc,
+            )
+
+    @staticmethod
+    def _hibt_klines_to_unified(
+        raw: List[Dict[str, Any]], symbol: str, period: str
+    ) -> List[Any]:
+        """Map HIBT candle rows to ``UnifiedKline`` (delegates to the shared
+        HiBT market-data helper)."""
+        from services.hibt_market_data import hibt_candles_to_unified
+
+        return hibt_candles_to_unified(raw, symbol, period)
 
     def get_backtest_result(self, db: Session, run_id: int) -> Dict[str, Any]:
         row = (

@@ -19,6 +19,7 @@ router = APIRouter()
 # Config keys
 HYPERLIQUID_RETENTION_KEY = "hyperliquid_retention_days"
 BINANCE_RETENTION_KEY = "binance_retention_days"
+HIBT_RETENTION_KEY = "hibt_retention_days"
 DEFAULT_RETENTION_DAYS = 365
 
 
@@ -26,6 +27,8 @@ def get_retention_key(exchange: str) -> str:
     """Get the config key for a specific exchange"""
     if exchange == "binance":
         return BINANCE_RETENTION_KEY
+    if exchange == "hibt":
+        return HIBT_RETENTION_KEY
     return HYPERLIQUID_RETENTION_KEY
 
 

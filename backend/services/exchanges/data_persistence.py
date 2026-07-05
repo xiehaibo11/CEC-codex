@@ -13,7 +13,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database.models import (
-    CryptoKline,
     MarketTradesAggregated,
     MarketOrderbookSnapshots,
     MarketAssetMetrics,
@@ -21,6 +20,7 @@ from database.models import (
 )
 from services.exchanges.base_adapter import (
     UnifiedKline,
+    UnifiedTrade,
     UnifiedOrderbook,
     UnifiedFunding,
     UnifiedOpenInterest,
@@ -112,6 +112,50 @@ class ExchangeDataPersistence:
         self.db.commit()
         logger.info("Bulk upserted %s klines", len(rows))
         return {"upserted": len(rows)}
+
+    def insert_klines_ignore_conflicts_bulk(
+        self,
+        klines: List[UnifiedKline],
+        environment: str = "mainnet",
+    ) -> dict:
+        """Bulk insert K-lines without replacing existing exchange-provided rows."""
+        if not klines:
+            return {"inserted": 0}
+
+        rows = []
+        for kline in klines:
+            dt = datetime.fromtimestamp(kline.timestamp, tz=timezone.utc)
+            rows.append({
+                "exchange": kline.exchange,
+                "symbol": kline.symbol,
+                "market": "CRYPTO",
+                "period": kline.interval,
+                "timestamp": kline.timestamp,
+                "datetime_str": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "environment": environment,
+                "open_price": kline.open_price,
+                "high_price": kline.high_price,
+                "low_price": kline.low_price,
+                "close_price": kline.close_price,
+                "volume": kline.volume,
+                "amount": kline.quote_volume,
+            })
+
+        result = self.db.execute(text("""
+            INSERT INTO crypto_klines (
+                exchange, symbol, market, period, timestamp, datetime_str, environment,
+                open_price, high_price, low_price, close_price, volume, amount
+            ) VALUES (
+                :exchange, :symbol, :market, :period, :timestamp, :datetime_str, :environment,
+                :open_price, :high_price, :low_price, :close_price, :volume, :amount
+            )
+            ON CONFLICT (exchange, symbol, market, period, timestamp, environment)
+            DO NOTHING
+        """), rows)
+        self.db.commit()
+        inserted = int(result.rowcount or 0)
+        logger.info("Bulk inserted %s derived klines (ignored %s conflicts)", inserted, len(rows) - inserted)
+        return {"inserted": inserted}
 
     def save_taker_volumes_from_klines(
         self,
@@ -243,6 +287,156 @@ class ExchangeDataPersistence:
         """), rows)
         self.db.commit()
         logger.info("Bulk upserted %s taker flow records", len(rows))
+        return {"upserted": len(rows)}
+
+    def upsert_taker_trades_bulk(
+        self,
+        trades: List[UnifiedTrade],
+        bucket_seconds: int = 15,
+    ) -> dict:
+        """Aggregate public trades and upsert taker buy/sell market flow.
+
+        This is used by venues such as HiBT where the public feed exposes recent
+        deals instead of Binance-style K-lines with taker split fields.
+        """
+        if not trades:
+            return {"upserted": 0}
+
+        bucket_ms = max(1, int(bucket_seconds)) * 1000
+        buckets = {}
+        for trade in trades:
+            side = str(trade.side or "").lower()
+            if side not in {"buy", "sell"}:
+                continue
+            timestamp_ms = (int(trade.timestamp) // bucket_ms) * bucket_ms
+            key = (trade.exchange, trade.symbol, timestamp_ms)
+            values = buckets.setdefault(
+                key,
+                {
+                    "exchange": trade.exchange,
+                    "symbol": trade.symbol,
+                    "timestamp": timestamp_ms,
+                    "taker_buy_volume": Decimal("0"),
+                    "taker_sell_volume": Decimal("0"),
+                    "taker_buy_count": 0,
+                    "taker_sell_count": 0,
+                    "taker_buy_notional": Decimal("0"),
+                    "taker_sell_notional": Decimal("0"),
+                    "high_price": trade.price,
+                    "low_price": trade.price,
+                },
+            )
+
+            notional = trade.price * trade.size
+            if side == "buy":
+                values["taker_buy_volume"] += trade.size
+                values["taker_buy_count"] += 1
+                values["taker_buy_notional"] += notional
+            else:
+                values["taker_sell_volume"] += trade.size
+                values["taker_sell_count"] += 1
+                values["taker_sell_notional"] += notional
+            if trade.price > values["high_price"]:
+                values["high_price"] = trade.price
+            if trade.price < values["low_price"]:
+                values["low_price"] = trade.price
+
+        rows = list(buckets.values())
+        if not rows:
+            return {"upserted": 0}
+
+        self.db.execute(text("""
+            INSERT INTO market_trades_aggregated (
+                exchange, symbol, timestamp, taker_buy_volume, taker_sell_volume,
+                taker_buy_count, taker_sell_count, taker_buy_notional,
+                taker_sell_notional, high_price, low_price
+            ) VALUES (
+                :exchange, :symbol, :timestamp, :taker_buy_volume, :taker_sell_volume,
+                :taker_buy_count, :taker_sell_count, :taker_buy_notional,
+                :taker_sell_notional, :high_price, :low_price
+            )
+            ON CONFLICT (exchange, symbol, timestamp)
+            DO UPDATE SET
+                taker_buy_volume = EXCLUDED.taker_buy_volume,
+                taker_sell_volume = EXCLUDED.taker_sell_volume,
+                taker_buy_count = EXCLUDED.taker_buy_count,
+                taker_sell_count = EXCLUDED.taker_sell_count,
+                taker_buy_notional = EXCLUDED.taker_buy_notional,
+                taker_sell_notional = EXCLUDED.taker_sell_notional,
+                high_price = EXCLUDED.high_price,
+                low_price = EXCLUDED.low_price
+        """), rows)
+        self.db.commit()
+        logger.info("Bulk upserted %s taker trade buckets", len(rows))
+        return {"upserted": len(rows)}
+
+    def upsert_taker_volume_proxy_from_klines_bulk(
+        self,
+        klines: List[UnifiedKline],
+        bucket_seconds: int = 60,
+    ) -> dict:
+        """Backfill market-flow coverage from candles when taker split is absent.
+
+        HiBT does not expose historical taker buy/sell volume. This writes a
+        neutral 50/50 volume proxy from historical 1m candles so coverage and
+        downstream joins have time-aligned rows without inventing a directional
+        taker imbalance.
+        """
+        rows = []
+        bucket_ms = max(1, int(bucket_seconds)) * 1000
+        for kline in klines:
+            timestamp_ms = (int(kline.timestamp) * 1000 // bucket_ms) * bucket_ms
+            base_volume = kline.volume or Decimal("0")
+            notional = kline.quote_volume or Decimal("0")
+            if notional <= 0 and base_volume > 0 and kline.close_price:
+                notional = base_volume * kline.close_price
+            if base_volume <= 0 and notional <= 0:
+                continue
+
+            buy_volume = base_volume / Decimal("2")
+            sell_volume = base_volume - buy_volume
+            buy_notional = notional / Decimal("2")
+            sell_notional = notional - buy_notional
+            rows.append({
+                "exchange": kline.exchange,
+                "symbol": kline.symbol,
+                "timestamp": timestamp_ms,
+                "taker_buy_volume": buy_volume,
+                "taker_sell_volume": sell_volume,
+                "taker_buy_count": 1 if buy_notional > 0 else 0,
+                "taker_sell_count": 1 if sell_notional > 0 else 0,
+                "taker_buy_notional": buy_notional,
+                "taker_sell_notional": sell_notional,
+                "high_price": kline.high_price,
+                "low_price": kline.low_price,
+            })
+
+        if not rows:
+            return {"upserted": 0}
+
+        self.db.execute(text("""
+            INSERT INTO market_trades_aggregated (
+                exchange, symbol, timestamp, taker_buy_volume, taker_sell_volume,
+                taker_buy_count, taker_sell_count, taker_buy_notional,
+                taker_sell_notional, high_price, low_price
+            ) VALUES (
+                :exchange, :symbol, :timestamp, :taker_buy_volume, :taker_sell_volume,
+                :taker_buy_count, :taker_sell_count, :taker_buy_notional,
+                :taker_sell_notional, :high_price, :low_price
+            )
+            ON CONFLICT (exchange, symbol, timestamp)
+            DO UPDATE SET
+                taker_buy_volume = EXCLUDED.taker_buy_volume,
+                taker_sell_volume = EXCLUDED.taker_sell_volume,
+                taker_buy_count = EXCLUDED.taker_buy_count,
+                taker_sell_count = EXCLUDED.taker_sell_count,
+                taker_buy_notional = EXCLUDED.taker_buy_notional,
+                taker_sell_notional = EXCLUDED.taker_sell_notional,
+                high_price = EXCLUDED.high_price,
+                low_price = EXCLUDED.low_price
+        """), rows)
+        self.db.commit()
+        logger.info("Bulk upserted %s taker proxy flow records", len(rows))
         return {"upserted": len(rows)}
 
     def save_orderbook(self, orderbook: UnifiedOrderbook) -> bool:

@@ -278,7 +278,31 @@ def _launch_one(session: Session, fingerprint: str, now_ts: int) -> bool:
 
 def _find_latest_source_run(session: Session, fingerprint: str) -> Optional[Dict[str, Any]]:
     """The most recent backtest run whose stored summary carries this
-    fingerprint - same source the holdout endpoint replays a config from."""
+    fingerprint - same source the holdout endpoint replays a config from.
+
+    Queries by fingerprint directly (Postgres jsonb) so an old source run is
+    still found after hundreds of newer unrelated runs; the bounded recency
+    scan remains as a fallback for non-jsonb backends / corrupt summary rows.
+    """
+    try:
+        row = session.execute(
+            text(
+                """
+                SELECT id, config, end_time
+                FROM event_contract_backtest_runs
+                WHERE status IN ('completed', 'partial')
+                  AND summary::jsonb->>'strategy_fingerprint' = :fingerprint
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"fingerprint": fingerprint},
+        ).mappings().first()
+        if row is not None:
+            return {"id": row["id"], "config": row["config"], "end_time": row["end_time"]}
+        return None
+    except Exception:
+        _rollback_safely(session)
     rows = session.execute(
         text(
             """

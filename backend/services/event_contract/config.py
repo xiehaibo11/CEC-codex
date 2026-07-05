@@ -80,11 +80,16 @@ class EventContractConfigMixin:
             "win_payout_ratio": _number(config, "win_payout_ratio", 0.8),
             "fee_rate": _number(config, "fee_rate", 0),
             "slippage_bps": _number(config, "slippage_bps", 0),
+            "impact_cost_bps": _number(config, "impact_cost_bps", 1.0),
             "delay_seconds": int(_number(config, "delay_seconds", 3)),
             "max_entry_lag_seconds": int(config.get("max_entry_lag_seconds") or PERIOD_SECONDS[period]),
             "max_expiry_lag_seconds": int(config.get("max_expiry_lag_seconds") or PERIOD_SECONDS[period]),
             "min_data_coverage_pct": float(config.get("min_data_coverage_pct") or 95),
             "strict_data_quality": bool(config.get("strict_data_quality", False)),
+            "enable_flow_features": bool(config.get("enable_flow_features", True)),
+            "min_flow_coverage_pct": float(config.get("min_flow_coverage_pct") or 90),
+            "strict_flow_quality": bool(config.get("strict_flow_quality", False)),
+            "max_flow_lag_seconds": int(config.get("max_flow_lag_seconds") or 60),
             "enable_l2_features": bool(config.get("enable_l2_features", False)),
             "min_l2_coverage_pct": float(config.get("min_l2_coverage_pct") or 96),
             "strict_l2_quality": bool(
@@ -167,6 +172,38 @@ class EventContractConfigMixin:
         cfg["max_trade_range_risk"] = min(max(cfg["max_trade_range_risk"], 0), 100)
         cfg["stake_amount"] = max(cfg["stake_amount"], 1)
         cfg["initial_balance"] = max(cfg["initial_balance"], cfg["stake_amount"])
+        # --- Execution-cost floors -------------------------------------------------
+        # Zero-cost assumptions make every run optimistic: entry slippage and
+        # impact shift the event-contract strike directly, the platform fee
+        # moves the break-even win rate, and the entry delay bounds realistic
+        # fill timing. Floors are enforced (not just warned) so tradability is
+        # always judged with real costs; each enforcement is recorded so the
+        # summary can show which floors were applied.
+        enforced_cost_floors = []
+        if cfg["slippage_bps"] < 2.0:
+            enforced_cost_floors.append(
+                {"param": "slippage_bps", "requested": cfg["slippage_bps"], "floored_to": 2.0}
+            )
+            cfg["slippage_bps"] = 2.0
+        if cfg["impact_cost_bps"] < 0.5:
+            enforced_cost_floors.append(
+                {"param": "impact_cost_bps", "requested": cfg["impact_cost_bps"], "floored_to": 0.5}
+            )
+            cfg["impact_cost_bps"] = 0.5
+        if cfg["fee_rate"] <= 0:
+            enforced_cost_floors.append(
+                {"param": "fee_rate", "requested": cfg["fee_rate"], "floored_to": 0.001}
+            )
+            cfg["fee_rate"] = 0.001
+        if cfg["delay_seconds"] < 3:
+            enforced_cost_floors.append(
+                {"param": "delay_seconds", "requested": cfg["delay_seconds"], "floored_to": 3}
+            )
+            cfg["delay_seconds"] = 3
+        # Underscore prefix keeps the floor audit out of _public_config, so two
+        # configs with identical effective costs share a fingerprint regardless
+        # of what was originally requested.
+        cfg["_enforced_cost_floors"] = enforced_cost_floors
         cfg["return_trade_limit"] = min(max(cfg["return_trade_limit"], 1), 1000)
         if cfg["draw_result"] not in {"loss", "draw", "refund"}:
             raise ValueError(f"Unsupported draw_result: {cfg['draw_result']}")

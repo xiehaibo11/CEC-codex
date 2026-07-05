@@ -6,6 +6,7 @@ import type {
   NewsStatsResponse,
   TestNewsSourceResponse,
 } from '@/lib/api'
+import type { ExchangeId } from '@/lib/types/exchange'
 
 export interface StorageStats {
   exchange: string
@@ -28,6 +29,10 @@ export type NewsSourceAdapter = 'rss_generic' | 'cryptopanic' | 'finnhub_calenda
 
 export interface WatchlistSettingsTabProps {
   t: TFunction
+  /** Exchange whose icon/branding heads the card. Defaults to Binance. */
+  exchangeId?: ExchangeId
+  /** Card title. Defaults to "Binance". */
+  title?: string
   availableSymbols: BinanceSymbolMeta[]
   watchlistSymbols: string[]
   maxSymbols: number
@@ -41,9 +46,13 @@ export interface WatchlistSettingsTabProps {
   onSave: () => void
 }
 
-export interface BinanceDataSettingsTabProps {
+export interface ExchangeDataSettingsTabProps {
   t: TFunction
-  watchlistSymbols: string[]
+  exchange: string
+  klinePeriods: string[]
+  backfillDescription: string
+  /** Whether the venue has a historical backfill launcher. Defaults to true. */
+  supportsBackfill?: boolean
   storageStats: Record<string, StorageStats>
   storageLoading: boolean
   retentionDays: Record<string, string>

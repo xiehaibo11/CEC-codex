@@ -21,6 +21,7 @@ KLINE_BACKFILL_LIMIT = 1500  # Per period
 KLINE_BACKFILL_DAYS_DEFAULT = 365
 KLINE_PAGE_DELAY_SECONDS = 0.35
 KLINE_PERIODS = BINANCE_KLINE_INTERVALS
+SPAN_KLINE_PERIODS = {"3d", "1w", "1M"}
 OI_BACKFILL_DAYS = 30
 FUNDING_BACKFILL_DAYS = 365
 SENTIMENT_BACKFILL_DAYS = 30
@@ -90,11 +91,12 @@ class BinanceBackfillService:
                 # 1. Backfill K-lines for each period
                 for period in KLINE_PERIODS:
                     try:
+                        period_start_time_ms = self._start_time_for_period(start_time_ms, period)
                         await self._backfill_klines(
                             symbol,
                             period,
                             persistence,
-                            start_time_ms,
+                            period_start_time_ms,
                             end_time_ms,
                             backfill_days,
                             update_progress,
@@ -151,6 +153,13 @@ class BinanceBackfillService:
             except ValueError:
                 logger.warning("Invalid Binance retention days config: %s", config.value)
         return KLINE_BACKFILL_DAYS_DEFAULT
+
+    def _start_time_for_period(self, start_time_ms: int, period: str) -> int:
+        """Start span periods one interval earlier to cover retention-window edges."""
+        if period not in SPAN_KLINE_PERIODS:
+            return start_time_ms
+        interval_seconds = BINANCE_KLINE_INTERVAL_SECONDS.get(period, 0)
+        return max(0, start_time_ms - interval_seconds * 1000)
 
     def _estimate_kline_pages(self, backfill_days: int) -> int:
         total_pages = 0

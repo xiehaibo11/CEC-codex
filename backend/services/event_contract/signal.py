@@ -54,6 +54,10 @@ class EventContractSignalMixin:
             "expected_win_rate": round(expected_win_rate, 2),
             "decision_policy": ai_consensus.get("decision_policy"),
             "edge_score": ai_consensus.get("edge_score"),
+            "edge_score_raw": ai_consensus.get("edge_score_raw"),
+            "exhaustion_reversal": bool(ai_consensus.get("exhaustion_reversal")),
+            "reversal_evidence_score": ai_consensus.get("reversal_evidence_score"),
+            "indicator_reversal_score": ai_consensus.get("indicator_reversal_score"),
             "risk_score": ai_consensus.get("risk_score"),
             "execution_score": ai_consensus.get("execution_score"),
             "decision_grade": ai_consensus.get("decision_grade"),
@@ -67,7 +71,16 @@ class EventContractSignalMixin:
             "entry_condition": self._entry_condition(allow_trade, final_direction, ai_consensus),
             "avoid_condition": avoid_condition,
             "reason": ai_consensus["reason_summary"],
-            "related_factors": [item["factor_name"] for item in factors[:12]],
+            # Strongest 12 by |normalized_score| - positional truncation hid
+            # factors appended late in the list (flow, L2, MA cross).
+            "related_factors": [
+                item["factor_name"]
+                for item in sorted(
+                    factors,
+                    key=lambda f: abs(f.get("normalized_score") or 0),
+                    reverse=True,
+                )[:12]
+            ],
             "ai_consensus": ai_consensus,
         }
 

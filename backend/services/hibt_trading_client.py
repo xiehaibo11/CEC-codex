@@ -17,6 +17,9 @@ from typing import Any, Dict, Mapping, Optional
 
 import requests
 
+from services.hibt_market_data import HibtMarketDataMixin
+from services.hibt_order_endpoints import HibtOrderMixin
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,8 +34,13 @@ class HibtAPIError(Exception):
         super().__init__(f"HiBT API Error {code}: {message}")
 
 
-class HibtTradingClient:
-    """Small HiBT perpetual futures REST client used by routes and trading UI."""
+class HibtTradingClient(HibtOrderMixin, HibtMarketDataMixin):
+    """HiBT perpetual futures REST client used by routes and trading UI.
+
+    Public market-data endpoints live in :class:`HibtMarketDataMixin`, order
+    and conditional-order endpoints in :class:`HibtOrderMixin`; this class
+    holds signing plus the private account endpoints.
+    """
 
     MAINNET_BASE_URL = "https://fapi.hibt0.com/open-api"
     DEFAULT_TIMEOUT = 10
@@ -196,46 +204,6 @@ class HibtTradingClient:
         except (TypeError, ValueError):
             return default
 
-    def get_server_time(self) -> int:
-        data = self._request("GET", "/v2/server/time")
-        if isinstance(data, dict):
-            return int(data.get("serverTime") or 0)
-        return 0
-
-    def get_symbols(self) -> list[Dict[str, Any]]:
-        data = self._request("GET", "/v2/market/symbols")
-        return data if isinstance(data, list) else []
-
-    def get_tickers(self, symbol: str | None = None) -> Any:
-        params: Dict[str, Any] = {}
-        if symbol:
-            params["symbol"] = self.to_hibt_symbol(symbol)
-        return self._request("GET", "/v2/market/tickers", params)
-
-    def get_price(self, symbol: str) -> float:
-        hibt_symbol = self.to_hibt_symbol(symbol)
-        data = self._request("GET", "/v2/market/ticker/price", {"symbol": hibt_symbol})
-        entries = data if isinstance(data, list) else [data]
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("symbol") and str(entry.get("symbol")).lower() != hibt_symbol:
-                continue
-            return self._float(entry.get("price") or entry.get("lastPrice") or entry.get("close") or entry.get("contract_price"))
-        return 0.0
-
-    def get_klines(self, symbol: str, period: str = "1m", start: int | None = None, end: int | None = None, count: int = 200) -> list[Dict[str, Any]]:
-        params: Dict[str, Any] = {"symbol": self.to_hibt_symbol(symbol), "period": self.to_period(period), "count": count}
-        if start is not None:
-            params["start"] = int(start)
-        if end is not None:
-            params["end"] = int(end)
-        data = self._request("GET", "/v2/market/candle", params)
-        return data if isinstance(data, list) else []
-
-    def get_depth(self, symbol: str, limit: int = 20) -> Any:
-        return self._request("GET", "/v2/market/depth", {"symbol": self.to_hibt_symbol(symbol), "limit": limit})
-
     def get_balance(self) -> Any:
         return self._request("GET", "/v2/account/balance", signed=True)
 
@@ -291,74 +259,66 @@ class HibtTradingClient:
     def set_leverage(self, symbol: str, leverage: int) -> Any:
         return self._request("POST", "/v2/account/setLeverage", {"symbol": self.to_hibt_symbol(symbol), "leverage": int(leverage)}, signed=True)
 
-    def place_order(
+    def get_trade_history(
         self,
         symbol: str,
-        side: str,
-        quantity: float,
-        order_type: str = "MARKET",
-        price: Optional[float] = None,
-        leverage: int = 1,
-        reduce_only: bool = False,
-        take_profit_price: Optional[float] = None,
-        stop_loss_price: Optional[float] = None,
-        custom_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        if reduce_only:
-            raise ValueError("HiBT reduce-only close requires close_position with a position ID")
-        order_type_upper = order_type.upper()
-        payload: Dict[str, Any] = {
-            "symbol": self.to_hibt_symbol(symbol),
-            "type": 2 if order_type_upper == "MARKET" else 1,
-            "side": 1 if side.upper() == "BUY" else 2,
-            "leverage": int(leverage),
-            "amount": str(quantity),
-        }
-        if custom_id:
-            payload["customID"] = custom_id
-        if order_type_upper == "LIMIT":
-            if price is None:
-                raise ValueError("Price required for HiBT limit order")
-            payload["price"] = str(price)
-        if take_profit_price is not None:
-            payload["isSetSp"] = True
-            payload["spPrice"] = str(take_profit_price)
-            payload.setdefault("triggerType", 2)
-        if stop_loss_price is not None:
-            payload["isSetSl"] = True
-            payload["slPrice"] = str(stop_loss_price)
-            payload.setdefault("triggerType", 2)
-        data = self._request("POST", "/v2/order/open", payload, signed=True)
-        return {
-            "order_id": data.get("orderID") if isinstance(data, dict) else None,
-            "status": "submitted",
-            "symbol": self.to_display_symbol(symbol),
-            "side": side.upper(),
-            "type": order_type_upper,
-            "quantity": float(quantity),
-            "price": float(price or 0),
-            "environment": self.environment,
-            "raw_response": data,
-        }
+        start_time: int | None = None,
+        end_time: int | None = None,
+        limit: int | None = None,
+    ) -> list[Dict[str, Any]]:
+        """Account trade history (``/v2/account/order``); start/end are SECONDS, limit<=1000."""
+        params: Dict[str, Any] = {"symbol": self.to_hibt_symbol(symbol)}
+        if start_time is not None:
+            params["startTime"] = int(start_time)
+        if end_time is not None:
+            params["endTime"] = int(end_time)
+        if limit is not None:
+            params["limit"] = int(limit)
+        data = self._request("GET", "/v2/account/order", params, signed=True)
+        return data if isinstance(data, list) else []
 
-    def close_position(self, position_id: str, quantity: float, order_type: str = "MARKET", price: Optional[float] = None) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "positionID": position_id,
-            "amount": str(quantity),
-            "type": 2 if order_type.upper() == "MARKET" else 1,
-        }
-        if order_type.upper() == "LIMIT":
-            if price is None:
-                raise ValueError("Price required for HiBT limit close")
-            payload["price"] = str(price)
-        data = self._request("POST", "/v2/order/close", payload, signed=True)
-        return {"order_id": data.get("orderID") if isinstance(data, dict) else None, "status": "submitted", "raw_response": data}
+    def get_balance_records(
+        self,
+        symbol: str | None = None,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        event: int | None = None,
+        limit: int | None = None,
+    ) -> list[Dict[str, Any]]:
+        """Balance change records (``/v2/account/balanceRecord``); ms timestamps, 30-day window."""
+        params: Dict[str, Any] = {}
+        if symbol:
+            params["symbol"] = self.to_hibt_symbol(symbol)
+        if start_time is not None:
+            params["startTime"] = int(start_time)
+        if end_time is not None:
+            params["endTime"] = int(end_time)
+        if event is not None:
+            params["event"] = int(event)
+        if limit is not None:
+            params["limit"] = int(limit)
+        data = self._request("GET", "/v2/account/balanceRecord", params, signed=True)
+        return data if isinstance(data, list) else []
 
-    def cancel_order(self, symbol: str, order_id: str | None = None, custom_id: str | None = None, position_id: str | None = None) -> Any:
-        payload = {
-            "symbol": self.to_hibt_symbol(symbol),
-            "orderID": order_id or "",
-            "customID": custom_id or "",
-            "positionID": position_id or "",
-        }
-        return self._request("POST", "/v2/order/cancel", payload, signed=True)
+    def get_forced_liquidations(
+        self,
+        symbol: str | None = None,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        action: int | None = None,
+        limit: int | None = None,
+    ) -> list[Dict[str, Any]]:
+        """Forced-liquidation history (``/v2/account/orderForced``); ms timestamps, 7-day window."""
+        params: Dict[str, Any] = {}
+        if symbol:
+            params["symbol"] = self.to_hibt_symbol(symbol)
+        if start_time is not None:
+            params["startTime"] = int(start_time)
+        if end_time is not None:
+            params["endTime"] = int(end_time)
+        if action is not None:
+            params["action"] = int(action)
+        if limit is not None:
+            params["limit"] = int(limit)
+        data = self._request("GET", "/v2/account/orderForced", params, signed=True)
+        return data if isinstance(data, list) else []

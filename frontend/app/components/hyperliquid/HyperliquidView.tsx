@@ -18,7 +18,6 @@ import { useTranslation } from 'react-i18next'
 import { useTradingMode } from '@/contexts/TradingModeContext'
 import { getArenaPositions, getArenaTrades, getAccounts, ArenaTrade, TradingAccount } from '@/lib/api'
 import AlphaArenaFeed from '@/components/portfolio/AlphaArenaFeed'
-import EventPaperTraderCard from '@/components/portfolio/EventPaperTraderCard'
 import HyperliquidMultiAccountSummary from '@/components/portfolio/HyperliquidMultiAccountSummary'
 import HyperliquidAssetChart, { TradeMarker } from './HyperliquidAssetChart'
 import ArenaView from '@/components/arena/ArenaView'
@@ -137,7 +136,6 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4">
-      <EventPaperTraderCard />
       <div className="flex-1 min-h-0 flex flex-col md:grid md:gap-6 md:grid-cols-[minmax(0,1fr)_minmax(320px,600px)] gap-4 pb-16 md:pb-0 overflow-y-auto md:overflow-hidden">
         {/* Left Panel - Arena or Chart & Account Summary */}
         <div className="min-w-0 flex flex-col gap-4 min-h-0">

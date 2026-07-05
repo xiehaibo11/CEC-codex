@@ -129,6 +129,42 @@ def cleanup_old_market_flow_data():
             )
         total_deleted += bn_total
 
+        # Clean up HiBT data
+        hibt_retention = get_retention_days("hibt")
+        hibt_cutoff_ms = int((time.time() - hibt_retention * 86400) * 1000)
+
+        hibt_trades = (
+            db.query(MarketTradesAggregated)
+            .filter(
+                MarketTradesAggregated.exchange == "hibt",
+                MarketTradesAggregated.timestamp < hibt_cutoff_ms
+            )
+            .delete(synchronize_session=False)
+        )
+        hibt_orderbook = (
+            db.query(MarketOrderbookSnapshots)
+            .filter(
+                MarketOrderbookSnapshots.exchange == "hibt",
+                MarketOrderbookSnapshots.timestamp < hibt_cutoff_ms
+            )
+            .delete(synchronize_session=False)
+        )
+        hibt_metrics = (
+            db.query(MarketAssetMetrics)
+            .filter(
+                MarketAssetMetrics.exchange == "hibt",
+                MarketAssetMetrics.timestamp < hibt_cutoff_ms
+            )
+            .delete(synchronize_session=False)
+        )
+        hibt_total = hibt_trades + hibt_orderbook + hibt_metrics
+        if hibt_total > 0:
+            logger.info(
+                f"HiBT cleanup: {hibt_trades} trades, {hibt_orderbook} orderbook, "
+                f"{hibt_metrics} metrics (older than {hibt_retention} days)"
+            )
+        total_deleted += hibt_total
+
         db.commit()
 
         if total_deleted == 0:

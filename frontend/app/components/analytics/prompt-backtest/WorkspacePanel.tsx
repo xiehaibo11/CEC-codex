@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -152,9 +153,8 @@ export default function WorkspacePanel({
               </TableHeader>
               <TableBody>
                 {workspace.map(record => (
-                  <>
+                  <Fragment key={record.id}>
                     <TableRow
-                      key={record.id}
                       className={record.isMatched === false ? 'opacity-50' : ''}
                     >
                       {searchMode && (
@@ -218,7 +218,7 @@ export default function WorkspacePanel({
                     </TableRow>
                     {/* Context row - show when matched */}
                     {record.isMatched && record.matchContext && (
-                      <TableRow key={`${record.id}-context`} className="bg-muted/30">
+                      <TableRow className="bg-muted/30">
                         <TableCell colSpan={searchMode ? 7 : 6} className="py-2">
                           <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-[80px] overflow-auto">
                             {record.matchContext}
@@ -226,7 +226,7 @@ export default function WorkspacePanel({
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

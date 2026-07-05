@@ -5,13 +5,17 @@ import {
   getBinanceAvailableSymbols,
   getBinanceWatchlist,
   updateBinanceWatchlist,
+  getHibtAvailableSymbols,
+  getHibtWatchlist,
+  updateHibtWatchlist,
 } from '@/lib/api'
-import type { BinanceSymbolMeta } from '@/lib/api'
+import type { BinanceSymbolMeta, HibtSymbolMeta } from '@/lib/api'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
-import { BinanceDataSettingsTab } from './settings-page/BinanceDataSettingsTab'
+import { ExchangeDataSettingsTab } from './settings-page/ExchangeDataSettingsTab'
 import { NewsSourcesSettingsTab } from './settings-page/NewsSourcesSettingsTab'
 import { WatchlistSettingsTab } from './settings-page/WatchlistSettingsTab'
 import { useNewsSourcesSettings } from './settings-page/useNewsSourcesSettings'
+import { BINANCE_KLINE_PERIODS } from './settings-page/constants'
 import type { BackfillStatus, StorageStats } from './settings-page/types'
 
 export default function SettingsPage() {
@@ -31,11 +35,22 @@ export default function SettingsPage() {
   const [bnSuccess, setBnSuccess] = useState<string | null>(null)
   const [bnSearchQuery, setBnSearchQuery] = useState('')
 
+  // HiBT Watchlist state (event-contract symbol monitoring, independent of Binance)
+  const [hibtAvailableSymbols, setHibtAvailableSymbols] = useState<HibtSymbolMeta[]>([])
+  const [hibtWatchlistSymbols, setHibtWatchlistSymbols] = useState<string[]>([])
+  const [hibtMaxSymbols, setHibtMaxSymbols] = useState(10)
+  const [hibtLoading, setHibtLoading] = useState(true)
+  const [hibtSaving, setHibtSaving] = useState(false)
+  const [hibtError, setHibtError] = useState<string | null>(null)
+  const [hibtSuccess, setHibtSuccess] = useState<string | null>(null)
+  const [hibtSearchQuery, setHibtSearchQuery] = useState('')
+
   // Storage stats state - per exchange
   const [storageStats, setStorageStats] = useState<Record<string, StorageStats>>({})
   const [storageLoading, setStorageLoading] = useState(false)
   const [retentionDays, setRetentionDays] = useState<Record<string, string>>({
     binance: '365',
+    hibt: '365',
   })
   const [retentionSaving, setRetentionSaving] = useState(false)
   const [retentionError, setRetentionError] = useState<string | null>(null)
@@ -48,7 +63,11 @@ export default function SettingsPage() {
   const [backfillJustCompleted, setBackfillJustCompleted] = useState<Record<string, boolean>>({})
 
   // Determine current exchange from active tab
-  const currentExchange = activeTab === 'binance-data' ? 'binance' : null
+  const currentExchange =
+    activeTab === 'binance-data' ? 'binance' : activeTab === 'hibt-data' ? 'hibt' : null
+  // Venues that expose a historical backfill launcher + status endpoints.
+  const currentExchangeSupportsBackfill =
+    currentExchange === 'binance' || currentExchange === 'hibt'
   const newsSourcesSettings = useNewsSourcesSettings({ activeTab, currentLang, t })
 
   const toggleLanguage = (lang: 'en' | 'zh') => {
@@ -96,10 +115,33 @@ export default function SettingsPage() {
     }
   }, [])
 
-  // Load watchlist on mount
+  const fetchHibtWatchlist = useCallback(async () => {
+    setHibtLoading(true)
+    setHibtError(null)
+    try {
+      const [available, watchlist] = await Promise.all([
+        getHibtAvailableSymbols(),
+        getHibtWatchlist(),
+      ])
+      setHibtAvailableSymbols(available.symbols || [])
+      setHibtMaxSymbols(watchlist.max_symbols ?? 10)
+      setHibtWatchlistSymbols(watchlist.symbols || [])
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load HiBT watchlist'
+      setHibtError(errorMsg)
+    } finally {
+      setHibtLoading(false)
+    }
+  }, [])
+
+  // Load watchlists on mount
   useEffect(() => {
     fetchWatchlist()
   }, [fetchWatchlist])
+
+  useEffect(() => {
+    fetchHibtWatchlist()
+  }, [fetchHibtWatchlist])
 
   // Load storage stats when exchange data tab is active
   useEffect(() => {
@@ -132,7 +174,7 @@ export default function SettingsPage() {
   const pollingRef = useRef<Record<string, boolean>>({})
 
   useEffect(() => {
-    if (currentExchange) {
+    if (currentExchange && currentExchangeSupportsBackfill) {
       // Initial fetch
       fetchBackfillStatus(currentExchange)
       pollingRef.current[currentExchange] = true
@@ -162,7 +204,7 @@ export default function SettingsPage() {
         pollingRef.current[currentExchange] = false
       }
     }
-  }, [activeTab, currentExchange, fetchBackfillStatus])
+  }, [activeTab, currentExchange, currentExchangeSupportsBackfill, fetchBackfillStatus])
 
   const handleStartBackfill = async (exchange: string, force: boolean = false) => {
     setBackfillStarting(prev => ({ ...prev, [exchange]: true }))
@@ -215,6 +257,36 @@ export default function SettingsPage() {
     }
   }
 
+  const toggleHibtWatchlistSymbol = (symbol: string) => {
+    const symbolUpper = symbol.toUpperCase()
+    setHibtError(null)
+    setHibtSuccess(null)
+    setHibtWatchlistSymbols((prev) => {
+      if (prev.includes(symbolUpper)) {
+        return prev.filter((s) => s !== symbolUpper)
+      }
+      if (prev.length >= hibtMaxSymbols) {
+        setHibtError(t('settings.maxSymbolsReached', `Maximum ${hibtMaxSymbols} symbols`))
+        return prev
+      }
+      return [...prev, symbolUpper]
+    })
+  }
+
+  const handleSaveHibtWatchlist = async () => {
+    setHibtSaving(true)
+    setHibtError(null)
+    setHibtSuccess(null)
+    try {
+      await updateHibtWatchlist(hibtWatchlistSymbols)
+      setHibtSuccess(t('settings.watchlistSaved', 'Watchlist saved'))
+    } catch (err) {
+      setHibtError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setHibtSaving(false)
+    }
+  }
+
   const handleSaveRetention = async () => {
     if (!currentExchange) return
     const days = parseInt(retentionDays[currentExchange], 10)
@@ -262,38 +334,84 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      {/* Tabs: Watchlist | Binance Data | News Sources */}
+      {/* Tabs: Watchlist | Binance Data | HiBT Data | News Sources */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl shrink-0">
+        <TabsList className="grid w-full grid-cols-4 max-w-3xl shrink-0">
           <TabsTrigger value="watchlist">{t('settings.watchlist', 'Watchlist')}</TabsTrigger>
           <TabsTrigger value="binance-data" className="flex items-center gap-1.5">
             <ExchangeIcon exchangeId="binance" size={16} />
             Binance
           </TabsTrigger>
+          <TabsTrigger value="hibt-data" className="flex items-center gap-1.5">
+            <ExchangeIcon exchangeId="hibt" size={16} />
+            HiBT
+          </TabsTrigger>
           <TabsTrigger value="news-sources">{t('settings.newsSources', 'News Sources')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="watchlist" className="mt-4 flex-1 min-h-0 flex flex-col overflow-auto">
-          <WatchlistSettingsTab
-            t={t}
-            availableSymbols={bnAvailableSymbols}
-            watchlistSymbols={bnWatchlistSymbols}
-            maxSymbols={bnMaxSymbols}
-            loading={bnLoading}
-            saving={bnSaving}
-            error={bnError}
-            success={bnSuccess}
-            searchQuery={bnSearchQuery}
-            onSearchQueryChange={setBnSearchQuery}
-            onToggleSymbol={toggleBnWatchlistSymbol}
-            onSave={handleSaveBnWatchlist}
-          />
+          <div className="space-y-6">
+            <WatchlistSettingsTab
+              t={t}
+              availableSymbols={bnAvailableSymbols}
+              watchlistSymbols={bnWatchlistSymbols}
+              maxSymbols={bnMaxSymbols}
+              loading={bnLoading}
+              saving={bnSaving}
+              error={bnError}
+              success={bnSuccess}
+              searchQuery={bnSearchQuery}
+              onSearchQueryChange={setBnSearchQuery}
+              onToggleSymbol={toggleBnWatchlistSymbol}
+              onSave={handleSaveBnWatchlist}
+            />
+            {/* HiBT event-contract monitor, below Binance on the same tab */}
+            <WatchlistSettingsTab
+              t={t}
+              exchangeId="hibt"
+              title={t('settings.hibtWatchlist', 'HiBT Monitor')}
+              availableSymbols={hibtAvailableSymbols}
+              watchlistSymbols={hibtWatchlistSymbols}
+              maxSymbols={hibtMaxSymbols}
+              loading={hibtLoading}
+              saving={hibtSaving}
+              error={hibtError}
+              success={hibtSuccess}
+              searchQuery={hibtSearchQuery}
+              onSearchQueryChange={setHibtSearchQuery}
+              onToggleSymbol={toggleHibtWatchlistSymbol}
+              onSave={handleSaveHibtWatchlist}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="binance-data" className="mt-4 flex-1 min-h-0 flex flex-col">
-          <BinanceDataSettingsTab
+          <ExchangeDataSettingsTab
             t={t}
-            watchlistSymbols={bnWatchlistSymbols}
+            exchange="binance"
+            klinePeriods={BINANCE_KLINE_PERIODS}
+            backfillDescription={t('settings.backfillDesc', 'K-lines 1m-1M for the retention period, OI (real-time only), Funding Rate (365d), Long/Short Ratio (30d)')}
+            storageStats={storageStats}
+            storageLoading={storageLoading}
+            retentionDays={retentionDays}
+            setRetentionDays={setRetentionDays}
+            retentionSaving={retentionSaving}
+            retentionError={retentionError}
+            retentionSuccess={retentionSuccess}
+            backfillStatus={backfillStatus}
+            backfillStarting={backfillStarting}
+            backfillJustCompleted={backfillJustCompleted}
+            onSaveRetention={handleSaveRetention}
+            onStartBackfill={handleStartBackfill}
+          />
+        </TabsContent>
+
+        <TabsContent value="hibt-data" className="mt-4 flex-1 min-h-0 flex flex-col">
+          <ExchangeDataSettingsTab
+            t={t}
+            exchange="hibt"
+            klinePeriods={BINANCE_KLINE_PERIODS}
+            backfillDescription={t('settings.backfillDesc', 'K-lines 1m-1M for the retention period, OI (real-time only), Funding Rate (365d), Long/Short Ratio (30d)')}
             storageStats={storageStats}
             storageLoading={storageLoading}
             retentionDays={retentionDays}

@@ -41,12 +41,21 @@ def build_backtest_validation_report(
         monte_carlo=monte_carlo,
         regime_stability=regime_stability,
     )
+    edge_monotonicity = _edge_monotonicity_report(trades)
+    threshold_sensitivity = _threshold_sensitivity_report(cfg, trades)
     warnings = _collect_validation_warnings(
         walk_forward=walk_forward,
         monte_carlo=monte_carlo,
         regime_stability=regime_stability,
         live_decay=live_decay,
     )
+    if edge_monotonicity.get("verdict") == "flat_or_inverted":
+        warnings.append("Edge 分数与实际胜率无单调关系：打分模型对该窗口无区分度")
+    for dim in threshold_sensitivity.get("dimensions", []):
+        if abs(dim.get("win_rate_delta") or 0) > 15:
+            warnings.append(
+                f"参数敏感：收紧 {dim['param']} 后胜率变化 {dim['win_rate_delta']:+.1f} 个百分点（>15），结果对该阈值不稳健"
+            )
     verdict = _validation_verdict(
         summary=summary,
         walk_forward=walk_forward,
@@ -62,6 +71,150 @@ def build_backtest_validation_report(
         "monte_carlo": monte_carlo,
         "regime_stability": regime_stability,
         "live_decay_estimate": live_decay,
+        "edge_monotonicity": edge_monotonicity,
+        "threshold_sensitivity": threshold_sensitivity,
+    }
+
+
+def _edge_monotonicity_report(
+    trades: List[Dict[str, Any]], groups: int = 4, min_samples: int = 40
+) -> Dict[str, Any]:
+    """Quantile-monotonicity check: do higher edge scores actually win more?
+
+    Quant-book layered test adapted to event contracts: decided trades are
+    ranked by edge score into quantile groups; a scoring model with real
+    discriminative power shows win rate rising from bottom to top group. A
+    flat or inverted profile means the score is noise for this window.
+    """
+    samples = []
+    for trade in trades:
+        if trade.get("result") not in ("win", "loss"):
+            continue
+        signal = trade.get("event_signal") or {}
+        # Prefer the unclamped raw score: the clamped edge_score saturates at
+        # 100 for most accepted setups and carries no rank information.
+        score = signal.get("edge_score_raw")
+        if score is None:
+            score = signal.get("edge_score")
+        if score is None:
+            score = trade.get("signal_strength")
+        if score is None:
+            continue
+        samples.append((float(score), 1.0 if trade["result"] == "win" else 0.0))
+    if len(samples) < min_samples:
+        return {"status": "insufficient_sample", "n": len(samples), "min_samples": min_samples}
+
+    samples.sort(key=lambda item: item[0])
+    size = len(samples) / groups
+    buckets = []
+    for group in range(groups):
+        rows = samples[int(round(group * size)) : int(round((group + 1) * size))]
+        if not rows:
+            continue
+        buckets.append(
+            {
+                "group": group + 1,
+                "n": len(rows),
+                "avg_score": round(sum(score for score, _ in rows) / len(rows), 2),
+                "win_rate": round(sum(won for _, won in rows) / len(rows) * 100, 2),
+            }
+        )
+    inversions = sum(
+        1 for prev, cur in zip(buckets, buckets[1:]) if cur["win_rate"] < prev["win_rate"]
+    )
+    spread = round(buckets[-1]["win_rate"] - buckets[0]["win_rate"], 2)
+    if spread > 0 and inversions == 0:
+        verdict = "monotonic"
+    elif spread > 0:
+        verdict = "partial"
+    else:
+        verdict = "flat_or_inverted"
+    return {
+        "status": "ok",
+        "n": len(samples),
+        "groups": buckets,
+        "inversions": inversions,
+        "top_minus_bottom": spread,
+        "verdict": verdict,
+    }
+
+
+def _threshold_sensitivity_report(
+    cfg: Dict[str, Any], trades: List[Dict[str, Any]], tighten_factor: float = 0.8
+) -> Dict[str, Any]:
+    """Tighten-only parameter perturbation on the realized trade stream.
+
+    The quant-book robustness test perturbs parameters +/-20% and expects
+    results to stay stable. Loosening a gate would admit trades we never
+    simulated, so only the tightening direction can be evaluated honestly
+    from recorded trades; each dimension re-scores the subset that would
+    survive a 20% stricter gate.
+    """
+    decided = [t for t in trades if t.get("result") in ("win", "loss")]
+    if len(decided) < 10:
+        return {"status": "insufficient_sample", "n": len(decided), "min_samples": 10}
+
+    def _metrics(items: List[Dict[str, Any]]) -> Dict[str, float]:
+        wins = sum(1 for t in items if t["result"] == "win")
+        return {
+            "win_rate": round(wins / len(items) * 100, 2) if items else 0.0,
+            "pnl": round(sum(float(t.get("profit_loss") or 0) for t in items), 4),
+        }
+
+    base = _metrics(decided)
+    dimensions = []
+
+    max_range_risk = float(cfg.get("max_trade_range_risk") or 45)
+    tightened_risk = round(max_range_risk * tighten_factor, 2)
+    kept = [
+        t
+        for t in decided
+        if float((t.get("event_signal") or {}).get("range_risk") or 0) <= tightened_risk
+    ]
+    if kept:
+        kept_metrics = _metrics(kept)
+        dimensions.append(
+            {
+                "param": "max_trade_range_risk",
+                "base_value": max_range_risk,
+                "tightened_value": tightened_risk,
+                "trades_kept": len(kept),
+                "kept_ratio": round(len(kept) / len(decided) * 100, 2),
+                "win_rate": kept_metrics["win_rate"],
+                "win_rate_delta": round(kept_metrics["win_rate"] - base["win_rate"], 2),
+                "pnl": kept_metrics["pnl"],
+            }
+        )
+
+    target_win_rate = float(cfg.get("target_win_rate") or 75)
+    raised_floor = min(target_win_rate + 5, 100.0)
+    kept = [
+        t
+        for t in decided
+        if float((t.get("event_signal") or {}).get("expected_win_rate") or 0) >= raised_floor
+    ]
+    if kept:
+        kept_metrics = _metrics(kept)
+        dimensions.append(
+            {
+                "param": "expected_win_rate_floor",
+                "base_value": target_win_rate,
+                "tightened_value": raised_floor,
+                "trades_kept": len(kept),
+                "kept_ratio": round(len(kept) / len(decided) * 100, 2),
+                "win_rate": kept_metrics["win_rate"],
+                "win_rate_delta": round(kept_metrics["win_rate"] - base["win_rate"], 2),
+                "pnl": kept_metrics["pnl"],
+            }
+        )
+
+    return {
+        "status": "ok",
+        "direction": "tighten_only",
+        "base_win_rate": base["win_rate"],
+        "base_pnl": base["pnl"],
+        "base_trades": len(decided),
+        "dimensions": dimensions,
     }
 
 

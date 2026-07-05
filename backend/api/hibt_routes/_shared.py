@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from sqlalchemy.orm import Session
 
 from database.models import HibtWallet
 from services.hibt_trading_client import HibtAPIError, HibtTradingClient
@@ -14,6 +15,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/hibt", tags=["hibt"])
 
 _client_cache: dict[str, HibtTradingClient] = {}
+
+
+def _resolve_wallet(db: Session, account_id: int, environment: str) -> HibtWallet:
+    """Return the active HiBT wallet for an account/environment or 404."""
+    wallet = db.query(HibtWallet).filter(
+        HibtWallet.account_id == account_id,
+        HibtWallet.environment == environment,
+        HibtWallet.is_active == "true",
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail=f"No {environment} HiBT wallet configured")
+    return wallet
 
 
 def _get_client(wallet: HibtWallet) -> HibtTradingClient:

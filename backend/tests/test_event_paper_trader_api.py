@@ -104,7 +104,8 @@ class TestListAndToggle:
             assert key in item, f"missing stats key {key}"
         assert item["trader_id"] == trader["id"]
         assert item["n_settled"] == 0
-        assert item["break_even_win_rate"] == pytest.approx(55.56, abs=0.01)
+        # Cost floor enforces min 0.1% fee: break_even = (1 + 0.001) / (1 + 0.8) * 100 ≈ 55.61
+        assert item["break_even_win_rate"] == pytest.approx(55.61, abs=0.01)
         assert item["p_value_vs_breakeven"] == 1.0
 
     def test_toggle_enabled(self, session):
@@ -143,8 +144,9 @@ class TestStatsMath:
         assert stats["win_rate_ci_low"] == expected_lo
         assert stats["win_rate_ci_high"] == expected_hi
 
-        # break-even for the default payout=0.8/fee_rate=0 config: (1)/(1.8)*100
-        assert stats["break_even_win_rate"] == pytest.approx(55.56, abs=0.01)
+        # Cost floor enforces min 0.1% fee: break_even = (1 + 0.001) / (1 + 0.8) * 100 ≈ 55.61
+        # break-even for the default payout=0.8/fee_rate floored to 0.001: (1.001)/(1.8)*100
+        assert stats["break_even_win_rate"] == pytest.approx(55.61, abs=0.01)
         assert stats["total_pnl"] == pytest.approx(3 * 80 - 2 * 100)  # +40
         assert stats["current_balance"] == 10000.0  # only bet.pnl updates balance in the live cycle
         assert stats["stake_amount"] == 100.0

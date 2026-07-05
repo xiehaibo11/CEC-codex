@@ -9,7 +9,6 @@
  */
 import { useState, useEffect } from 'react'
 import AccountDataView from './AccountDataView'
-import EventPaperTraderCard from './EventPaperTraderCard'
 import { AIDecision } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -151,7 +150,6 @@ export default function ComprehensiveView({
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4">
-      <EventPaperTraderCard />
       <div className="flex-1 min-h-0">
         <AccountDataView
           overview={overview}

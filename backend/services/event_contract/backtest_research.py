@@ -363,14 +363,28 @@ def _missing_data_recommendations(cfg: Dict[str, Any], data_quality: Dict[str, A
             }
         )
     cg = data_quality.get("coinglass") or {}
-    if not cg.get("enabled") or cg.get("warnings") or float(cg.get("coverage_pct") or 0) < float(cfg.get("min_coinglass_coverage_pct") or 96):
-        items.append(
-            {
-                "data_type": "CoinGlass derivatives",
-                "status": "missing_or_low_coverage",
-                "recommendation": "补充CVD、taker buy/sell、OI、funding、liquidation，并保持无未来函数对齐。",
-            }
-        )
+    cg_covered = bool(cg.get("enabled")) and not cg.get("warnings") and float(cg.get("coverage_pct") or 0) >= float(cfg.get("min_coinglass_coverage_pct") or 96)
+    flow = data_quality.get("flow") or {}
+    flow_covered = bool(flow.get("enabled")) and float(flow.get("coverage_pct") or 0) >= float(cfg.get("min_flow_coverage_pct") or 90)
+    if not cg_covered:
+        if flow_covered:
+            # The local collector already supplies CVD/taker/OI/funding with
+            # no-look-ahead alignment; only liquidation remains CoinGlass-only.
+            items.append(
+                {
+                    "data_type": "Liquidation data",
+                    "status": "missing_or_low_coverage",
+                    "recommendation": "CVD、taker buy/sell、OI、funding 已由本地市场流数据覆盖（无未来函数对齐）；liquidation 仍需 CoinGlass，启用后可补齐爆仓维度。",
+                }
+            )
+        else:
+            items.append(
+                {
+                    "data_type": "CoinGlass derivatives",
+                    "status": "missing_or_low_coverage",
+                    "recommendation": "补充CVD、taker buy/sell、OI、funding、liquidation，并保持无未来函数对齐。",
+                }
+            )
     if float(cfg.get("fee_rate") or 0) <= 0 or float(cfg.get("slippage_bps") or 0) <= 0:
         items.append(
             {

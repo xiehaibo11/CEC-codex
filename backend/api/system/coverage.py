@@ -30,6 +30,18 @@ def get_expected_kline_records_per_day(period: str) -> int:
     return max(1, (24 * 60 * 60) // interval_seconds)
 
 
+def calculate_daily_coverage_pct(records: int, expected_records: int) -> int:
+    """Return daily coverage percentage, preserving any non-zero presence.
+
+    A day with a few sparse records should not be rendered as 0/no data. The
+    heatmap uses 0 as the no-record state, so any positive record count is
+    floored to 1%.
+    """
+    if records <= 0 or expected_records <= 0:
+        return 0
+    return max(1, min(100, round(records / expected_records * 100)))
+
+
 @router.get("/data-coverage")
 def get_data_coverage(
     days: int = 30,
@@ -176,7 +188,7 @@ def get_data_coverage(
             for row in rows:
                 date_str = row[0]
                 records = row[1]
-                coverage_pct = min(100, round(records / expected_records * 100))
+                coverage_pct = calculate_daily_coverage_pct(records, expected_records)
                 coverage_map[date_str] = coverage_pct
 
         # Generate date list

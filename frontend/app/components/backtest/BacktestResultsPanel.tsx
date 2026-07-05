@@ -30,6 +30,7 @@ import type {
   EventBacktestTaskStatus,
   EventBacktestQualityGate,
   EventBacktestValidationReport,
+  EventBacktestWindowReuse,
   EventFactorSnapshot,
   EventTradeLog,
 } from '@/lib/api'
@@ -120,6 +121,7 @@ export function BacktestResultsPanel({
               <CredibilityCard summary={backtest.summary} onHoldout={onHoldout} holdoutRunning={holdoutRunning} />
             )}
             <SummaryGrid backtest={backtest} />
+            <WindowReuseNotice windowReuse={backtest.summary.research_report?.window_reuse} />
             <ProfessionalDecisionSummary trade={selectedTrade || backtest.trades[0]} />
             <QualityGatePanel qualityGate={backtest.summary.quality_gate} />
             <ValidationReportPanel validationReport={backtest.summary.validation_report} />
@@ -147,7 +149,7 @@ export function BacktestResultsPanel({
           <div className="py-12 text-center text-sm text-muted-foreground">
             {runningBacktest
               ? t('backtestTool.running', 'Running event-contract backtest...')
-              : t('backtestTool.runHint', 'Configure AI confirmation and run an event-contract backtest.')}
+              : t('backtestTool.runHint', 'Results will appear here after you run an event-contract backtest.')}
           </div>
         )}
       </CardContent>
@@ -196,6 +198,56 @@ function ProfessionalDecisionSummary({ trade }: { trade?: EventTradeLog | null }
   )
 }
 
+/** Data-snooping banner: warns when this window has already been re-optimized
+ * with many different configs, so a good-looking result may just fit the
+ * window's noise. Rendered only at medium/high risk. */
+function WindowReuseNotice({ windowReuse }: { windowReuse?: EventBacktestWindowReuse }) {
+  const { t } = useTranslation()
+  if (!windowReuse?.available) return null
+  const risk = windowReuse.overfit_risk || 'low'
+  if (risk === 'low') return null
+  const tone = risk === 'high'
+    ? 'border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-300'
+    : 'border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+  return (
+    <div className={`rounded-md border px-3 py-2 text-xs ${tone}`}>
+      <div className="font-medium">
+        {t('backtestTool.windowReuseTitle', 'Data-snooping risk: this window has been re-tested')}
+      </div>
+      <div className="mt-1">
+        {t('backtestTool.windowReuseBody', '{{fingerprints}} distinct strategy variants have already been tested on this window ({{runs}} prior runs). The more strategies are tuned against one window, the more the best result fits that window\'s noise. Confirm with a frozen-parameter holdout on an unseen window before trusting it.', {
+          runs: windowReuse.prior_runs,
+          fingerprints: windowReuse.distinct_fingerprints,
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Map known backend abort reasons to a localized, actionable explanation.
+ * Returns null for unrecognized errors so the raw message still shows. */
+function localizeBacktestError(message: string | null | undefined, t: ReturnType<typeof useTranslation>['t']): string | null {
+  if (!message) return null
+  const l2Match = message.match(/L2 coverage ([\d.]+)% below ([\d.]+)%/)
+  if (l2Match) {
+    return t('backtestTool.errL2Coverage', 'L2 orderbook coverage for this window is {{actual}}%, below the strict threshold of {{required}}%. L2 history cannot be backfilled — pick a window with better coverage (use the Data Quality Precheck), lower the L2 min coverage, or disable strict L2 quality.', {
+      actual: l2Match[1],
+      required: l2Match[2],
+    })
+  }
+  const klineMatch = message.match(/K-line data quality check failed.*coverage ([\d.]+)% below ([\d.]+)%/)
+  if (klineMatch) {
+    return t('backtestTool.errKlineCoverage', 'K-line coverage for this window is {{actual}}%, below the strict threshold of {{required}}%. Pick a different window or relax the data quality settings.', {
+      actual: klineMatch[1],
+      required: klineMatch[2],
+    })
+  }
+  if (/Not enough .* K-line data/.test(message)) {
+    return t('backtestTool.errNotEnoughKlines', 'Not enough K-line history for this window (warmup + expiry bars required). Choose a later start time or a shorter window.')
+  }
+  return null
+}
+
 function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus }) {
   const { t } = useTranslation()
   const ai_reviewer_statuses = taskStatus.ai_reviewer_statuses || []
@@ -233,6 +285,11 @@ function TaskProgressPanel({ taskStatus }: { taskStatus: EventBacktestTaskStatus
         </div>
       </div>
       <Progress value={taskStatus.progress_pct || 0} className="mt-3" />
+      {taskStatus.status === 'failed' && !isExpired && localizeBacktestError(taskStatus.error_message, t) && (
+        <div className="mt-3 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+          {localizeBacktestError(taskStatus.error_message, t)}
+        </div>
+      )}
       {isExpired && (
         <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           {t('backtestTool.taskExpiredHint', 'This backtest task is expired and is no longer running. Start a new backtest to continue.')}
@@ -413,6 +470,15 @@ function QualityGatePanel({ qualityGate }: { qualityGate?: EventBacktestQualityG
   )
 }
 
+function edgeMonotonicityLabel(
+  verdict: 'monotonic' | 'partial' | 'flat_or_inverted' | undefined,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
+  if (verdict === 'monotonic') return t('backtestTool.monotonic', 'monotonic')
+  if (verdict === 'partial') return t('backtestTool.partialMonotonic', 'partial')
+  return t('backtestTool.flatOrInverted', 'no discrimination')
+}
+
 function ValidationReportPanel({ validationReport }: { validationReport?: EventBacktestValidationReport }) {
   const { t } = useTranslation()
   if (!validationReport) return null
@@ -478,6 +544,38 @@ function ValidationReportPanel({ validationReport }: { validationReport?: EventB
           label={t('backtestTool.expectedDecay', 'Expected Decay')}
           value={formatPct(validationReport.live_decay_estimate.expected_decay_pct)}
           tone={validationReport.live_decay_estimate.expected_decay_pct >= 65 ? 'amber' : 'green'}
+        />
+        <MetricCard
+          label={t('backtestTool.edgeMonotonicity', 'Edge Monotonicity')}
+          value={
+            validationReport.edge_monotonicity?.status === 'ok'
+              ? `${edgeMonotonicityLabel(validationReport.edge_monotonicity.verdict, t)} (${(validationReport.edge_monotonicity.top_minus_bottom ?? 0) >= 0 ? '+' : ''}${validationReport.edge_monotonicity.top_minus_bottom ?? 0}pp)`
+              : t('backtestTool.insufficientSample', 'insufficient sample')
+          }
+          tone={
+            validationReport.edge_monotonicity?.status !== 'ok'
+              ? undefined
+              : validationReport.edge_monotonicity.verdict === 'monotonic'
+                ? 'green'
+                : validationReport.edge_monotonicity.verdict === 'partial'
+                  ? 'amber'
+                  : 'red'
+          }
+        />
+        <MetricCard
+          label={t('backtestTool.thresholdSensitivity', 'Threshold Sensitivity')}
+          value={
+            validationReport.threshold_sensitivity?.status === 'ok'
+              ? `${t('backtestTool.maxDelta', 'max Δ')} ${Math.max(...(validationReport.threshold_sensitivity.dimensions || []).map(d => Math.abs(d.win_rate_delta)), 0).toFixed(1)}pp`
+              : t('backtestTool.insufficientSample', 'insufficient sample')
+          }
+          tone={
+            validationReport.threshold_sensitivity?.status !== 'ok'
+              ? undefined
+              : Math.max(...(validationReport.threshold_sensitivity.dimensions || []).map(d => Math.abs(d.win_rate_delta)), 0) > 15
+                ? 'amber'
+                : 'green'
+          }
         />
       </div>
       {validationReport.warnings.length > 0 && (

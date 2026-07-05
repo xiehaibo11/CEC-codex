@@ -3,16 +3,16 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from api.auth_dependencies import get_account_for_current_user, get_current_user
 from database.connection import get_db
-from database.models import HibtWallet, User
+from database.models import User
 from services.hyperliquid_environment import get_global_trading_mode
 
-from ._shared import _get_client, logger, router
+from ._shared import _get_client, _resolve_wallet, logger, router
 
 
 class ManualOrderRequest(BaseModel):
@@ -32,15 +32,16 @@ class ManualOrderRequest(BaseModel):
         populate_by_name = True
 
 
-def _resolve_wallet(db: Session, account_id: int, environment: str) -> HibtWallet:
-    wallet = db.query(HibtWallet).filter(
-        HibtWallet.account_id == account_id,
-        HibtWallet.environment == environment,
-        HibtWallet.is_active == "true",
-    ).first()
-    if not wallet:
-        raise HTTPException(status_code=404, detail=f"No {environment} HiBT wallet configured")
-    return wallet
+class CancelOrderRequest(BaseModel):
+    """Request model for cancelling a HiBT order; one identifier required."""
+
+    symbol: str = Field(..., description="Asset symbol, e.g. BTC")
+    order_id: Optional[str] = Field(None, alias="orderId")
+    custom_id: Optional[str] = Field(None, alias="customId")
+    position_id: Optional[str] = Field(None, alias="positionId")
+
+    class Config:
+        populate_by_name = True
 
 
 @router.post("/accounts/{account_id}/order")
@@ -130,3 +131,107 @@ def _find_position(positions: list[dict], symbol: str) -> dict | None:
             continue
         return position
     return None
+
+
+@router.post("/accounts/{account_id}/cancel-order")
+def cancel_order(
+    account_id: int,
+    request: CancelOrderRequest,
+    environment: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cancel an active HiBT order by order/custom/position ID."""
+    if not (request.order_id or request.custom_id or request.position_id):
+        raise HTTPException(status_code=400, detail="orderId, customId or positionId is required")
+    if not environment:
+        environment = get_global_trading_mode(db)
+    get_account_for_current_user(account_id, current_user, db)
+    wallet = _resolve_wallet(db, account_id, environment)
+
+    try:
+        return _get_client(wallet).cancel_order(
+            symbol=request.symbol,
+            order_id=request.order_id,
+            custom_id=request.custom_id,
+            position_id=request.position_id,
+        )
+    except Exception as e:
+        logger.error("HiBT cancel order failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/accounts/{account_id}/close-all")
+def close_all_positions(
+    account_id: int,
+    symbol: str,
+    environment: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Close all HiBT positions for a symbol in one call."""
+    if not environment:
+        environment = get_global_trading_mode(db)
+    get_account_for_current_user(account_id, current_user, db)
+    wallet = _resolve_wallet(db, account_id, environment)
+
+    try:
+        order_ids = _get_client(wallet).close_all_positions(symbol)
+        return {"order_ids": order_ids, "symbol": symbol.upper(), "environment": environment}
+    except Exception as e:
+        logger.error("HiBT close all positions failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/accounts/{account_id}/open-orders")
+def get_open_orders(
+    account_id: int,
+    symbol: Optional[str] = None,
+    environment: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List unfinished HiBT orders, optionally filtered by symbol."""
+    if not environment:
+        environment = get_global_trading_mode(db)
+    get_account_for_current_user(account_id, current_user, db)
+    wallet = _resolve_wallet(db, account_id, environment)
+
+    try:
+        orders = _get_client(wallet).get_open_orders(symbol=symbol)
+        return {"orders": orders, "environment": environment}
+    except Exception as e:
+        logger.error("HiBT open orders query failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/accounts/{account_id}/order-history")
+def get_order_history(
+    account_id: int,
+    symbol: str,
+    start_time: Optional[int] = None,
+    end_time: Optional[int] = None,
+    page_index: Optional[int] = None,
+    page_size: Optional[int] = Query(None, le=50),
+    environment: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Query completed HiBT orders (paginated; start/end in seconds)."""
+    if not environment:
+        environment = get_global_trading_mode(db)
+    get_account_for_current_user(account_id, current_user, db)
+    wallet = _resolve_wallet(db, account_id, environment)
+
+    try:
+        result = _get_client(wallet).get_order_history(
+            symbol=symbol,
+            start_time=start_time,
+            end_time=end_time,
+            page_index=page_index,
+            page_size=page_size,
+        )
+        return {**result, "environment": environment}
+    except Exception as e:
+        logger.error("HiBT order history query failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))

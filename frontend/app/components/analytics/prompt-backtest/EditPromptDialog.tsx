@@ -4,6 +4,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -31,6 +32,9 @@ export default function EditPromptDialog({
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>{t('promptBacktest.editPrompt', 'Edit Prompt')}</DialogTitle>
+          <DialogDescription>
+            {t('promptBacktest.editPromptDesc', "Edit this record's prompt text, then save it back to the workspace.")}
+          </DialogDescription>
         </DialogHeader>
         {editingRecord && (
           <div className="space-y-4">

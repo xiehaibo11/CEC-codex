@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
+import { Loader2, ShieldCheck } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { CoinGlassEventContractCapability, EventContractSymbol, HyperAiProfile } from '@/lib/api'
+import type {
+  CoinGlassEventContractCapability,
+  DataQualityPreview,
+  EventContractSymbol,
+  HyperAiProfile,
+} from '@/lib/api'
 
 import { ToggleRow } from './shared'
 import type { FormState } from './types'
@@ -25,6 +32,9 @@ type Props = {
   loadingCoinGlassCapability: boolean
   loadingSymbols: boolean
   updateForm: <K extends keyof FormState>(key: K, value: FormState[K]) => void
+  qualityPreview: DataQualityPreview | null
+  checkingQuality: boolean
+  onCheckDataQuality: () => void
 }
 
 export function BacktestConfigPanel({
@@ -37,6 +47,9 @@ export function BacktestConfigPanel({
   loadingCoinGlassCapability,
   loadingSymbols,
   updateForm,
+  qualityPreview,
+  checkingQuality,
+  onCheckDataQuality,
 }: Props) {
   const { t } = useTranslation()
   const coinGlassAvailable = coinglassCapability?.available === true
@@ -211,6 +224,71 @@ export function BacktestConfigPanel({
           </div>
         </div>
 
+        <div className="rounded-md border p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {t('backtestTool.dataQualityTitle', 'Data Quality Precheck')}
+            </div>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={checkingQuality} onClick={onCheckDataQuality}>
+              {checkingQuality && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              {t('backtestTool.checkDataQuality', 'Check Coverage')}
+            </Button>
+          </div>
+          {qualityPreview ? (
+            <div className="space-y-1.5 text-xs">
+              {([
+                ['kline', t('backtestTool.klineCoverage', 'K-line'), qualityPreview.kline],
+                ['l2', t('backtestTool.l2Source', 'L2 Orderbook'), qualityPreview.l2],
+                ['coinglass', 'CoinGlass', qualityPreview.coinglass],
+              ] as const).map(([source, label, audit]) => {
+                if (!audit) return null
+                const blocked = qualityPreview.would_block.some(item => item.source === source)
+                const warned = (audit.warnings || []).length > 0
+                const tone = blocked ? 'text-red-600' : warned ? 'text-amber-600' : 'text-green-600'
+                return (
+                  <div key={source} className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className={`font-medium ${tone}`}>
+                      {audit.coverage_pct.toFixed(2)}%
+                      {audit.min_required_coverage_pct != null && ` / ≥${audit.min_required_coverage_pct}%`}
+                      {blocked
+                        ? ` · ${t('backtestTool.qualityWouldBlock', 'will abort run')}`
+                        : warned
+                          ? ` · ${t('backtestTool.qualityWarning', 'warning')}`
+                          : ` · ${t('backtestTool.qualityPass', 'OK')}`}
+                    </span>
+                  </div>
+                )
+              })}
+              {(() => {
+                const sanitize = qualityPreview.kline?.sanitize
+                if (!sanitize || (sanitize.dropped_invalid_bars === 0 && sanitize.dropped_duplicate_bars === 0)) return null
+                return (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">{t('backtestTool.sanitizeLabel', 'Cleaning')}</span>
+                    <span className={sanitize.dropped_invalid_bars > 0 ? 'font-medium text-amber-600' : 'text-muted-foreground'}>
+                      {t('backtestTool.sanitizeSummary', 'deduped {{dups}} · dropped {{invalid}} corrupt bars', {
+                        dups: sanitize.dropped_duplicate_bars,
+                        invalid: sanitize.dropped_invalid_bars,
+                      })}
+                    </span>
+                  </div>
+                )
+              })()}
+              {!qualityPreview.ok && (
+                <p className="text-amber-700 dark:text-amber-400">
+                  {t('backtestTool.qualitySuggestion', 'Options: pick a window with better coverage, lower the min coverage threshold, or turn off strict quality mode (results will be labeled lower-credibility).')}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t('backtestTool.dataQualityHint', 'Checks kline/L2/CoinGlass coverage for the selected window before you run, so strict quality gates do not abort the run mid-flight.')}
+            </p>
+          )}
+        </div>
+
         <div className="space-y-1">
           <Label className="text-xs">{t('backtestTool.startTime', 'Start Time')}</Label>
           <Input type="datetime-local" value={form.start_time} onChange={event => updateForm('start_time', event.target.value)} />
@@ -289,7 +367,17 @@ export function BacktestConfigPanel({
             <Label className="text-xs">{t('backtestTool.slippage', 'Slippage bps')}</Label>
             <Input type="number" value={form.slippage_bps} onChange={event => updateForm('slippage_bps', Number(event.target.value))} />
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t('backtestTool.impactCost', 'Impact bps')}</Label>
+            <Input type="number" step="0.5" value={form.impact_cost_bps} onChange={event => updateForm('impact_cost_bps', Number(event.target.value))} />
+          </div>
         </div>
+
+        {(Number(form.fee_rate) <= 0 || Number(form.slippage_bps) < 2 || Number(form.impact_cost_bps) < 0.5) && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            {t('backtestTool.costFloorHint', 'Execution-cost floors are enforced at run time: fee ≥ 0.1%, slippage ≥ 2 bps, impact ≥ 0.5 bps, delay ≥ 3s. Values below the floor are raised automatically.')}
+          </p>
+        )}
 
         <div className="grid gap-2">
           <ToggleRow label={t('backtestTool.nonOverlapping', 'One bet at a time (independent samples)')} checked={form.non_overlapping_only} onChange={value => updateForm('non_overlapping_only', value)} />

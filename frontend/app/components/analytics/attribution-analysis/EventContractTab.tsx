@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import EventPaperTraderCard from '../EventPaperTraderCard'
 import { getEventContractAttribution } from './api'
 import type { EventContractAttributionResponse, EventContractDimensionRow } from './types'
 
@@ -28,19 +29,29 @@ export default function EventContractTab() {
     }
   }, [])
 
+  // The live paper-trader card always renders; only the settled-bet
+  // attribution section below it depends on the fetch result.
   if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading...</div>
+    return (
+      <div className="space-y-6">
+        <EventPaperTraderCard />
+        <div className="text-center py-8 text-muted-foreground">Loading...</div>
+      </div>
+    )
   }
 
   if (!data || data.overview.n === 0) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-muted-foreground text-center">
-            {t('attribution.eventContract.noData', 'No settled event contract bets yet')}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <EventPaperTraderCard />
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center">
+              {t('attribution.eventContract.noData', 'No settled event contract bets yet')}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -48,6 +59,7 @@ export default function EventContractTab() {
 
   return (
     <div className="space-y-6">
+      <EventPaperTraderCard />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">

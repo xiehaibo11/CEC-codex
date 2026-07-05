@@ -249,6 +249,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "weighted_consensus_rate": weighted_consensus_rate,
             "consensus_rate": consensus_rate,
             "edge_score": professional["edge_score"],
+            "edge_score_raw": professional["edge_score_raw"],
             "risk_score": professional["risk_score"],
             "execution_score": professional["execution_score"],
             "decision_grade": professional["decision_grade"],
@@ -256,6 +257,9 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "veto_reasons": veto_reasons,
             "decision_diagnostics": professional["decision_diagnostics"],
             "allow_trade": allow_trade,
+            "exhaustion_reversal": exhaustion_reversal,
+            "reversal_evidence_score": features.get("coinglass_reversal_score", 0.0),
+            "indicator_reversal_score": features.get("indicator_reversal_score", 0.0),
             "signal_type": signal_type,
             "signal_strength": round(signal_strength, 2),
             "future_5m_long_probability": round(long_probability, 2),
@@ -346,7 +350,25 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
 
         risk_score = self._professional_risk_score(features)
         execution_score = self._professional_execution_score(cfg, features)
-        edge_score = self._clamp_score(
+        # MA-cross textbook confirmation trio: a fully confirmed cross that
+        # agrees with the setup direction is corroboration; a confirmed cross
+        # against it is a contradiction; a whipsaw (re-cross inside the
+        # lookback) means the direction is undecidable and reads as noise.
+        ma_cross_component = 0.0
+        ma_dir = features.get("ma_cross_direction")
+        if features.get("ma_cross_whipsaw"):
+            ma_cross_component = -6.0
+        elif features.get("ma_cross_confirmed"):
+            if ma_dir == top_direction:
+                ma_cross_component = 6.0
+            elif top_direction in ("long", "short"):
+                ma_cross_component = -10.0
+        # Component sum can reach ~146, so the clamped score saturates at 100
+        # for nearly every accepted setup. Keep the clamped score for all
+        # existing gates (behavior unchanged) but record the raw score too -
+        # it is the only version with enough spread to measure whether the
+        # scoring model actually rank-orders outcomes (edge monotonicity).
+        edge_score_raw = (
             38.0
             + vote_rate * 0.45
             + avg_confidence * 0.20
@@ -354,8 +376,10 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             + volume_component
             + max(0.0, 45.0 - risk_score) * 0.10
             + directional_bonus
+            + ma_cross_component
             - len(veto_reasons) * 32.0
         )
+        edge_score = self._clamp_score(edge_score_raw)
         confidence = self._clamp_score(edge_score * 0.72 + execution_score * 0.18 + (100.0 - risk_score) * 0.10)
 
         hard_veto_count = len(veto_reasons)
@@ -394,6 +418,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "trend_component": round(trend_component, 2),
             "volume_component": round(volume_component, 2),
             "avg_confidence": round(avg_confidence, 2),
+            "ma_cross_component": round(ma_cross_component, 2),
             "risk_veto_count": hard_veto_count,
             "composite_score": round(composite_score, 2),
             "edge_threshold": 75,
@@ -403,6 +428,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         }
         return {
             "edge_score": round(edge_score, 2),
+            "edge_score_raw": round(edge_score_raw, 2),
             "risk_score": round(risk_score, 2),
             "execution_score": round(execution_score, 2),
             "confidence": round(confidence, 2),
@@ -425,6 +451,8 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         )
         if bool(features.get("mtf_conflict")):
             risk_score += 18.0
+        if bool(features.get("ma_cross_whipsaw")):
+            risk_score += 8.0
         if float(features.get("volume_ratio") or 0.0) < 0.75:
             risk_score += 12.0
         if abs(float(features.get("cvd_proxy") or 0.0)) < 0.08:
@@ -586,6 +614,12 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         vol_avg = self._mean(volumes[-30:-1]) or 1
         volume_ratio = volumes[-1] / vol_avg if vol_avg else 1
         atr_pct = self._atr_pct(history[-30:])
+        ma_cross = self._ma_cross_state(closes, atr_pct)
+        macd = self._macd_state(closes)
+        boll = self._bollinger_state(closes)
+        rsi_divergence = self._rsi_divergence(closes)
+        obv = self._obv_state(closes, volumes)
+        double_pattern = self._double_extreme_state(highs, lows, closes, atr_pct)
         support = min(lows[-31:-1]) if len(lows) > 31 else min(lows[:-1] or lows)
         resistance = max(highs[-31:-1]) if len(highs) > 31 else max(highs[:-1] or highs)
         range_width_pct = (resistance - support) / close * 100 if close else 0
@@ -593,7 +627,10 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         range_pos = max(0, min(1, range_pos))
         vwap = self._vwap(history[-60:])
         cvd_proxy_raw = self._signed_volume_delta(history[-30:])
-        flow = last.get("coinglass") or {}
+        # Flow evidence source priority: CoinGlass (paid, includes liquidation)
+        # > local market-flow collector (real taker/OI/funding, 15s resolution)
+        # > nothing. Field names are interchangeable by design.
+        flow = last.get("coinglass") or last.get("flow") or {}
         cvd_value = flow.get("cvd_delta_norm")
         # Keep cvd_proxy at the OHLCV 1m-resolution measure so the 30 rule-based AI
         # votes don't lose fidelity when CG is on (CG is 30m forward-filled, would
@@ -601,6 +638,12 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         # The CG CVD signal still contributes via coinglass_reversal_score below.
         cvd_proxy = cvd_proxy_raw
         cvd_source = "OHLCV proxy"
+        if flow.get("source") == "local_market_flow" and cvd_value is not None:
+            # Local taker aggregates are 15s resolution - strictly higher
+            # fidelity than the OHLCV proxy, so real CVD takes over here
+            # (unlike 30m forward-filled CoinGlass, which would pin values).
+            cvd_proxy = float(cvd_value)
+            cvd_source = "Local flow"
         taker_delta = flow.get("taker_delta_norm")
         taker_buy_sell_ratio = flow.get("taker_buy_sell_ratio")
         oi_change_pct = flow.get("oi_change_pct")
@@ -710,6 +753,28 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
                     cg_components.append(-15)
 
         coinglass_reversal_score = max(-60.0, min(60.0, sum(cg_components))) if cg_components else 0.0
+
+        # Indicator-based reversal evidence from real OHLCV+volume, same sign
+        # convention as coinglass_reversal_score: positive supports LONG
+        # exhaustion (fade a top), negative supports SHORT exhaustion (fade a
+        # bottom). RSI divergence, an OBV/MA cross, and W/M patterns are the
+        # classic early-reversal reads; each votes independently, capped +/-60.
+        ind_components: List[float] = []
+        if rsi_divergence == "bearish":
+            ind_components.append(20.0)
+        elif rsi_divergence == "bullish":
+            ind_components.append(-20.0)
+        if obv["cross"] == "down":
+            ind_components.append(15.0)
+        elif obv["cross"] == "up":
+            ind_components.append(-15.0)
+        if double_pattern["pattern"] == "double_top":
+            ind_components.append(25.0 if double_pattern["confirmed"] else 10.0)
+        elif double_pattern["pattern"] == "double_bottom":
+            ind_components.append(-25.0 if double_pattern["confirmed"] else -10.0)
+        indicator_reversal_score = (
+            max(-60.0, min(60.0, sum(ind_components))) if ind_components else 0.0
+        )
         # Exhaustion detection: strong consensus plus overextension can mark an extreme likely to reverse.
         # trap_risk > 28: price getting "trapped" at extremes. signal_strength >= 89 gate applied later.
         # range_pos extremes are implicit via max_trade_range_risk=45 edge quality gate.
@@ -742,21 +807,26 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         cg_boost_long  = cg_available and coinglass_reversal_score >=  25
         cg_boost_short = cg_available and coinglass_reversal_score <= -25
 
-        cg_boosted_long = (
-            cg_boost_long
+        # Indicator evidence (RSI divergence / OBV cross / W-M pattern) widens
+        # the gate under the same additive rule: corroborate, never cancel.
+        evidence_boost_long = cg_boost_long or indicator_reversal_score >= 25
+        evidence_boost_short = cg_boost_short or indicator_reversal_score <= -25
+
+        evidence_boosted_long = (
+            evidence_boost_long
             and trend_score > 0.10 and volume_ratio > 1.1
             and rsi > 63 and ret15 < 0.25
             and trap_risk > 18
         )
-        cg_boosted_short = (
-            cg_boost_short
+        evidence_boosted_short = (
+            evidence_boost_short
             and trend_score < -0.10 and volume_ratio > 1.1
             and rsi < 37 and ret15 > -0.25
             and trap_risk > 18
         )
 
-        exhaustion_long  = ohlcv_exhaustion_long  or cg_boosted_long
-        exhaustion_short = ohlcv_exhaustion_short or cg_boosted_short
+        exhaustion_long  = ohlcv_exhaustion_long  or evidence_boosted_long
+        exhaustion_short = ohlcv_exhaustion_short or evidence_boosted_short
 
         if fake_breakout_risk > 60:
             market_state = "fake_breakout"
@@ -804,6 +874,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "liquidation_imbalance": liquidation_imbalance if liquidation_imbalance is not None else 0.0,
             "coinglass_available_metrics": flow.get("available_metrics", []),
             "coinglass_lag_seconds": flow.get("lag_seconds"),
+            "flow_source": flow.get("source"),
             "l2_available": l2_available,
             "l2_source": l2_source,
             "l2_lag_seconds": l2.get("lag_seconds"),
@@ -813,6 +884,27 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "bid_depth_10": l2.get("bid_depth_10"),
             "ask_depth_10": l2.get("ask_depth_10"),
             "trend_score": trend_score,
+            "ma_cross_direction": ma_cross["direction"],
+            "ma_cross_bars_since": ma_cross["bars_since"],
+            "ma_cross_confirmations": ma_cross["confirmations"],
+            "ma_cross_confirmed": ma_cross["confirmed"],
+            "ma_cross_whipsaw": ma_cross["whipsaw"],
+            "ma_cross_angle_pct_per_bar": ma_cross["angle_pct_per_bar"],
+            "ma_cross_score": ma_cross["score"],
+            "macd_line": macd["line"],
+            "macd_signal_line": macd["signal"],
+            "macd_hist": macd["hist"],
+            "macd_cross": macd["cross"],
+            "bb_percent_b": boll["percent_b"],
+            "bb_bandwidth_pct": boll["bandwidth_pct"],
+            "bb_band_walk": boll["band_walk"],
+            "rsi_divergence": rsi_divergence,
+            "obv_above_ma": obv["above_ma"],
+            "obv_cross": obv["cross"],
+            "double_pattern": double_pattern["pattern"],
+            "double_pattern_confirmed": double_pattern["confirmed"],
+            "double_pattern_neckline": double_pattern["neckline"],
+            "indicator_reversal_score": indicator_reversal_score,
             "exhaustion_long": exhaustion_long,
             "exhaustion_short": exhaustion_short,
             "coinglass_reversal_score": coinglass_reversal_score,

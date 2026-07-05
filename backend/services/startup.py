@@ -165,6 +165,15 @@ def initialize_services():
         print("Binance WebSocket collector started")
         logger.info(f"[Binance] WebSocket collector started with symbols: {binance_watchlist}")
 
+        # Start HiBT market-flow collector (REST polling of latest public deals)
+        from services.exchanges.hibt_collector import hibt_collector
+        from services.hibt_symbol_service import get_selected_symbols as get_hibt_selected_symbols
+        hibt_watchlist = get_hibt_selected_symbols()
+        print(f"Starting HiBT market-flow collector with HiBT watchlist: {hibt_watchlist}")
+        hibt_collector.start(symbols=hibt_watchlist if hibt_watchlist else ["BTC"])
+        print("HiBT market-flow collector started")
+        logger.info(f"[HiBT] Market-flow collector started with symbols: {hibt_watchlist}")
+
         # Start Factor Computation Engine (if enabled)
         from config.settings import FACTOR_ENGINE_ENABLED
         if FACTOR_ENGINE_ENABLED:
@@ -257,6 +266,10 @@ def shutdown_services():
         # Stop Binance WebSocket collector
         from services.exchanges.binance_ws_collector import binance_ws_collector
         binance_ws_collector.stop()
+
+        # Stop HiBT market-flow collector
+        from services.exchanges.hibt_collector import hibt_collector
+        hibt_collector.stop()
 
         # Stop News Collector
         from services.news_collector_service import news_collector_service

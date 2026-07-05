@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -34,3 +34,21 @@ class HibtWallet(Base):
     )
 
     account = relationship("Account")
+
+
+class HibtBackfillTask(Base):
+    """Store HiBT K-line backfill task status."""
+
+    __tablename__ = "hibt_backfill_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbols = Column(String(200), nullable=False)  # Comma-separated symbols
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(
+        TIMESTAMP,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )

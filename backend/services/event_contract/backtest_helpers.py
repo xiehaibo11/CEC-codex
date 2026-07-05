@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timezone
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy import text
 
 from services.event_contract.backtest_quality import build_backtest_quality_gate
 from services.event_contract.backtest_research import build_backtest_research_report
@@ -17,6 +20,75 @@ from services.event_contract.constants import ENGINE_VERSION
 
 
 class EventContractBacktestHelperMixin:
+    def _window_reuse_report(self, db, cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """Count prior runs that tested a substantially overlapping window.
+
+        Repeatedly re-optimizing parameters against the same historical window
+        is data snooping: the more configs tried on one window, the more the
+        best result is a fit to that window's noise. This audit makes the
+        re-optimization pressure visible instead of pretending each run is the
+        first look at the data.
+        """
+        start = cfg["start_time"]
+        end = cfg["end_time"]
+        window_seconds = max((end - start).total_seconds(), 1)
+        # Columns are naive-UTC timestamps and summary is stored as TEXT JSON.
+        if start.tzinfo is not None:
+            start = start.astimezone(timezone.utc).replace(tzinfo=None)
+        if end.tzinfo is not None:
+            end = end.astimezone(timezone.utc).replace(tzinfo=None)
+        try:
+            row = db.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS runs,
+                           COUNT(DISTINCT summary::jsonb->>'config_hash') AS configs,
+                           COUNT(DISTINCT summary::jsonb->>'strategy_fingerprint') AS fingerprints
+                    FROM event_contract_backtest_runs
+                    WHERE symbol = :symbol
+                      AND exchange = :exchange
+                      AND period = :period
+                      AND status IN ('completed', 'partial')
+                      AND summary IS NOT NULL
+                      AND GREATEST(
+                            EXTRACT(EPOCH FROM (LEAST(end_time, :end) - GREATEST(start_time, :start))),
+                            0
+                          ) >= :half_window
+                    """
+                ),
+                {
+                    "symbol": cfg["symbol"],
+                    "exchange": cfg["exchange"],
+                    "period": cfg["period"],
+                    "start": start,
+                    "end": end,
+                    "half_window": window_seconds * 0.5,
+                },
+            ).mappings().first()
+        except Exception:  # noqa: BLE001 - audit must never break the run itself
+            return {"available": False}
+
+        prior_runs = int(row["runs"] or 0)
+        distinct_configs = int(row["configs"] or 0)
+        distinct_fingerprints = int(row["fingerprints"] or 0)
+        # Risk keys off strategy fingerprints (window-agnostic): frozen-parameter
+        # holdout/rolling-validation reruns share a fingerprint and are NOT
+        # snooping, while each genuinely re-tuned parameter set adds one.
+        if distinct_fingerprints >= 10:
+            risk = "high"
+        elif distinct_fingerprints >= 3:
+            risk = "medium"
+        else:
+            risk = "low"
+        return {
+            "available": True,
+            "overlap_threshold_pct": 50,
+            "prior_runs": prior_runs,
+            "distinct_configs": distinct_configs,
+            "distinct_fingerprints": distinct_fingerprints,
+            "overfit_risk": risk,
+        }
+
     def _build_summary(
         self,
         cfg: Dict[str, Any],
@@ -90,6 +162,11 @@ class EventContractBacktestHelperMixin:
             "strategy_fingerprint": self._strategy_fingerprint(cfg),
             "platform": cfg.get("platform", "custom"),
             "non_overlapping_only": cfg.get("non_overlapping_only", True),
+            "fee_rate": cfg["fee_rate"],
+            "slippage_bps": cfg["slippage_bps"],
+            "impact_cost_bps": cfg.get("impact_cost_bps", 0),
+            "delay_seconds": cfg["delay_seconds"],
+            "enforced_cost_floors": cfg.get("_enforced_cost_floors", []),
             "reviewer_weights_mode": cfg.get("reviewer_weights_mode", "pre_window"),
             "data_quality": data_quality,
             "consensus_mode": cfg["consensus_mode"],
