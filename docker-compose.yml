@@ -20,9 +20,58 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pass through host proxy settings (empty if host has none)
+        http_proxy: ${http_proxy-}
+        https_proxy: ${https_proxy-}
+        HTTP_PROXY: ${HTTP_PROXY-}
+        HTTPS_PROXY: ${HTTPS_PROXY-}
+        ALL_PROXY: ${ALL_PROXY-}
+    container_name: cec-codex-app
+    environment:
+      # In-network database connection (container talks to the postgres service
+      # directly on 5432; the host-side 5434 mapping is for local `pnpm dev` only)
+      DATABASE_URL: postgresql://alpha_user:alpha_pass@postgres:5432/alpha_arena
+      SNAPSHOT_DATABASE_URL: postgresql://alpha_user:alpha_pass@postgres:5432/alpha_snapshots
+      # Hyperliquid Builder Fee Configuration
+      HYPERLIQUID_BUILDER_ADDRESS: "0x012E82f81e506b8f0EF69FF719a6AC65822b5924"
+      HYPERLIQUID_BUILDER_FEE: "30"
+      # Binance Broker Configuration
+      BINANCE_BROKER_ID: "tbyPbcd9"
+      # Factor Engine
+      FACTOR_ENGINE_ENABLED: "true"
+      # Hyper Insight login-based integration
+      HYPER_INSIGHT_API_BASE_URL: ${HYPER_INSIGHT_API_BASE_URL:-https://hyper.akooi.com}
+      # Explicitly disable all proxy settings in container
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      ALL_PROXY: ""
+      NO_PROXY: ""
+      no_proxy: ""
+    ports:
+      - "127.0.0.1:8802:8802"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Encryption key persistence — losing this invalidates stored credentials
+      - cec-codex-appdata:/app/data
+      - ./logs:/app/logs
+    networks:
+      - cec-codex-net
+    restart: unless-stopped
+
 volumes:
   cec-codex-pgdata:
     name: cec-codex-pgdata
+  cec-codex-appdata:
+    name: cec-codex-appdata
 
 networks:
   cec-codex-net:
