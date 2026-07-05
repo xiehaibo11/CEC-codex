@@ -2,7 +2,10 @@
 Order methods for BinanceTradingClient.
 """
 import logging
+import time
 from typing import Any, Dict, List, Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +78,14 @@ class BinanceTradingOrdersMixin:
             )
 
         # Build order params
+        client_order_id = f"x-{self.broker_id}-{self._get_timestamp()}"
         params = {
             "symbol": binance_symbol,
             "side": side.upper(),
             "type": order_type.upper(),
             "quantity": str(rounded_qty),
             # Add broker ID prefix for commission tracking
-            "newClientOrderId": f"x-{self.broker_id}-{self._get_timestamp()}",
+            "newClientOrderId": client_order_id,
         }
 
         if reduce_only:
@@ -103,7 +107,7 @@ class BinanceTradingOrdersMixin:
                     "Position mode mismatch: Your Binance account uses Hedge Mode (dual position). "
                     "Please switch to One-way Mode: Binance App → Futures → Settings → Position Mode → One-way Mode"
                 )
-            raise
+            result = self._recover_ambiguous_order(binance_symbol, client_order_id, e)
 
         logger.info(
             f"[BINANCE] Order placed: {side} {rounded_qty} {binance_symbol} "
@@ -126,6 +130,50 @@ class BinanceTradingOrdersMixin:
             "environment": self.environment,
             "raw_response": result,
         }
+
+    def _recover_ambiguous_order(
+        self,
+        binance_symbol: str,
+        client_order_id: str,
+        original_exc: Exception,
+    ) -> Dict[str, Any]:
+        """After a gateway 5xx or transport error the order may still have
+        reached the matching engine. Query it by client order ID: if it exists,
+        return it as the placement result so a filled order is never
+        mis-reported as a failure (which would leave the position without its
+        TP/SL). If it does not exist, re-raise the original error — we never
+        blindly re-submit, to rule out duplicate positions.
+        """
+        from services.binance_trading_client import BinanceAPIError
+
+        ambiguous = isinstance(original_exc, requests.exceptions.RequestException) or (
+            isinstance(original_exc, BinanceAPIError)
+            and (original_exc.status_code or 0) >= 500
+        )
+        if not ambiguous:
+            raise original_exc
+
+        time.sleep(1)  # give the matching engine a moment before verifying
+        try:
+            order = self._request(
+                "GET",
+                "/fapi/v1/order",
+                {"symbol": binance_symbol, "origClientOrderId": client_order_id},
+                signed=True,
+            )
+        except Exception as query_exc:
+            logger.error(
+                f"[BINANCE] Ambiguous order {client_order_id}: verification query "
+                f"failed too ({query_exc}); reporting the original error"
+            )
+            raise original_exc
+
+        logger.warning(
+            f"[BINANCE] Order {client_order_id} reached the exchange despite "
+            f"transport error ({original_exc}); recovered via query, "
+            f"status={order.get('status')}"
+        )
+        return order
 
     def place_stop_order(
         self,
