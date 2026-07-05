@@ -120,6 +120,15 @@ def _run_trader_cycle(
         "exchange": trader.exchange,
         "environment": trader.environment,
     }
+    # The cycle runs without a user context; CoinGlass-enabled strategies need
+    # their key injected the same way authenticated requests get it.
+    if base_config.get("enable_coinglass_features") and not base_config.get("_coinglass_api_key"):
+        from api.coinglass.keys import resolve_background_coinglass_key
+
+        api_key, key_source = resolve_background_coinglass_key(session)
+        if api_key:
+            base_config["_coinglass_api_key"] = api_key
+            base_config["_coinglass_key_source"] = key_source
     cfg = event_contract_service._normalize_config(dict(base_config), prediction=True)
 
     klines = _load_trader_klines(session, trader, now_ts)

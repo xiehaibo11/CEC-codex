@@ -324,6 +324,15 @@ def run_event_backtest_task(task_id: int) -> None:
             if record:
                 config["_coinglass_api_key"] = decrypt_private_key(record.api_key_encrypted)
                 config["_coinglass_key_source"] = "user"
+        if config.get("enable_coinglass_features") and not config.get("_coinglass_api_key"):
+            # Tasks launched by background jobs (rolling validation) carry no
+            # user_id — resolve the key the same way the paper-trader cycle does.
+            from api.coinglass.keys import resolve_background_coinglass_key
+
+            api_key, key_source = resolve_background_coinglass_key(db)
+            if api_key:
+                config["_coinglass_api_key"] = api_key
+                config["_coinglass_key_source"] = key_source
         update_event_backtest_task(
             db,
             task_id,

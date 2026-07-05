@@ -71,3 +71,28 @@ def _upsert_user_key(db: Session, user_id: int, api_key: str, subscription_data:
     )
     db.add(record)
     return record
+
+
+def resolve_background_coinglass_key(db: Session) -> tuple[str, str]:
+    """CoinGlass key for background jobs with no user context (paper-trader
+    cycle, rolling validation). Server key wins; otherwise fall back to the
+    single stored user key — single-tenant deployments have exactly one.
+    With multiple stored keys there is no honest way to pick, so refuse and
+    ask for COINGLASS_API_KEY instead of guessing.
+    """
+    server_key = _server_coinglass_key()
+    if server_key:
+        return server_key, "server"
+    records = db.query(CoinGlassUserKey).limit(2).all()
+    if len(records) == 1:
+        try:
+            return decrypt_private_key(records[0].api_key_encrypted), "user"
+        except Exception:
+            logger.warning("Stored CoinGlass key cannot be decrypted for background use")
+            return "", "none"
+    if len(records) > 1:
+        logger.warning(
+            "Multiple stored CoinGlass user keys; background jobs cannot choose one - "
+            "set COINGLASS_API_KEY on the server"
+        )
+    return "", "none"
