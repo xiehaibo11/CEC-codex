@@ -247,5 +247,14 @@ def main():
         sys.exit(1)
 
 
+def upgrade():
+    """migration_manager entry point — main() without its sys.exit(1), which
+    would raise SystemExit past the runner's `except Exception` and kill boot."""
+    create_hyperliquid_wallets_table()
+    migrate_account_wallets()
+    initialize_global_trading_mode()
+    verify_migration()
+
+
 if __name__ == "__main__":
     main()

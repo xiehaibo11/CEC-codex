@@ -42,6 +42,12 @@ def run_migration(engine):
         print("✅ Made program_execution_logs.binding_id nullable")
 
 
+def upgrade():
+    """migration_manager entry point"""
+    from database.connection import engine
+    run_migration(engine)
+
+
 if __name__ == "__main__":
     # For standalone testing
     import sys

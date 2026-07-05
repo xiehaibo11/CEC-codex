@@ -246,16 +246,16 @@ class HyperliquidStrategyManager(StrategyManager):
 
     def _register_signal_callback(self):
         """Register callback with signal detection service"""
-        logger.warning("[HyperliquidStrategy] _register_signal_callback() called")
+        logger.debug("[HyperliquidStrategy] _register_signal_callback() called")
         if self._signal_callback_registered:
-            logger.warning("[HyperliquidStrategy] Callback already registered, skipping")
+            logger.debug("[HyperliquidStrategy] Callback already registered, skipping")
             return
         try:
             from services.signal_detection_service import signal_detection_service
-            logger.warning(f"[HyperliquidStrategy] Callbacks before register: {len(signal_detection_service._trigger_callbacks)}")
+            logger.debug(f"[HyperliquidStrategy] Callbacks before register: {len(signal_detection_service._trigger_callbacks)}")
             signal_detection_service.subscribe_signal_triggers(self._on_signal_triggered)
             self._signal_callback_registered = True
-            logger.warning(f"[HyperliquidStrategy] Signal trigger callback registered! Callbacks after: {len(signal_detection_service._trigger_callbacks)}")
+            logger.info(f"[HyperliquidStrategy] Signal trigger callback registered ({len(signal_detection_service._trigger_callbacks)} total)")
         except Exception as e:
             logger.error(f"[HyperliquidStrategy] Failed to register signal callback: {e}", exc_info=True)
 

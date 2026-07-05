@@ -97,6 +97,12 @@ def run_migration(engine):
             print("⏭️ binding_id FK already has ON DELETE SET NULL, skipping")
 
 
+def upgrade():
+    """migration_manager entry point"""
+    from database.connection import engine
+    run_migration(engine)
+
+
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, "/home/wwwroot/hyper-alpha-arena-prod/backend")

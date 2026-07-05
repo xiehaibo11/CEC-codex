@@ -79,9 +79,17 @@ def add_environment_field():
         # Step 6: Add UNIQUE constraint on (account_id, environment)
         logger.info("Step 6: Adding UNIQUE constraint on (account_id, environment)...")
         db.execute(text("""
-            ALTER TABLE hyperliquid_wallets
-            ADD CONSTRAINT uq_hyperliquid_wallets_account_environment
-            UNIQUE (account_id, environment)
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'uq_hyperliquid_wallets_account_environment'
+                ) THEN
+                    ALTER TABLE hyperliquid_wallets
+                    ADD CONSTRAINT uq_hyperliquid_wallets_account_environment
+                    UNIQUE (account_id, environment);
+                END IF;
+            END $$
         """))
         db.commit()
         logger.info("✓ UNIQUE constraint added on (account_id, environment)")
@@ -154,6 +162,13 @@ def main():
     except Exception as e:
         logger.error(f"Migration script failed: {e}")
         sys.exit(1)
+
+
+def upgrade():
+    """migration_manager entry point — main() without its sys.exit(1), which
+    would raise SystemExit past the runner's `except Exception` and kill boot."""
+    add_environment_field()
+    verify_migration()
 
 
 if __name__ == "__main__":

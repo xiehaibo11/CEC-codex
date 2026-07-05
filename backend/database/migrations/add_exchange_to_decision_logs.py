@@ -55,5 +55,8 @@ def run():
             print("[Migration] Column 'exchange' already exists in program_execution_logs")
 
 
+# migration_manager entry point
+upgrade = run
+
 if __name__ == "__main__":
     run()

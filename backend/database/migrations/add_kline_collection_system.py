@@ -98,5 +98,10 @@ def migrate():
         print("   - 添加性能优化索引")
         print("   - 创建数据覆盖统计视图")
 
+# migration_manager invokes module.upgrade(); without this alias the script
+# is silently skipped on every boot and the kline_coverage_stats view never
+# gets created
+upgrade = migrate
+
 if __name__ == "__main__":
     migrate()

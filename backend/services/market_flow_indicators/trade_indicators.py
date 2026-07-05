@@ -44,7 +44,7 @@ def _get_cvd_data(
     if not records:
         from datetime import datetime
         logger.warning(
-            f"CVD insufficient data: symbol={symbol}, period={period}, "
+            f"CVD insufficient data: symbol={symbol}, exchange={exchange}, period={period}, "
             f"query_range=[{datetime.utcfromtimestamp(start_time/1000)} - "
             f"{datetime.utcfromtimestamp(current_time_ms/1000)}], records_found=0"
         )

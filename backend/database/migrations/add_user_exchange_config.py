@@ -43,5 +43,8 @@ def migrate():
         conn.commit()
         print("✅ user_exchange_config table created successfully")
 
+# migration_manager entry point
+upgrade = migrate
+
 if __name__ == "__main__":
     migrate()
