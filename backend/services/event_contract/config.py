@@ -173,33 +173,54 @@ class EventContractConfigMixin:
         cfg["stake_amount"] = max(cfg["stake_amount"], 1)
         cfg["initial_balance"] = max(cfg["initial_balance"], cfg["stake_amount"])
         # --- Execution-cost floors -------------------------------------------------
-        # Zero-cost assumptions make every run optimistic: entry slippage and
-        # impact shift the event-contract strike directly, the platform fee
-        # moves the break-even win rate, and the entry delay bounds realistic
-        # fill timing. Floors are enforced (not just warned) so tradability is
-        # always judged with real costs; each enforcement is recorded so the
-        # summary can show which floors were applied.
+        # Zero-cost assumptions make every run optimistic. But the RIGHT cost
+        # model depends on the venue's documented product mechanics:
+        #
+        # Event-contract platforms (hibt, binance_event — sources in
+        # platforms.py): stake-based binary contracts with NO separate trading
+        # fee (the house edge lives in the 0.8 payout), and the strike is set
+        # at the venue index/mark price at confirmation — the stake never
+        # crosses an order book, so book slippage and market impact do not
+        # apply. Forcing perp-style fee/slippage floors onto these venues
+        # would be synthetic data, not conservatism. The honest cost there is
+        # TIME: the confirmation delay (floored below) plus next-bar-open
+        # entry pricing already enforced by the engine.
+        #
+        # Custom/unknown venues keep the conservative perp-style floors.
         enforced_cost_floors = []
-        if cfg["slippage_bps"] < 2.0:
-            enforced_cost_floors.append(
-                {"param": "slippage_bps", "requested": cfg["slippage_bps"], "floored_to": 2.0}
-            )
-            cfg["slippage_bps"] = 2.0
-        if cfg["impact_cost_bps"] < 0.5:
-            enforced_cost_floors.append(
-                {"param": "impact_cost_bps", "requested": cfg["impact_cost_bps"], "floored_to": 0.5}
-            )
-            cfg["impact_cost_bps"] = 0.5
-        if cfg["fee_rate"] <= 0:
-            enforced_cost_floors.append(
-                {"param": "fee_rate", "requested": cfg["fee_rate"], "floored_to": 0.001}
-            )
-            cfg["fee_rate"] = 0.001
+        event_contract_platform = cfg["platform"] in ("hibt", "binance_event")
+        if event_contract_platform:
+            # Defaults (not floors) are perp assumptions too — zero them for
+            # stake-based binary contracts unless the user explicitly priced
+            # some venue-specific cost in.
+            if config.get("impact_cost_bps") is None:
+                cfg["impact_cost_bps"] = 0.0
+            if config.get("slippage_bps") is None:
+                cfg["slippage_bps"] = 0.0
+        if not event_contract_platform:
+            if cfg["slippage_bps"] < 2.0:
+                enforced_cost_floors.append(
+                    {"param": "slippage_bps", "requested": cfg["slippage_bps"], "floored_to": 2.0}
+                )
+                cfg["slippage_bps"] = 2.0
+            if cfg["impact_cost_bps"] < 0.5:
+                enforced_cost_floors.append(
+                    {"param": "impact_cost_bps", "requested": cfg["impact_cost_bps"], "floored_to": 0.5}
+                )
+                cfg["impact_cost_bps"] = 0.5
+            if cfg["fee_rate"] <= 0:
+                enforced_cost_floors.append(
+                    {"param": "fee_rate", "requested": cfg["fee_rate"], "floored_to": 0.001}
+                )
+                cfg["fee_rate"] = 0.001
         if cfg["delay_seconds"] < 3:
             enforced_cost_floors.append(
                 {"param": "delay_seconds", "requested": cfg["delay_seconds"], "floored_to": 3}
             )
             cfg["delay_seconds"] = 3
+        cfg["_platform_cost_model"] = (
+            "event_contract_documented" if event_contract_platform else "custom_floored"
+        )
         # Underscore prefix keeps the floor audit out of _public_config, so two
         # configs with identical effective costs share a fingerprint regardless
         # of what was originally requested.

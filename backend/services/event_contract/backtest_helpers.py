@@ -167,6 +167,7 @@ class EventContractBacktestHelperMixin:
             "impact_cost_bps": cfg.get("impact_cost_bps", 0),
             "delay_seconds": cfg["delay_seconds"],
             "enforced_cost_floors": cfg.get("_enforced_cost_floors", []),
+            "platform_cost_model": cfg.get("_platform_cost_model", "custom_floored"),
             "reviewer_weights_mode": cfg.get("reviewer_weights_mode", "pre_window"),
             "data_quality": data_quality,
             "consensus_mode": cfg["consensus_mode"],
