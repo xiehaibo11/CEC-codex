@@ -58,6 +58,11 @@ class PredictRequest(BaseModel):
     enable_multi_timeframe_filter: bool = True
     enable_volume_filter: bool = True
     enable_cvd_filter: bool = False
+    # Factor-combination entry gate (5m momentum + VWAP deviation trailing quantile)
+    enable_factor_gate: bool = False
+    factor_gate_quantile: float = Field(default=0.6, ge=0.5, le=0.95)
+    factor_gate_lookback: int = Field(default=60, ge=20, le=500)
+    factor_gate_min_history: int = Field(default=40, ge=10, le=500)
     enable_coinglass_features: bool = False
     min_coinglass_coverage_pct: Optional[float] = Field(default=96, ge=0, le=100)
     strict_coinglass_quality: bool = True

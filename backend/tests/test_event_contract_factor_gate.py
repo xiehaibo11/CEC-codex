@@ -97,6 +97,26 @@ def test_gate_veto_forces_hold_in_analysis(svc):
     assert "因子门控" in reasons
 
 
+def test_api_request_schema_carries_gate_fields():
+    """PredictRequest is a whitelist — pydantic silently drops undeclared
+    fields, which is exactly how the gate got stripped on its first deploy
+    (run 2032). Guard the request-model contract explicitly."""
+    from api.event_contract_routes import BacktestRequest
+
+    req = BacktestRequest(
+        symbol="BTC",
+        exchange="binance",
+        start_time="2026-05-01T00:00:00+00:00",
+        end_time="2026-05-02T00:00:00+00:00",
+        enable_factor_gate=True,
+        factor_gate_quantile=0.7,
+    )
+    dumped = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    assert dumped["enable_factor_gate"] is True
+    assert dumped["factor_gate_quantile"] == 0.7
+    assert dumped["factor_gate_lookback"] == 60
+
+
 def test_fingerprint_stable_for_ungated_configs(svc):
     """Gate keys must NOT enter the normalized config when the gate is off —
     existing strategies' fingerprints (rolling-validation keys) depend on it."""
