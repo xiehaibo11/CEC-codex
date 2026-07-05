@@ -1,0 +1,91 @@
+flowchart TB
+  subgraph Triggers["触发来源"]
+    Manual["手动 Dashboard trigger<br/>POST /accounts/{id}/trigger-ai-trade"]
+    Scheduler["APScheduler 自动交易任务"]
+    SignalTrigger["Signal Pool 边沿触发"]
+    ProgramTrigger["Program Trader price update / schedule"]
+    HyperAIChat["Hyper AI 对话工具调用"]
+  end
+
+  subgraph Context["上下文构建"]
+    AccountState["账户 / 资产 / 持仓 / 订单"]
+    MarketContext["K线 / 资金流 / OI / funding / regime"]
+    PromptBinding["PromptTemplate + AccountPromptBinding"]
+    FactorContext["FactorValue / CustomFactor"]
+    NewsContext["NewsArticle / market intelligence"]
+    SignalContext["SignalTriggerLog / pools"]
+  end
+
+  subgraph AI["AI 决策层"]
+    DecisionEngine["services/ai_decision_service<br/>prompt_context + llm_payload + decision_response"]
+    LLM["外部 LLM Provider"]
+    DecisionPersist["save_ai_decision<br/>ai_decision_logs"]
+  end
+
+  subgraph Routing["执行路由"]
+    Dispatcher["place_ai_driven_crypto_order"]
+    PaperRoute["Account.hyperliquid_environment is NULL<br/>paper_trading matcher"]
+    HyperLive["testnet/mainnet<br/>place_ai_driven_hyperliquid_order"]
+    BinanceLive["Binance account<br/>place_ai_driven_binance_order"]
+    HiBTManual["HiBT manual order endpoints<br/>hibt_trading_client"]
+  end
+
+  subgraph Execution["落库与推送"]
+    Orders["orders"]
+    Positions["positions"]
+    Trades["trades"]
+    Snapshots["account_asset_snapshots"]
+    WS["WebSocket/SSE/UI 刷新"]
+  end
+
+  Manual --> Dispatcher
+  Scheduler --> Dispatcher
+  SignalTrigger --> SignalContext
+  SignalContext --> Dispatcher
+  ProgramTrigger --> ProgramSandbox["program_trader<br/>validator + SandboxExecutor + Decision"]
+  ProgramSandbox --> Dispatcher
+  HyperAIChat --> Context
+
+  Dispatcher --> Context
+  Context --> AccountState
+  Context --> MarketContext
+  Context --> PromptBinding
+  Context --> FactorContext
+  Context --> NewsContext
+  Context --> SignalContext
+  Context --> DecisionEngine
+  DecisionEngine --> LLM
+  LLM --> DecisionEngine
+  DecisionEngine --> DecisionPersist
+  DecisionPersist --> Dispatcher
+
+  Dispatcher --> PaperRoute
+  Dispatcher --> HyperLive
+  Dispatcher --> BinanceLive
+  Dispatcher --> HiBTManual
+  PaperRoute --> Orders
+  PaperRoute --> Positions
+  PaperRoute --> Trades
+  HyperLive --> Orders
+  HyperLive --> Positions
+  HyperLive --> Trades
+  BinanceLive --> Orders
+  BinanceLive --> Positions
+  BinanceLive --> Trades
+  HiBTManual --> Orders
+  HiBTManual --> Trades
+  Orders --> Snapshots
+  Positions --> Snapshots
+  Trades --> Snapshots
+  Snapshots --> WS
+
+  classDef trigger fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef context fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef ai fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef route fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Manual,Scheduler,SignalTrigger,ProgramTrigger,HyperAIChat trigger
+  class AccountState,MarketContext,PromptBinding,FactorContext,NewsContext,SignalContext,Context context
+  class DecisionEngine,LLM,DecisionPersist ai
+  class Dispatcher,PaperRoute,HyperLive,BinanceLive,HiBTManual,ProgramSandbox route
+  class Orders,Positions,Trades,Snapshots,WS data

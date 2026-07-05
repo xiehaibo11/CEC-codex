@@ -1,0 +1,36 @@
+sequenceDiagram
+  autonumber
+  participant Proc as uvicorn main:app
+  participant Main as backend/main.py
+  participant AppStart as app_startup.py
+  participant Startup as services/startup.py
+  participant DB as PostgreSQL
+  participant Scheduler as APScheduler
+  participant Services as Collectors / Streams / Bots
+
+  Proc->>Main: import FastAPI app and routers
+  Main->>Main: mount static, add CORS/GZip
+  Proc->>Main: startup event
+  Main->>AppStart: run_startup_tasks()
+  AppStart->>DB: Base.metadata.create_all
+  AppStart->>DB: init snapshot DB
+  AppStart->>DB: run idempotent migrations
+  AppStart->>DB: validate/sync schema
+  AppStart->>DB: seed configs, default user, prompts
+  AppStart->>AppStart: init Hyper AI from env if configured
+  AppStart->>DB: cleanup leftover backfill tasks
+  AppStart->>Startup: initialize_services()
+  Startup->>Scheduler: start scheduler and interval jobs
+  Startup->>Services: refresh symbol catalogs
+  Startup->>Services: start market stream and pub/sub subscribers
+  Startup->>Services: start strategy manager
+  Startup->>Services: start account snapshots, kline collector, market-flow collectors
+  Startup->>Services: start factor engine, news collector, event paper trader
+  Main->>Services: restore Telegram/Discord adapters
+
+  Proc->>Main: shutdown event
+  Main->>Services: stop runtime monitor
+  Main->>Startup: shutdown_services()
+  Startup->>Services: stop strategy manager, market stream, collectors, news
+  Startup->>Scheduler: stop scheduler
+  Main->>Services: stop Discord gateway

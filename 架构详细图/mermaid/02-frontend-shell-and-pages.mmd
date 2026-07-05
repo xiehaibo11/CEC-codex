@@ -1,0 +1,50 @@
+flowchart TB
+  Main["frontend/app/main.tsx<br/>应用初始化"] --> Providers["AppProviders.tsx<br/>AuthProvider<br/>ExchangeProvider<br/>TradingModeProvider<br/>ArenaDataProvider<br/>Toaster"]
+  Main --> Route["useHashRoute.ts<br/>hash 路由<br/>默认 hyper-ai"]
+  Main --> AuthGate["登录与初始化门控<br/>AuthContext + isAuthenticated<br/>SplashScreen + Hyper AI Onboarding"]
+  Providers --> AppShell["AppShell.tsx<br/>Header + Sidebar + MainContent"]
+  Route --> AppShell
+  AuthGate --> AppShell
+
+  AppShell --> Sidebar["components/layout/Sidebar.tsx<br/>截图左侧导航来源"]
+  AppShell --> Header["components/layout/Header.tsx<br/>页面标题 / 账户选择"]
+  AppShell --> MainContent["MainContent<br/>lazy-loaded page views"]
+
+  Sidebar --> NavHyper["Hyper AI<br/>page=hyper-ai"]
+  Sidebar --> NavDash["数据看板<br/>page=comprehensive"]
+  Sidebar --> NavAITrader["AI交易员<br/>page=trader-management"]
+  Sidebar --> NavPrompt["提示词策略<br/>page=prompt-management"]
+  Sidebar --> NavProgram["程序化交易<br/>page=program-trader"]
+  Sidebar --> NavSignal["信号系统<br/>page=signal-management"]
+  Sidebar --> NavAttribution["归因分析<br/>page=attribution<br/>截图选中项"]
+  Sidebar --> NavBacktest["回测工具<br/>page=backtest-tool"]
+  Sidebar --> NavFactor["因子库<br/>page=factor-library"]
+  Sidebar --> NavManual["手动交易<br/>page=manual-trading"]
+  Sidebar --> NavKline["K线图表<br/>page=klines"]
+  Sidebar --> NavCG["CoinGlass<br/>page=coinglass"]
+  Sidebar --> NavLogs["系统日志<br/>page=system-logs"]
+  Sidebar --> SettingsGear["设置入口<br/>page=settings"]
+
+  MainContent --> HyperAiPage["components/hyper-ai/HyperAiPage"]
+  MainContent --> Dashboard["components/portfolio/ComprehensiveView<br/>paper 模式数据看板"]
+  MainContent --> HyperView["components/hyperliquid/HyperliquidView<br/>live/testnet 桌面视图"]
+  MainContent --> MobileDashboard["components/mobile/MobileDashboard<br/>移动端看板"]
+  MainContent --> TraderMgmt["components/trader/TraderManagement"]
+  MainContent --> PromptManager["components/prompt/PromptManager"]
+  MainContent --> ProgramTrader["components/program/ProgramTrader"]
+  MainContent --> SignalManager["components/signal/SignalManager"]
+  MainContent --> Attribution["components/analytics/AttributionAnalysis"]
+  MainContent --> Backtest["components/backtest/BacktestTool"]
+  MainContent --> FactorLib["components/factor/FactorLibrary"]
+  MainContent --> ManualTrading["components/hyperliquid/HyperliquidPage"]
+  MainContent --> Klines["components/klines/KlinesView"]
+  MainContent --> CoinGlass["components/coinglass/CoinGlassView"]
+  MainContent --> Settings["components/settings/SettingsPage"]
+  MainContent --> Logs["components/layout/SystemLogs"]
+
+  classDef shell fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef nav fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef page fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Main,Providers,Route,AuthGate,AppShell,Sidebar,Header,MainContent shell
+  class NavHyper,NavDash,NavAITrader,NavPrompt,NavProgram,NavSignal,NavAttribution,NavBacktest,NavFactor,NavManual,NavKline,NavCG,NavLogs,SettingsGear nav
+  class HyperAiPage,Dashboard,HyperView,MobileDashboard,TraderMgmt,PromptManager,ProgramTrader,SignalManager,Attribution,Backtest,FactorLib,ManualTrading,Klines,CoinGlass,Settings,Logs page

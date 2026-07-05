@@ -1,0 +1,26 @@
+flowchart LR
+  DevCmd["pnpm dev"] --> Concurrent["concurrently<br/>dev:backend + dev:frontend"]
+  Concurrent --> BackendDev["cd backend<br/>uv sync --quiet<br/>uv run uvicorn main:app --reload --port 5611 --host 0.0.0.0"]
+  Concurrent --> FrontendDev["cd frontend<br/>pnpm dev<br/>Vite :8802"]
+  FrontendDev --> Proxy["Vite proxy<br/>/api -> 127.0.0.1:5611<br/>/ws -> ws://127.0.0.1:5611"]
+  BackendDev --> FastAPI["FastAPI backend/main.py"]
+  Proxy --> FastAPI
+
+  BuildCmd["pnpm build:frontend"] --> ViteBuild["frontend/package.json<br/>vite build"]
+  ViteBuild --> Dist["frontend/dist<br/>hashed assets + chunks"]
+  BackendRuntime["backend/app_runtime.py<br/>build_frontend + watcher"] --> Dist
+  BackendRuntime --> Static["backend/static<br/>production static serving"]
+  FastAPI --> Static
+
+  BackendDev --> DB[("PostgreSQL<br/>DATABASE_URL / SessionLocal")]
+  FastAPI --> Env[".env / config/settings.py<br/>API keys, CORS, feature flags"]
+  FastAPI --> Logs["system logs / stdout / tmux/systemd logs"]
+
+  classDef cmd fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef runtime fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef artifact fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef config fill:#fef3c7,stroke:#d97706,color:#0f172a
+  class DevCmd,Concurrent,BuildCmd cmd
+  class BackendDev,FrontendDev,Proxy,FastAPI,BackendRuntime runtime
+  class Dist,Static,DB artifact
+  class Env,Logs config

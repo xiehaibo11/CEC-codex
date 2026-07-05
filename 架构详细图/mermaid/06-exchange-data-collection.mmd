@@ -1,0 +1,75 @@
+flowchart TB
+  subgraph UI["前端 Settings 数据采集页"]
+    Settings["SettingsPage"] --> SharedTab["ExchangeDataSettingsTab<br/>Binance / HiBT 同一套完整卡片"]
+    SharedTab --> StatsCard["当前存储 / 已采集币种 / 保留天数 / 预计最大占用"]
+    SharedTab --> RetentionForm["设置保留期限 7-730 天"]
+    SharedTab --> BackfillButton["开始回填 / 进度条 / 重新开始"]
+    SharedTab --> FlowHeatmap["资金流覆盖<br/>data_type=market_flow"]
+    SharedTab --> KlineHeatmap["K线周期覆盖<br/>data_type=klines + period selector"]
+  end
+
+  subgraph API["后端 System API"]
+    StatsAPI["GET /api/system/storage-stats?exchange="]
+    RetentionAPI["GET/PUT /api/system/retention-days"]
+    BackfillAPI["POST /api/system/{exchange}/backfill<br/>GET /api/system/{exchange}/backfill/status"]
+    CoverageAPI["GET /api/system/data-coverage<br/>exchange + data_type + period + days + tz_offset"]
+  end
+
+  StatsCard --> StatsAPI
+  RetentionForm --> RetentionAPI
+  BackfillButton --> BackfillAPI
+  FlowHeatmap --> CoverageAPI
+  KlineHeatmap --> CoverageAPI
+
+  subgraph Binance["Binance 数据链路"]
+    BinanceBackfill["services/exchanges/binance_backfill.py<br/>历史 K线全周期 + 资金流"]
+    BinanceRest["binance_collector<br/>REST ticker/account/metrics"]
+    BinanceWS["binance_ws_collector<br/>WebSocket taker volume 15s 聚合"]
+    BinanceAPI["Binance Futures API"]
+    BinancePeriods["K线周期<br/>1m 3m 5m 15m 30m<br/>1h 2h 4h 6h 8h 12h<br/>1d 3d 1w 1M"]
+  end
+
+  subgraph HiBT["HiBT 数据链路"]
+    HiBTBackfill["services/exchanges/hibt_backfill.py<br/>直接周期 + 派生周期 + fallback"]
+    HiBTCollector["hibt_collector<br/>REST /v2/market/deals 实时资金流"]
+    HiBTMarketData["hibt_market_data.py<br/>fetch_hibt_klines / fetch_hibt_deals"]
+    HiBTAPI["HiBT Public APIs"]
+    HiBTPeriods["前端展示与 Binance 一致<br/>1m 3m 5m 15m 30m<br/>1h 2h 4h 6h 8h 12h<br/>1d 3d 1w 1M"]
+  end
+
+  BackfillAPI --> BinanceBackfill
+  BackfillAPI --> HiBTBackfill
+  CoverageAPI --> MarketTables["market_trades_aggregated<br/>market_orderbook_snapshots<br/>market_asset_metrics"]
+  CoverageAPI --> KlineTable["crypto_klines"]
+  StatsAPI --> StorageTables["PostgreSQL table sizes + symbol counts"]
+
+  BinanceBackfill --> BinanceAPI
+  BinanceRest --> BinanceAPI
+  BinanceWS --> BinanceAPI
+  BinanceBackfill --> BinancePeriods
+  BinanceBackfill --> KlineTable
+  BinanceBackfill --> MarketTables
+  BinanceWS --> MarketTables
+
+  HiBTBackfill --> HiBTMarketData
+  HiBTCollector --> HiBTMarketData
+  HiBTMarketData --> HiBTAPI
+  HiBTBackfill --> HiBTPeriods
+  HiBTBackfill --> KlineTable
+  HiBTBackfill --> MarketTables
+  HiBTCollector --> MarketTables
+
+  MarketTables --> DB[("PostgreSQL")]
+  KlineTable --> DB
+  StorageTables --> DB
+
+  classDef ui fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef api fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef binance fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef hibt fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Settings,SharedTab,StatsCard,RetentionForm,BackfillButton,FlowHeatmap,KlineHeatmap ui
+  class StatsAPI,RetentionAPI,BackfillAPI,CoverageAPI api
+  class BinanceBackfill,BinanceRest,BinanceWS,BinanceAPI,BinancePeriods binance
+  class HiBTBackfill,HiBTCollector,HiBTMarketData,HiBTAPI,HiBTPeriods hibt
+  class MarketTables,KlineTable,StorageTables,DB data

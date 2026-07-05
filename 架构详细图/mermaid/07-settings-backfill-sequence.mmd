@@ -1,0 +1,42 @@
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant FE as SettingsPage / ExchangeDataSettingsTab
+  participant API as /api/system
+  participant Task as Backfill Service
+  participant EX as Exchange API
+  participant DB as PostgreSQL
+
+  U->>FE: 打开 Binance-data 或 HiBT-data
+  FE->>API: GET /storage-stats?exchange=binance|hibt
+  API->>DB: 统计表大小、币种数、保留天数
+  DB-->>API: storage stats
+  API-->>FE: 卡片四项指标
+  FE->>API: GET /data-coverage?exchange=&data_type=market_flow
+  API->>DB: 按日聚合资金流覆盖
+  DB-->>API: symbols + coverage summary
+  API-->>FE: 资金流热力图
+  FE->>API: GET /data-coverage?exchange=&data_type=klines&period=1m
+  API->>DB: 按日/周期聚合 K线覆盖
+  DB-->>API: symbols + coverage summary
+  API-->>FE: K线热力图
+
+  U->>FE: 点击开始回填
+  FE->>API: POST /{exchange}/backfill?force=false
+  API->>DB: 创建或复用 backfill task
+  API->>Task: 后台执行回填
+  API-->>FE: task_id + status
+
+  loop 2 秒轮询
+    FE->>API: GET /{exchange}/backfill/status
+    API->>DB: 查询任务进度
+    API-->>FE: pending/running/completed/failed + progress
+  end
+
+  Task->>EX: 拉取历史 K线 / 资金流原始数据
+  EX-->>Task: candles / trades / metrics
+  Task->>DB: upsert crypto_klines / market_trades_aggregated
+  Task->>DB: 更新 task progress 与完成状态
+  FE->>API: GET /data-coverage 刷新覆盖
+  API->>DB: 重新计算覆盖率
+  API-->>FE: 完整热力图

@@ -1,0 +1,57 @@
+flowchart TB
+  AppStartup["app_startup.run_startup_tasks"] --> DBCreate["Base.metadata.create_all"]
+  AppStartup --> SnapshotInit["init_snapshot_database"]
+  AppStartup --> Migrations["migration_manager.run_all_migrations<br/>idempotent migrations"]
+  AppStartup --> Schema["schema_validator.validate_and_sync_schema"]
+  AppStartup --> Seed["seed core DB<br/>default user / trading configs / prompts"]
+  AppStartup --> CleanupTasks["cleanup leftover backfill tasks"]
+  AppStartup --> InitServices["services.startup.initialize_services"]
+
+  InitServices --> Scheduler["start_scheduler + setup_market_tasks"]
+  InitServices --> Symbols["symbol catalogs<br/>Hyperliquid + Binance + HiBT refresh"]
+  InitServices --> MarketStream["market_stream<br/>polling by GlobalSamplingConfig"]
+  InitServices --> StrategyMgr["trading_strategy.StrategyManager<br/>AI / random auto trade hooks"]
+  InitServices --> ProgramExec["program_execution_service<br/>on_price_update triggers"]
+  InitServices --> Snapshots["account snapshot services<br/>Hyperliquid 30s<br/>Binance 5min"]
+  InitServices --> RealtimeKlines["kline_realtime_collector<br/>1m interval"]
+  InitServices --> HLMarketFlow["market_flow_collector<br/>Hyperliquid trades/orderbook/OI/funding"]
+  InitServices --> BinanceRest["exchanges.binance_collector<br/>REST polling"]
+  InitServices --> BinanceWS["exchanges.binance_ws_collector<br/>15s taker volume aggregation"]
+  InitServices --> HiBTCollector["exchanges.hibt_collector<br/>REST deals polling"]
+  InitServices --> FactorEngine["factor_computation_service<br/>factor_effectiveness_service"]
+  InitServices --> NewsCollector["news_collector_service<br/>news_ai_classifier"]
+  InitServices --> EventLive["event_contract.live_paper_trader<br/>60s cycle"]
+  InitServices --> EventValidation["event_contract.rolling_validation<br/>12h validation"]
+  InitServices --> Bots["Telegram / Discord restore"]
+
+  Scheduler --> Jobs["interval jobs<br/>price_cache_cleanup<br/>asset_curve_broadcast<br/>market_flow_cleanup<br/>news_collector<br/>news_ai_classifier<br/>event paper trader<br/>rolling validation"]
+  MarketStream --> PriceEvents["market_events pub/sub"]
+  PriceEvents --> StrategyMgr
+  PriceEvents --> ProgramExec
+  PriceEvents --> AssetSnapshot["asset_snapshot_service<br/>disabled paper snapshot handler noted"]
+
+  HLMarketFlow --> Persistence["data_persistence / market_flow tables"]
+  BinanceRest --> Persistence
+  BinanceWS --> Persistence
+  HiBTCollector --> Persistence
+  RealtimeKlines --> KlineStore["crypto_klines"]
+  FactorEngine --> FactorStore["factor_values<br/>factor_effectiveness"]
+  EventLive --> EventStore["event_contract_* tables"]
+  NewsCollector --> NewsStore["news_articles"]
+  StrategyMgr --> TradeStore["orders / trades / positions / ai_decision_logs"]
+
+  Persistence --> MainDB[("PostgreSQL 主库")]
+  KlineStore --> MainDB
+  FactorStore --> MainDB
+  EventStore --> MainDB
+  NewsStore --> MainDB
+  TradeStore --> MainDB
+
+  classDef startup fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef service fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef job fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class AppStartup,DBCreate,SnapshotInit,Migrations,Schema,Seed,CleanupTasks,InitServices startup
+  class Scheduler,Symbols,MarketStream,StrategyMgr,ProgramExec,Snapshots,RealtimeKlines,HLMarketFlow,BinanceRest,BinanceWS,HiBTCollector,FactorEngine,NewsCollector,EventLive,EventValidation,Bots,PriceEvents,AssetSnapshot service
+  class Jobs job
+  class Persistence,KlineStore,FactorStore,EventStore,NewsStore,TradeStore,MainDB data

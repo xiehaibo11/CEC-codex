@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CEC-codex 前后端架构详细图</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    header { padding: 24px 32px; background: #0f172a; color: white; }
+    main { padding: 24px 32px 64px; }
+    section { background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin: 0 0 24px; box-shadow: 0 1px 3px rgba(15,23,42,.08); overflow-x: auto; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin-top: 0; font-size: 20px; }
+    p, li { line-height: 1.7; }
+    code { background: #e2e8f0; padding: 2px 6px; border-radius: 6px; }
+    .note { color: #475569; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CEC-codex 前端 + 后端架构详细图</h1>
+    <p class="note">基于当前仓库代码生成（2026-07-04 深度校验更新，分支 refactor/code-split）；Markdown 完整版见 <code>CEC-codex-前后端架构详细图.md</code>。</p>
+  </header>
+  <main>
+    <section>
+      <h2>说明</h2>
+      <p>本 HTML 直接渲染 Mermaid 图。若离线打不开图，请查看 Markdown 文件或 <code>mermaid/*.mmd</code> 原始图。</p>
+      <p>重点覆盖：截图侧边栏、React Shell、API 调用层、FastAPI Router、后台服务、Binance/HiBT 数据采集、事件合约纸面交易与滚动验证、数据库模型、AI/Program/Signal/回测链路。</p>
+    </section>
+    <section><h2>1. 全局系统拓扑图</h2><pre class="mermaid">flowchart LR
+  User[&quot;操作者 / 研究员&lt;br/&gt;浏览器 UI&quot;] --&gt; Browser[&quot;Browser&lt;br/&gt;React + Hash Route&quot;]
+  Browser --&gt;|开发环境 http://127.0.0.1:8802| Vite[&quot;Vite Dev Server&lt;br/&gt;frontend/vite.config.ts&lt;br/&gt;proxy /api + /ws&quot;]
+  Browser --&gt;|生产环境同源访问| Static[&quot;FastAPI Static&lt;br/&gt;backend/static&lt;br/&gt;/static 与 /assets&quot;]
+  Vite --&gt;|/api 与 /ws 代理| FastAPI[&quot;FastAPI app&lt;br/&gt;backend/main.py&lt;br/&gt;uvicorn :5611&quot;]
+  Static --&gt; FastAPI
+  Browser --&gt;|fetch /api/*| FastAPI
+  Browser --&gt;|长轮询 /api/ai-stream/{task_id}?offset=| AIStream[&quot;AI Stream Service&lt;br/&gt;api/ai_stream_routes.py&lt;br/&gt;services/ai_stream_service.py&lt;br/&gt;缓冲轮询而非原生 SSE&quot;]
+  Browser --&gt;|WebSocket /ws| WS[&quot;WebSocket Manager&lt;br/&gt;api/ws/*&quot;]
+
+  FastAPI --&gt; Startup[&quot;启动层&lt;br/&gt;backend/app_startup.py&lt;br/&gt;services/startup.py&quot;]
+  Startup --&gt; Scheduler[&quot;APScheduler 包装&lt;br/&gt;services/scheduler.py&quot;]
+  Startup --&gt; Collectors[&quot;行情采集器&lt;br/&gt;Kline / Market Flow / Binance / HiBT&quot;]
+  Startup --&gt; Strategy[&quot;交易策略与自动交易&lt;br/&gt;services/trading_strategy.py&quot;]
+  Startup --&gt; RuntimeMonitor[&quot;运行时监控&lt;br/&gt;backend/app_runtime.py&quot;]
+
+  FastAPI --&gt; MainDB[(&quot;PostgreSQL 主库&lt;br/&gt;SQLAlchemy SessionLocal&quot;)]
+  FastAPI --&gt; SnapshotDB[(&quot;Snapshot DB&lt;br/&gt;snapshot_connection&lt;br/&gt;snapshot_models&quot;)]
+  Scheduler --&gt; MainDB
+  Collectors --&gt; MainDB
+  Strategy --&gt; MainDB
+  AIStream --&gt; MainDB
+  WS --&gt; Browser
+
+  Collectors --&gt; BinanceAPI[&quot;Binance Futures APIs&lt;br/&gt;REST + WebSocket&quot;]
+  Collectors --&gt; HiBTAPI[&quot;HiBT Public APIs&lt;br/&gt;REST Kline + Deals&quot;]
+  Collectors --&gt; HyperAPI[&quot;Hyperliquid APIs&lt;br/&gt;Market + Account&quot;]
+  FastAPI --&gt; CoinGlassAPI[&quot;CoinGlass APIs&lt;br/&gt;server-side paid keys&quot;]
+  FastAPI --&gt; LLM[&quot;LLM Providers&lt;br/&gt;OpenAI-compatible / Anthropic / others&quot;]
+  FastAPI --&gt; Bots[&quot;Telegram / Discord Bot Adapter&quot;]
+
+  classDef client fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef backend fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef external fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class User,Browser,Vite,Static client
+  class FastAPI,Startup,Scheduler,Collectors,Strategy,RuntimeMonitor,AIStream,WS backend
+  class MainDB,SnapshotDB data
+  class BinanceAPI,HiBTAPI,HyperAPI,CoinGlassAPI,LLM,Bots external</pre></section>
+    <section><h2>2. 前端 Shell、侧边栏与页面架构</h2><pre class="mermaid">flowchart TB
+  Main[&quot;frontend/app/main.tsx&lt;br/&gt;应用初始化&quot;] --&gt; Providers[&quot;AppProviders.tsx&lt;br/&gt;AuthProvider&lt;br/&gt;ExchangeProvider&lt;br/&gt;TradingModeProvider&lt;br/&gt;ArenaDataProvider&lt;br/&gt;Toaster&quot;]
+  Main --&gt; Route[&quot;useHashRoute.ts&lt;br/&gt;hash 路由&lt;br/&gt;默认 hyper-ai&quot;]
+  Main --&gt; AuthGate[&quot;登录与初始化门控&lt;br/&gt;AuthContext + isAuthenticated&lt;br/&gt;SplashScreen + Hyper AI Onboarding&quot;]
+  Providers --&gt; AppShell[&quot;AppShell.tsx&lt;br/&gt;Header + Sidebar + MainContent&quot;]
+  Route --&gt; AppShell
+  AuthGate --&gt; AppShell
+
+  AppShell --&gt; Sidebar[&quot;components/layout/Sidebar.tsx&lt;br/&gt;截图左侧导航来源&quot;]
+  AppShell --&gt; Header[&quot;components/layout/Header.tsx&lt;br/&gt;页面标题 / 账户选择&quot;]
+  AppShell --&gt; MainContent[&quot;MainContent&lt;br/&gt;lazy-loaded page views&quot;]
+
+  Sidebar --&gt; NavHyper[&quot;Hyper AI&lt;br/&gt;page=hyper-ai&quot;]
+  Sidebar --&gt; NavDash[&quot;数据看板&lt;br/&gt;page=comprehensive&quot;]
+  Sidebar --&gt; NavAITrader[&quot;AI交易员&lt;br/&gt;page=trader-management&quot;]
+  Sidebar --&gt; NavPrompt[&quot;提示词策略&lt;br/&gt;page=prompt-management&quot;]
+  Sidebar --&gt; NavProgram[&quot;程序化交易&lt;br/&gt;page=program-trader&quot;]
+  Sidebar --&gt; NavSignal[&quot;信号系统&lt;br/&gt;page=signal-management&quot;]
+  Sidebar --&gt; NavAttribution[&quot;归因分析&lt;br/&gt;page=attribution&lt;br/&gt;截图选中项&quot;]
+  Sidebar --&gt; NavBacktest[&quot;回测工具&lt;br/&gt;page=backtest-tool&quot;]
+  Sidebar --&gt; NavFactor[&quot;因子库&lt;br/&gt;page=factor-library&quot;]
+  Sidebar --&gt; NavManual[&quot;手动交易&lt;br/&gt;page=manual-trading&quot;]
+  Sidebar --&gt; NavKline[&quot;K线图表&lt;br/&gt;page=klines&quot;]
+  Sidebar --&gt; NavCG[&quot;CoinGlass&lt;br/&gt;page=coinglass&quot;]
+  Sidebar --&gt; NavLogs[&quot;系统日志&lt;br/&gt;page=system-logs&quot;]
+  Sidebar --&gt; SettingsGear[&quot;设置入口&lt;br/&gt;page=settings&quot;]
+
+  MainContent --&gt; HyperAiPage[&quot;components/hyper-ai/HyperAiPage&quot;]
+  MainContent --&gt; Dashboard[&quot;components/portfolio/ComprehensiveView&lt;br/&gt;paper 模式数据看板&quot;]
+  MainContent --&gt; HyperView[&quot;components/hyperliquid/HyperliquidView&lt;br/&gt;live/testnet 桌面视图&quot;]
+  MainContent --&gt; MobileDashboard[&quot;components/mobile/MobileDashboard&lt;br/&gt;移动端看板&quot;]
+  MainContent --&gt; TraderMgmt[&quot;components/trader/TraderManagement&quot;]
+  MainContent --&gt; PromptManager[&quot;components/prompt/PromptManager&quot;]
+  MainContent --&gt; ProgramTrader[&quot;components/program/ProgramTrader&quot;]
+  MainContent --&gt; SignalManager[&quot;components/signal/SignalManager&quot;]
+  MainContent --&gt; Attribution[&quot;components/analytics/AttributionAnalysis&quot;]
+  MainContent --&gt; Backtest[&quot;components/backtest/BacktestTool&quot;]
+  MainContent --&gt; FactorLib[&quot;components/factor/FactorLibrary&quot;]
+  MainContent --&gt; ManualTrading[&quot;components/hyperliquid/HyperliquidPage&quot;]
+  MainContent --&gt; Klines[&quot;components/klines/KlinesView&quot;]
+  MainContent --&gt; CoinGlass[&quot;components/coinglass/CoinGlassView&quot;]
+  MainContent --&gt; Settings[&quot;components/settings/SettingsPage&quot;]
+  MainContent --&gt; Logs[&quot;components/layout/SystemLogs&quot;]
+
+  classDef shell fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef nav fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef page fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Main,Providers,Route,AuthGate,AppShell,Sidebar,Header,MainContent shell
+  class NavHyper,NavDash,NavAITrader,NavPrompt,NavProgram,NavSignal,NavAttribution,NavBacktest,NavFactor,NavManual,NavKline,NavCG,NavLogs,SettingsGear nav
+  class HyperAiPage,Dashboard,HyperView,MobileDashboard,TraderMgmt,PromptManager,ProgramTrader,SignalManager,Attribution,Backtest,FactorLib,ManualTrading,Klines,CoinGlass,Settings,Logs page</pre></section>
+    <section><h2>3. 前端状态层与 API 调用层</h2><pre class="mermaid">flowchart LR
+  subgraph State[&quot;前端状态层&quot;]
+    AuthCtx[&quot;AuthContext&lt;br/&gt;/api/auth&lt;br/&gt;Cookie arena_token&quot;]
+    ExchangeCtx[&quot;ExchangeContext&lt;br/&gt;selected_exchange&lt;br/&gt;localStorage + /api/users/exchange-config&quot;]
+    TradingModeCtx[&quot;TradingModeContext&lt;br/&gt;testnet/mainnet&lt;br/&gt;/api/hyperliquid/trading-mode&quot;]
+    ArenaCtx[&quot;ArenaDataContext&lt;br/&gt;缓存 arena trades / model chat / positions&quot;]
+    HashRoute[&quot;useHashRoute&lt;br/&gt;window.location.hash&quot;]
+    WSClient[&quot;useTradingWebSocket&lt;br/&gt;行情/资产推送&quot;]
+  end
+
+  subgraph ApiLib[&quot;frontend/app/lib&quot;]
+    ApiClient[&quot;apiClient.ts&lt;br/&gt;apiRequest()&lt;br/&gt;Authorization Bearer + JSON errors&quot;]
+    ApiBarrel[&quot;api.ts&lt;br/&gt;统一导出 account/arena/core/eventContract/hibt/... APIs&quot;]
+    HyperApi[&quot;hyperliquidApi.ts&quot;]
+    HibtApi[&quot;hibtApi.ts&quot;]
+    EventApi[&quot;eventContractApi.ts&quot;]
+    ProgramApi[&quot;programApi.ts&quot;]
+    PromptApi[&quot;promptApi.ts&quot;]
+  end
+
+  subgraph UI[&quot;页面与组件&quot;]
+    SettingsPage[&quot;SettingsPage&lt;br/&gt;交易所 watchlist / 数据采集&quot;]
+    DataTab[&quot;ExchangeDataSettingsTab&lt;br/&gt;Binance 与 HiBT 共用卡片骨架&quot;]
+    Heatmap[&quot;DataCoverageHeatmap&lt;br/&gt;365/730 天覆盖热力图&quot;]
+    KlinesView[&quot;KlinesView&quot;]
+    CoinGlassView[&quot;CoinGlassView&quot;]
+    HyperAi[&quot;Hyper AI Chat&quot;]
+    BacktestView[&quot;BacktestTool&quot;]
+    AttributionView[&quot;AttributionAnalysis&quot;]
+  end
+
+  UI --&gt; ApiBarrel
+  ApiBarrel --&gt; ApiClient
+  AuthCtx --&gt; ApiClient
+  ExchangeCtx --&gt; ApiClient
+  TradingModeCtx --&gt; ApiClient
+  WSClient --&gt; WSBackend[&quot;/ws 或 /api/ws&lt;br/&gt;backend/api/ws&quot;]
+
+  SettingsPage --&gt; DataTab
+  DataTab --&gt; Heatmap
+  SettingsPage --&gt;|watchlist| BinanceHibt[&quot;/api/binance/*&lt;br/&gt;/api/hibt/*&quot;]
+  SettingsPage --&gt;|storage / retention| SystemStats[&quot;/api/system/storage-stats&lt;br/&gt;/api/system/retention&quot;]
+  SettingsPage --&gt;|backfill| Backfill[&quot;POST /api/system/{exchange}/backfill&lt;br/&gt;GET /status&quot;]
+  Heatmap --&gt; Coverage[&quot;GET /api/system/data-coverage&lt;br/&gt;exchange + data_type + period + days&quot;]
+
+  KlinesView --&gt; KlineApi[&quot;/api/klines&lt;br/&gt;/api/klines/analysis&quot;]
+  CoinGlassView --&gt; CGApi[&quot;/api/coinglass/catalog&lt;br/&gt;/api/coinglass/subscription&lt;br/&gt;/api/coinglass/*&quot;]
+  HyperAi --&gt; HyperAiApi[&quot;/api/hyper-ai/*&lt;br/&gt;/api/ai-stream/*&quot;]
+  BacktestView --&gt; BacktestApi[&quot;/api/event-contract/*&lt;br/&gt;/api/prompt-backtest/*&quot;]
+  AttributionView --&gt; AttributionApi[&quot;/api/analytics/*&lt;br/&gt;/api/event-contract/*&quot;]
+
+  classDef state fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef api fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef ui fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef endpoint fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class AuthCtx,ExchangeCtx,TradingModeCtx,ArenaCtx,HashRoute,WSClient state
+  class ApiClient,ApiBarrel,HyperApi,HibtApi,EventApi,ProgramApi,PromptApi api
+  class SettingsPage,DataTab,Heatmap,KlinesView,CoinGlassView,HyperAi,BacktestView,AttributionView ui
+  class WSBackend,BinanceHibt,SystemStats,Backfill,Coverage,KlineApi,CGApi,HyperAiApi,BacktestApi,AttributionApi endpoint</pre></section>
+    <section><h2>4. 后端 FastAPI Router 架构</h2><pre class="mermaid">flowchart TB
+  Main[&quot;backend/main.py&lt;br/&gt;FastAPI app&quot;] --&gt; Middleware[&quot;CORS + GZip&lt;br/&gt;StaticFiles /static /assets&quot;]
+  Main --&gt; StartupHooks[&quot;startup/shutdown hooks&lt;br/&gt;app_startup + service shutdown&quot;]
+  Main --&gt; Health[&quot;GET /api/health&lt;br/&gt;POST /api/rebuild-frontend&quot;]
+
+  Main --&gt; Auth[&quot;/api/auth&lt;br/&gt;local_auth_routes.py&quot;]
+  Main --&gt; User[&quot;/api/users&lt;br/&gt;user_routes.py&quot;]
+  Main --&gt; Accounts[&quot;/api/account&lt;br/&gt;account_routes.py&quot;]
+  Main --&gt; Orders[&quot;/api/orders&lt;br/&gt;order_routes.py&quot;]
+  Main --&gt; Crypto[&quot;/api/crypto&lt;br/&gt;crypto_routes.py&quot;]
+  Main --&gt; Market[&quot;/api/market&lt;br/&gt;market_data_routes.py&quot;]
+  Main --&gt; Ranking[&quot;/api/ranking&lt;br/&gt;ranking_routes.py&quot;]
+  Main --&gt; Arena[&quot;/api/arena&lt;br/&gt;arena_routes.py&quot;]
+  Main --&gt; Config[&quot;/api/config&lt;br/&gt;config_routes.py&quot;]
+  Main --&gt; Sampling[&quot;/api/sampling&lt;br/&gt;sampling_routes.py&quot;]
+  Main --&gt; MarketRegime[&quot;/api/market-regime&lt;br/&gt;market_regime_routes.py&quot;]
+  Main --&gt; TraderData[&quot;/api/trader&lt;br/&gt;trader_data_routes.py + api/trader_data/*&quot;]
+  Main --&gt; PromptBacktest[&quot;/api/prompt-backtest&lt;br/&gt;prompt_backtest_routes.py&quot;]
+
+  Main --&gt; HyperLiquid[&quot;/api/hyperliquid&lt;br/&gt;hyperliquid_routes.py&quot;]
+  Main --&gt; HyperActions[&quot;/api/hyperliquid/actions&lt;br/&gt;hyperliquid_action_routes.py&quot;]
+  Main --&gt; Binance[&quot;/api/binance&lt;br/&gt;wallet / trading / account / market&quot;]
+  Main --&gt; HiBT[&quot;/api/hibt&lt;br/&gt;wallet / trading / account / market&quot;]
+
+  Main --&gt; Klines[&quot;/api/klines&lt;br/&gt;kline_routes.py + kline_analysis_routes.py&quot;]
+  Main --&gt; MarketFlow[&quot;/api/market-flow&lt;br/&gt;summary + indicators&quot;]
+  Main --&gt; System[&quot;/api/system&lt;br/&gt;storage_stats + coverage + retention + backfill&quot;]
+  Main --&gt; CoinGlass[&quot;/api/coinglass&lt;br/&gt;catalog + keys + event_contract client&quot;]
+
+  Main --&gt; HyperAI[&quot;/api/hyper-ai&lt;br/&gt;profile + conversation + memory + skills + tools&quot;]
+  Main --&gt; AIStream[&quot;/api/ai-stream&lt;br/&gt;SSE task polling&quot;]
+  Main --&gt; Prompts[&quot;/api/prompts&lt;br/&gt;templates + bindings + preview + AI chat + variables&quot;]
+  Main --&gt; Program[&quot;/api/programs&lt;br/&gt;legacy program routes&quot;]
+  Main --&gt; Signals[&quot;/api/signals&lt;br/&gt;definitions + pools + analysis + testing + trigger logs&quot;]
+  Main --&gt; Factors[&quot;/api/factors&lt;br/&gt;library + values + effectiveness + compute + custom + expression&quot;]
+  Main --&gt; Analytics[&quot;/api/analytics&lt;br/&gt;analytics_routes.py&quot;]
+  Main --&gt; EventContract[&quot;/api/event-contract&lt;br/&gt;event_contract_routes.py&quot;]
+  Main --&gt; News[&quot;/api/news&lt;br/&gt;news_routes.py&quot;]
+  Main --&gt; Intel[&quot;/api/market-intelligence&lt;br/&gt;market_intelligence_routes.py&quot;]
+  Main --&gt; Logs[&quot;/api/system-logs&lt;br/&gt;system_log_routes.py&quot;]
+  Main --&gt; Bots[&quot;/api/bot&lt;br/&gt;telegram + discord + notifications&quot;]
+
+  System --&gt; StorageStats[&quot;GET storage-stats?exchange=&quot;]
+  System --&gt; Coverage[&quot;GET data-coverage?exchange=&amp;data_type=&amp;period=&amp;days=&quot;]
+  System --&gt; Retention[&quot;GET/PUT retention-days&quot;]
+  System --&gt; Backfill[&quot;POST /{exchange}/backfill&lt;br/&gt;GET /{exchange}/backfill/status&quot;]
+
+  classDef root fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef route fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef system fill:#fef3c7,stroke:#d97706,color:#0f172a
+  class Main,Middleware,StartupHooks,Health root
+  class Auth,User,Accounts,Orders,Crypto,Market,Ranking,Arena,Config,Sampling,MarketRegime,TraderData,PromptBacktest,HyperLiquid,HyperActions,Binance,HiBT,Klines,MarketFlow,CoinGlass,HyperAI,AIStream,Prompts,Program,Signals,Factors,Analytics,EventContract,News,Intel,Logs,Bots route
+  class System,StorageStats,Coverage,Retention,Backfill system</pre></section>
+    <section><h2>5. 后端服务、调度任务与后台采集器</h2><pre class="mermaid">flowchart TB
+  AppStartup[&quot;app_startup.run_startup_tasks&quot;] --&gt; DBCreate[&quot;Base.metadata.create_all&quot;]
+  AppStartup --&gt; SnapshotInit[&quot;init_snapshot_database&quot;]
+  AppStartup --&gt; Migrations[&quot;migration_manager.run_all_migrations&lt;br/&gt;idempotent migrations&quot;]
+  AppStartup --&gt; Schema[&quot;schema_validator.validate_and_sync_schema&quot;]
+  AppStartup --&gt; Seed[&quot;seed core DB&lt;br/&gt;default user / trading configs / prompts&quot;]
+  AppStartup --&gt; CleanupTasks[&quot;cleanup leftover backfill tasks&quot;]
+  AppStartup --&gt; InitServices[&quot;services.startup.initialize_services&quot;]
+
+  InitServices --&gt; Scheduler[&quot;start_scheduler + setup_market_tasks&quot;]
+  InitServices --&gt; Symbols[&quot;symbol catalogs&lt;br/&gt;Hyperliquid + Binance + HiBT refresh&quot;]
+  InitServices --&gt; MarketStream[&quot;market_stream&lt;br/&gt;polling by GlobalSamplingConfig&quot;]
+  InitServices --&gt; StrategyMgr[&quot;trading_strategy.StrategyManager&lt;br/&gt;AI / random auto trade hooks&quot;]
+  InitServices --&gt; ProgramExec[&quot;program_execution_service&lt;br/&gt;on_price_update triggers&quot;]
+  InitServices --&gt; Snapshots[&quot;account snapshot services&lt;br/&gt;Hyperliquid 30s&lt;br/&gt;Binance 5min&quot;]
+  InitServices --&gt; RealtimeKlines[&quot;kline_realtime_collector&lt;br/&gt;1m interval&quot;]
+  InitServices --&gt; HLMarketFlow[&quot;market_flow_collector&lt;br/&gt;Hyperliquid trades/orderbook/OI/funding&quot;]
+  InitServices --&gt; BinanceRest[&quot;exchanges.binance_collector&lt;br/&gt;REST polling&quot;]
+  InitServices --&gt; BinanceWS[&quot;exchanges.binance_ws_collector&lt;br/&gt;15s taker volume aggregation&quot;]
+  InitServices --&gt; HiBTCollector[&quot;exchanges.hibt_collector&lt;br/&gt;REST deals polling&quot;]
+  InitServices --&gt; FactorEngine[&quot;factor_computation_service&lt;br/&gt;factor_effectiveness_service&quot;]
+  InitServices --&gt; NewsCollector[&quot;news_collector_service&lt;br/&gt;news_ai_classifier&quot;]
+  InitServices --&gt; EventLive[&quot;event_contract.live_paper_trader&lt;br/&gt;60s cycle&quot;]
+  InitServices --&gt; EventValidation[&quot;event_contract.rolling_validation&lt;br/&gt;12h validation&quot;]
+  InitServices --&gt; Bots[&quot;Telegram / Discord restore&quot;]
+
+  Scheduler --&gt; Jobs[&quot;interval jobs&lt;br/&gt;price_cache_cleanup&lt;br/&gt;asset_curve_broadcast&lt;br/&gt;market_flow_cleanup&lt;br/&gt;news_collector&lt;br/&gt;news_ai_classifier&lt;br/&gt;event paper trader&lt;br/&gt;rolling validation&quot;]
+  MarketStream --&gt; PriceEvents[&quot;market_events pub/sub&quot;]
+  PriceEvents --&gt; StrategyMgr
+  PriceEvents --&gt; ProgramExec
+  PriceEvents --&gt; AssetSnapshot[&quot;asset_snapshot_service&lt;br/&gt;disabled paper snapshot handler noted&quot;]
+
+  HLMarketFlow --&gt; Persistence[&quot;data_persistence / market_flow tables&quot;]
+  BinanceRest --&gt; Persistence
+  BinanceWS --&gt; Persistence
+  HiBTCollector --&gt; Persistence
+  RealtimeKlines --&gt; KlineStore[&quot;crypto_klines&quot;]
+  FactorEngine --&gt; FactorStore[&quot;factor_values&lt;br/&gt;factor_effectiveness&quot;]
+  EventLive --&gt; EventStore[&quot;event_contract_* tables&quot;]
+  NewsCollector --&gt; NewsStore[&quot;news_articles&quot;]
+  StrategyMgr --&gt; TradeStore[&quot;orders / trades / positions / ai_decision_logs&quot;]
+
+  Persistence --&gt; MainDB[(&quot;PostgreSQL 主库&quot;)]
+  KlineStore --&gt; MainDB
+  FactorStore --&gt; MainDB
+  EventStore --&gt; MainDB
+  NewsStore --&gt; MainDB
+  TradeStore --&gt; MainDB
+
+  classDef startup fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef service fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef job fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class AppStartup,DBCreate,SnapshotInit,Migrations,Schema,Seed,CleanupTasks,InitServices startup
+  class Scheduler,Symbols,MarketStream,StrategyMgr,ProgramExec,Snapshots,RealtimeKlines,HLMarketFlow,BinanceRest,BinanceWS,HiBTCollector,FactorEngine,NewsCollector,EventLive,EventValidation,Bots,PriceEvents,AssetSnapshot service
+  class Jobs job
+  class Persistence,KlineStore,FactorStore,EventStore,NewsStore,TradeStore,MainDB data</pre></section>
+    <section><h2>6. Binance / HiBT 数据采集与覆盖热力图</h2><pre class="mermaid">flowchart TB
+  subgraph UI[&quot;前端 Settings 数据采集页&quot;]
+    Settings[&quot;SettingsPage&quot;] --&gt; SharedTab[&quot;ExchangeDataSettingsTab&lt;br/&gt;Binance / HiBT 同一套完整卡片&quot;]
+    SharedTab --&gt; StatsCard[&quot;当前存储 / 已采集币种 / 保留天数 / 预计最大占用&quot;]
+    SharedTab --&gt; RetentionForm[&quot;设置保留期限 7-730 天&quot;]
+    SharedTab --&gt; BackfillButton[&quot;开始回填 / 进度条 / 重新开始&quot;]
+    SharedTab --&gt; FlowHeatmap[&quot;资金流覆盖&lt;br/&gt;data_type=market_flow&quot;]
+    SharedTab --&gt; KlineHeatmap[&quot;K线周期覆盖&lt;br/&gt;data_type=klines + period selector&quot;]
+  end
+
+  subgraph API[&quot;后端 System API&quot;]
+    StatsAPI[&quot;GET /api/system/storage-stats?exchange=&quot;]
+    RetentionAPI[&quot;GET/PUT /api/system/retention-days&quot;]
+    BackfillAPI[&quot;POST /api/system/{exchange}/backfill&lt;br/&gt;GET /api/system/{exchange}/backfill/status&quot;]
+    CoverageAPI[&quot;GET /api/system/data-coverage&lt;br/&gt;exchange + data_type + period + days + tz_offset&quot;]
+  end
+
+  StatsCard --&gt; StatsAPI
+  RetentionForm --&gt; RetentionAPI
+  BackfillButton --&gt; BackfillAPI
+  FlowHeatmap --&gt; CoverageAPI
+  KlineHeatmap --&gt; CoverageAPI
+
+  subgraph Binance[&quot;Binance 数据链路&quot;]
+    BinanceBackfill[&quot;services/exchanges/binance_backfill.py&lt;br/&gt;历史 K线全周期 + 资金流&quot;]
+    BinanceRest[&quot;binance_collector&lt;br/&gt;REST ticker/account/metrics&quot;]
+    BinanceWS[&quot;binance_ws_collector&lt;br/&gt;WebSocket taker volume 15s 聚合&quot;]
+    BinanceAPI[&quot;Binance Futures API&quot;]
+    BinancePeriods[&quot;K线周期&lt;br/&gt;1m 3m 5m 15m 30m&lt;br/&gt;1h 2h 4h 6h 8h 12h&lt;br/&gt;1d 3d 1w 1M&quot;]
+  end
+
+  subgraph HiBT[&quot;HiBT 数据链路&quot;]
+    HiBTBackfill[&quot;services/exchanges/hibt_backfill.py&lt;br/&gt;直接周期 + 派生周期 + fallback&quot;]
+    HiBTCollector[&quot;hibt_collector&lt;br/&gt;REST /v2/market/deals 实时资金流&quot;]
+    HiBTMarketData[&quot;hibt_market_data.py&lt;br/&gt;fetch_hibt_klines / fetch_hibt_deals&quot;]
+    HiBTAPI[&quot;HiBT Public APIs&quot;]
+    HiBTPeriods[&quot;前端展示与 Binance 一致&lt;br/&gt;1m 3m 5m 15m 30m&lt;br/&gt;1h 2h 4h 6h 8h 12h&lt;br/&gt;1d 3d 1w 1M&quot;]
+  end
+
+  BackfillAPI --&gt; BinanceBackfill
+  BackfillAPI --&gt; HiBTBackfill
+  CoverageAPI --&gt; MarketTables[&quot;market_trades_aggregated&lt;br/&gt;market_orderbook_snapshots&lt;br/&gt;market_asset_metrics&quot;]
+  CoverageAPI --&gt; KlineTable[&quot;crypto_klines&quot;]
+  StatsAPI --&gt; StorageTables[&quot;PostgreSQL table sizes + symbol counts&quot;]
+
+  BinanceBackfill --&gt; BinanceAPI
+  BinanceRest --&gt; BinanceAPI
+  BinanceWS --&gt; BinanceAPI
+  BinanceBackfill --&gt; BinancePeriods
+  BinanceBackfill --&gt; KlineTable
+  BinanceBackfill --&gt; MarketTables
+  BinanceWS --&gt; MarketTables
+
+  HiBTBackfill --&gt; HiBTMarketData
+  HiBTCollector --&gt; HiBTMarketData
+  HiBTMarketData --&gt; HiBTAPI
+  HiBTBackfill --&gt; HiBTPeriods
+  HiBTBackfill --&gt; KlineTable
+  HiBTBackfill --&gt; MarketTables
+  HiBTCollector --&gt; MarketTables
+
+  MarketTables --&gt; DB[(&quot;PostgreSQL&quot;)]
+  KlineTable --&gt; DB
+  StorageTables --&gt; DB
+
+  classDef ui fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef api fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef binance fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef hibt fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Settings,SharedTab,StatsCard,RetentionForm,BackfillButton,FlowHeatmap,KlineHeatmap ui
+  class StatsAPI,RetentionAPI,BackfillAPI,CoverageAPI api
+  class BinanceBackfill,BinanceRest,BinanceWS,BinanceAPI,BinancePeriods binance
+  class HiBTBackfill,HiBTCollector,HiBTMarketData,HiBTAPI,HiBTPeriods hibt
+  class MarketTables,KlineTable,StorageTables,DB data</pre></section>
+    <section><h2>7. Settings 回填时序图</h2><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant FE as SettingsPage / ExchangeDataSettingsTab
+  participant API as /api/system
+  participant Task as Backfill Service
+  participant EX as Exchange API
+  participant DB as PostgreSQL
+
+  U-&gt;&gt;FE: 打开 Binance-data 或 HiBT-data
+  FE-&gt;&gt;API: GET /storage-stats?exchange=binance|hibt
+  API-&gt;&gt;DB: 统计表大小、币种数、保留天数
+  DB--&gt;&gt;API: storage stats
+  API--&gt;&gt;FE: 卡片四项指标
+  FE-&gt;&gt;API: GET /data-coverage?exchange=&amp;data_type=market_flow
+  API-&gt;&gt;DB: 按日聚合资金流覆盖
+  DB--&gt;&gt;API: symbols + coverage summary
+  API--&gt;&gt;FE: 资金流热力图
+  FE-&gt;&gt;API: GET /data-coverage?exchange=&amp;data_type=klines&amp;period=1m
+  API-&gt;&gt;DB: 按日/周期聚合 K线覆盖
+  DB--&gt;&gt;API: symbols + coverage summary
+  API--&gt;&gt;FE: K线热力图
+
+  U-&gt;&gt;FE: 点击开始回填
+  FE-&gt;&gt;API: POST /{exchange}/backfill?force=false
+  API-&gt;&gt;DB: 创建或复用 backfill task
+  API-&gt;&gt;Task: 后台执行回填
+  API--&gt;&gt;FE: task_id + status
+
+  loop 2 秒轮询
+    FE-&gt;&gt;API: GET /{exchange}/backfill/status
+    API-&gt;&gt;DB: 查询任务进度
+    API--&gt;&gt;FE: pending/running/completed/failed + progress
+  end
+
+  Task-&gt;&gt;EX: 拉取历史 K线 / 资金流原始数据
+  EX--&gt;&gt;Task: candles / trades / metrics
+  Task-&gt;&gt;DB: upsert crypto_klines / market_trades_aggregated
+  Task-&gt;&gt;DB: 更新 task progress 与完成状态
+  FE-&gt;&gt;API: GET /data-coverage 刷新覆盖
+  API-&gt;&gt;DB: 重新计算覆盖率
+  API--&gt;&gt;FE: 完整热力图</pre></section>
+    <section><h2>8. AI / Program / Signal / 交易执行链路</h2><pre class="mermaid">flowchart TB
+  subgraph Triggers[&quot;触发来源&quot;]
+    Manual[&quot;手动 Dashboard trigger&lt;br/&gt;POST /accounts/{id}/trigger-ai-trade&quot;]
+    Scheduler[&quot;APScheduler 自动交易任务&quot;]
+    SignalTrigger[&quot;Signal Pool 边沿触发&quot;]
+    ProgramTrigger[&quot;Program Trader price update / schedule&quot;]
+    HyperAIChat[&quot;Hyper AI 对话工具调用&quot;]
+  end
+
+  subgraph Context[&quot;上下文构建&quot;]
+    AccountState[&quot;账户 / 资产 / 持仓 / 订单&quot;]
+    MarketContext[&quot;K线 / 资金流 / OI / funding / regime&quot;]
+    PromptBinding[&quot;PromptTemplate + AccountPromptBinding&quot;]
+    FactorContext[&quot;FactorValue / CustomFactor&quot;]
+    NewsContext[&quot;NewsArticle / market intelligence&quot;]
+    SignalContext[&quot;SignalTriggerLog / pools&quot;]
+  end
+
+  subgraph AI[&quot;AI 决策层&quot;]
+    DecisionEngine[&quot;services/ai_decision_service&lt;br/&gt;prompt_context + llm_payload + decision_response&quot;]
+    LLM[&quot;外部 LLM Provider&quot;]
+    DecisionPersist[&quot;save_ai_decision&lt;br/&gt;ai_decision_logs&quot;]
+  end
+
+  subgraph Routing[&quot;执行路由&quot;]
+    Dispatcher[&quot;place_ai_driven_crypto_order&quot;]
+    PaperRoute[&quot;Account.hyperliquid_environment is NULL&lt;br/&gt;paper_trading matcher&quot;]
+    HyperLive[&quot;testnet/mainnet&lt;br/&gt;place_ai_driven_hyperliquid_order&quot;]
+    BinanceLive[&quot;Binance account&lt;br/&gt;place_ai_driven_binance_order&quot;]
+    HiBTManual[&quot;HiBT manual order endpoints&lt;br/&gt;hibt_trading_client&quot;]
+  end
+
+  subgraph Execution[&quot;落库与推送&quot;]
+    Orders[&quot;orders&quot;]
+    Positions[&quot;positions&quot;]
+    Trades[&quot;trades&quot;]
+    Snapshots[&quot;account_asset_snapshots&quot;]
+    WS[&quot;WebSocket/SSE/UI 刷新&quot;]
+  end
+
+  Manual --&gt; Dispatcher
+  Scheduler --&gt; Dispatcher
+  SignalTrigger --&gt; SignalContext
+  SignalContext --&gt; Dispatcher
+  ProgramTrigger --&gt; ProgramSandbox[&quot;program_trader&lt;br/&gt;validator + SandboxExecutor + Decision&quot;]
+  ProgramSandbox --&gt; Dispatcher
+  HyperAIChat --&gt; Context
+
+  Dispatcher --&gt; Context
+  Context --&gt; AccountState
+  Context --&gt; MarketContext
+  Context --&gt; PromptBinding
+  Context --&gt; FactorContext
+  Context --&gt; NewsContext
+  Context --&gt; SignalContext
+  Context --&gt; DecisionEngine
+  DecisionEngine --&gt; LLM
+  LLM --&gt; DecisionEngine
+  DecisionEngine --&gt; DecisionPersist
+  DecisionPersist --&gt; Dispatcher
+
+  Dispatcher --&gt; PaperRoute
+  Dispatcher --&gt; HyperLive
+  Dispatcher --&gt; BinanceLive
+  Dispatcher --&gt; HiBTManual
+  PaperRoute --&gt; Orders
+  PaperRoute --&gt; Positions
+  PaperRoute --&gt; Trades
+  HyperLive --&gt; Orders
+  HyperLive --&gt; Positions
+  HyperLive --&gt; Trades
+  BinanceLive --&gt; Orders
+  BinanceLive --&gt; Positions
+  BinanceLive --&gt; Trades
+  HiBTManual --&gt; Orders
+  HiBTManual --&gt; Trades
+  Orders --&gt; Snapshots
+  Positions --&gt; Snapshots
+  Trades --&gt; Snapshots
+  Snapshots --&gt; WS
+
+  classDef trigger fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef context fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef ai fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef route fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Manual,Scheduler,SignalTrigger,ProgramTrigger,HyperAIChat trigger
+  class AccountState,MarketContext,PromptBinding,FactorContext,NewsContext,SignalContext,Context context
+  class DecisionEngine,LLM,DecisionPersist ai
+  class Dispatcher,PaperRoute,HyperLive,BinanceLive,HiBTManual,ProgramSandbox route
+  class Orders,Positions,Trades,Snapshots,WS data</pre></section>
+    <section><h2>9. 事件合约回测、纸面交易与滚动验证</h2><pre class="mermaid">flowchart TB
+  subgraph Predict[&quot;预测管线 EventContractService.predict&quot;]
+    Data[&quot;data.py&lt;br/&gt;K线 / L2 / CoinGlass 数据接入&quot;]
+    Features[&quot;features.py + flow_features.py&lt;br/&gt;l2_features.py + coinglass_features.py&lt;br/&gt;特征构建&quot;]
+    Rules[&quot;rules.py + analysis.py&lt;br/&gt;规则引擎与技术面快照&quot;]
+    LLMPanel[&quot;llm.py 多评审员共识&lt;br/&gt;constants.py: 25人评审团&lt;br/&gt;共识阈值5 / 上限31&quot;]
+    ReviewerLearn[&quot;reviewer_expertise.py&lt;br/&gt;reviewer_learning.py&lt;br/&gt;30评审员贝叶斯进化&quot;]
+    Signal[&quot;signal.py&lt;br/&gt;_build_event_signal 信号载荷&quot;]
+  end
+
+  subgraph Backtest[&quot;历史回测&quot;]
+    BT[&quot;backtest.py + backtest_helpers.py&lt;br/&gt;历史结算回测循环&quot;]
+    Stats[&quot;backtest_stats.py&lt;br/&gt;binomial_p_value / wilson_interval&quot;]
+    QualityGate[&quot;backtest_quality.py + quality.py&lt;br/&gt;覆盖率审计 preview_data_quality&quot;]
+    Constraints[&quot;backtest_constraints.py + backtest_research.py&quot;]
+    Tasks[&quot;tasks.py&lt;br/&gt;异步回测任务线程 + 暂停&quot;]
+    Validation[&quot;backtest_validation.py&lt;br/&gt;holdout 配置重放&quot;]
+  end
+
+  subgraph Paper[&quot;纸面交易 60s 循环 live_paper_trader.py&quot;]
+    Settle[&quot;Phase 1 settle&lt;br/&gt;到期 open 注单按 1m bar 结算&quot;]
+    Fill[&quot;Phase 2 fill entry&lt;br/&gt;pending_entry 按下一根 bar 开盘价成交&quot;]
+    Decide[&quot;Phase 3 decide&lt;br/&gt;调 predict 开新 pending_entry&quot;]
+    Isolation[&quot;每 trader 独立 try/except + 独立 commit&lt;br/&gt;单个失败不拖垮同侪&quot;]
+  end
+
+  subgraph Rolling[&quot;滚动样本外验证 12h rolling_validation.py&quot;]
+    Fingerprint[&quot;config.py _strategy_fingerprint&lt;br/&gt;与窗口无关的策略指纹&quot;]
+    Holdout[&quot;冻结参数 holdout 回测&lt;br/&gt;复用 /{run_id}/holdout 配置重放&lt;br/&gt;覆盖上次验证点以来的窗口&quot;]
+    Guard[&quot;重复 pending 启动防护&quot;]
+    Cumulative[&quot;cumulative_validation_stats&lt;br/&gt;聚合 recorded 窗口&lt;br/&gt;Wilson CI + 二项显著性&quot;]
+  end
+
+  Data --&gt; Features --&gt; Rules --&gt; LLMPanel --&gt; Signal
+  ReviewerLearn --&gt; LLMPanel
+  Signal --&gt; BT
+  BT --&gt; Stats
+  BT --&gt; QualityGate
+  BT --&gt; Constraints
+  Tasks --&gt; BT
+  Validation --&gt; BT
+
+  Settle --&gt; Fill --&gt; Decide
+  Decide --&gt;|predict| Data
+  Decide --&gt; Isolation
+
+  Fingerprint --&gt; Holdout --&gt; Guard
+  Holdout --&gt; Validation
+  Cumulative --&gt; Card[&quot;前端可信度卡片&lt;br/&gt;analytics/EventPaperTraderCard&quot;]
+
+  PaperTables[(&quot;EventContractPaperTrader&lt;br/&gt;EventContractPaperBet&quot;)] --&gt; Settle
+  ValidationLog[(&quot;EventContractValidationLog&quot;)] --&gt; Cumulative
+  RunTables[(&quot;EventContractBacktestRun&lt;br/&gt;EventContractTradeLog&lt;br/&gt;EventContractBacktestTask&quot;)] --&gt; BT
+
+  classDef predict fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef backtest fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef paper fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef rolling fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Data,Features,Rules,LLMPanel,ReviewerLearn,Signal predict
+  class BT,Stats,QualityGate,Constraints,Tasks,Validation backtest
+  class Settle,Fill,Decide,Isolation paper
+  class Fingerprint,Holdout,Guard,Cumulative,Card rolling
+  class PaperTables,ValidationLog,RunTables data</pre></section>
+    <section><h2>10. 数据模型 ER 概览</h2><pre class="mermaid">erDiagram
+  USER ||--o{ ACCOUNT : owns
+  USER ||--o{ USER_AUTH_SESSION : authenticates
+  USER ||--o{ USER_EXCHANGE_CONFIG : selects_exchange
+  USER ||--o{ COINGLASS_USER_KEY : stores_key
+
+  ACCOUNT ||--o{ POSITION : has
+  ACCOUNT ||--o{ ORDER : places
+  ACCOUNT ||--o{ TRADE : records
+  ACCOUNT ||--o{ AI_DECISION_LOG : produces
+  ACCOUNT ||--o{ ACCOUNT_ASSET_SNAPSHOT : snapshots
+  ACCOUNT ||--o{ ACCOUNT_PROMPT_BINDING : uses_prompt
+  ACCOUNT ||--o{ ACCOUNT_PROGRAM_BINDING : runs_program
+  ACCOUNT ||--o{ ACCOUNT_STRATEGY_CONFIG : configures_strategy
+
+  PROMPT_TEMPLATE ||--o{ ACCOUNT_PROMPT_BINDING : bound_to
+  PROMPT_TEMPLATE ||--o{ PROMPT_BACKTEST_TASK : tests
+  PROMPT_BACKTEST_TASK ||--o{ PROMPT_BACKTEST_ITEM : has_items
+
+  TRADING_PROGRAM ||--o{ ACCOUNT_PROGRAM_BINDING : bound_to
+  TRADING_PROGRAM ||--o{ PROGRAM_EXECUTION_LOG : logs
+  TRADING_PROGRAM ||--o{ BACKTEST_RESULT : backtests
+  BACKTEST_RESULT ||--o{ BACKTEST_TRIGGER_LOG : explains
+
+  SIGNAL_DEFINITION ||--o{ SIGNAL_POOL : included_in
+  SIGNAL_POOL ||--o{ SIGNAL_TRIGGER_LOG : emits
+  SIGNAL_POOL ||--o{ TRADER_TRIGGER_CONFIG : routes_to_trader
+
+  CRYPTO_KLINE ||--o{ FACTOR_VALUE : input_to
+  CUSTOM_FACTOR ||--o{ FACTOR_VALUE : computes
+  FACTOR_VALUE ||--o{ FACTOR_EFFECTIVENESS : evaluated_by
+  MARKET_TRADES_AGGREGATED ||--o{ SIGNAL_TRIGGER_LOG : can_trigger
+  MARKET_ASSET_METRICS ||--o{ SIGNAL_TRIGGER_LOG : can_trigger
+  MARKET_ORDERBOOK_SNAPSHOTS ||--o{ SIGNAL_TRIGGER_LOG : can_trigger
+
+  HYPERLIQUID_WALLET ||--o{ HYPERLIQUID_ACCOUNT_SNAPSHOT : snapshots
+  HYPERLIQUID_WALLET ||--o{ HYPERLIQUID_POSITION : positions
+  HYPERLIQUID_WALLET ||--o{ HYPERLIQUID_EXCHANGE_ACTION : actions
+  BINANCE_WALLET ||--o{ BINANCE_ACCOUNT_SNAPSHOT : snapshots
+  HIBT_WALLET ||--o{ TRADE : manual_trades
+
+  BINANCE_BACKFILL_TASK ||--o{ CRYPTO_KLINE : fills
+  HIBT_BACKFILL_TASK ||--o{ CRYPTO_KLINE : fills
+  HYPERLIQUID_BACKFILL_TASK ||--o{ CRYPTO_KLINE : fills
+
+  HYPER_AI_PROFILE ||--o{ HYPER_AI_CONVERSATION : owns
+  HYPER_AI_CONVERSATION ||--o{ HYPER_AI_MESSAGE : contains
+  HYPER_AI_PROFILE ||--o{ HYPER_AI_MEMORY : remembers
+  BOT_CONFIG ||--o{ BOT_CHAT_BINDING : binds
+
+  EVENT_CONTRACT_BACKTEST_RUN ||--o{ EVENT_CONTRACT_TRADE_LOG : has
+  EVENT_CONTRACT_BACKTEST_TASK ||--o{ EVENT_CONTRACT_BACKTEST_RUN : creates
+  EVENT_CONTRACT_PAPER_TRADER ||--o{ EVENT_CONTRACT_PAPER_BET : places
+  EVENT_CONTRACT_PAPER_TRADER ||--o{ EVENT_CONTRACT_VALIDATION_LOG : validates</pre></section>
+    <section><h2>11. 启动与关闭流程</h2><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant Proc as uvicorn main:app
+  participant Main as backend/main.py
+  participant AppStart as app_startup.py
+  participant Startup as services/startup.py
+  participant DB as PostgreSQL
+  participant Scheduler as APScheduler
+  participant Services as Collectors / Streams / Bots
+
+  Proc-&gt;&gt;Main: import FastAPI app and routers
+  Main-&gt;&gt;Main: mount static, add CORS/GZip
+  Proc-&gt;&gt;Main: startup event
+  Main-&gt;&gt;AppStart: run_startup_tasks()
+  AppStart-&gt;&gt;DB: Base.metadata.create_all
+  AppStart-&gt;&gt;DB: init snapshot DB
+  AppStart-&gt;&gt;DB: run idempotent migrations
+  AppStart-&gt;&gt;DB: validate/sync schema
+  AppStart-&gt;&gt;DB: seed configs, default user, prompts
+  AppStart-&gt;&gt;AppStart: init Hyper AI from env if configured
+  AppStart-&gt;&gt;DB: cleanup leftover backfill tasks
+  AppStart-&gt;&gt;Startup: initialize_services()
+  Startup-&gt;&gt;Scheduler: start scheduler and interval jobs
+  Startup-&gt;&gt;Services: refresh symbol catalogs
+  Startup-&gt;&gt;Services: start market stream and pub/sub subscribers
+  Startup-&gt;&gt;Services: start strategy manager
+  Startup-&gt;&gt;Services: start account snapshots, kline collector, market-flow collectors
+  Startup-&gt;&gt;Services: start factor engine, news collector, event paper trader
+  Main-&gt;&gt;Services: restore Telegram/Discord adapters
+
+  Proc-&gt;&gt;Main: shutdown event
+  Main-&gt;&gt;Services: stop runtime monitor
+  Main-&gt;&gt;Startup: shutdown_services()
+  Startup-&gt;&gt;Services: stop strategy manager, market stream, collectors, news
+  Startup-&gt;&gt;Scheduler: stop scheduler
+  Main-&gt;&gt;Services: stop Discord gateway</pre></section>
+    <section><h2>12. 开发、构建与部署运行图</h2><pre class="mermaid">flowchart LR
+  DevCmd[&quot;pnpm dev&quot;] --&gt; Concurrent[&quot;concurrently&lt;br/&gt;dev:backend + dev:frontend&quot;]
+  Concurrent --&gt; BackendDev[&quot;cd backend&lt;br/&gt;uv sync --quiet&lt;br/&gt;uv run uvicorn main:app --reload --port 5611 --host 0.0.0.0&quot;]
+  Concurrent --&gt; FrontendDev[&quot;cd frontend&lt;br/&gt;pnpm dev&lt;br/&gt;Vite :8802&quot;]
+  FrontendDev --&gt; Proxy[&quot;Vite proxy&lt;br/&gt;/api -&gt; 127.0.0.1:5611&lt;br/&gt;/ws -&gt; ws://127.0.0.1:5611&quot;]
+  BackendDev --&gt; FastAPI[&quot;FastAPI backend/main.py&quot;]
+  Proxy --&gt; FastAPI
+
+  BuildCmd[&quot;pnpm build:frontend&quot;] --&gt; ViteBuild[&quot;frontend/package.json&lt;br/&gt;vite build&quot;]
+  ViteBuild --&gt; Dist[&quot;frontend/dist&lt;br/&gt;hashed assets + chunks&quot;]
+  BackendRuntime[&quot;backend/app_runtime.py&lt;br/&gt;build_frontend + watcher&quot;] --&gt; Dist
+  BackendRuntime --&gt; Static[&quot;backend/static&lt;br/&gt;production static serving&quot;]
+  FastAPI --&gt; Static
+
+  BackendDev --&gt; DB[(&quot;PostgreSQL&lt;br/&gt;DATABASE_URL / SessionLocal&quot;)]
+  FastAPI --&gt; Env[&quot;.env / config/settings.py&lt;br/&gt;API keys, CORS, feature flags&quot;]
+  FastAPI --&gt; Logs[&quot;system logs / stdout / tmux/systemd logs&quot;]
+
+  classDef cmd fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef runtime fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef artifact fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef config fill:#fef3c7,stroke:#d97706,color:#0f172a
+  class DevCmd,Concurrent,BuildCmd cmd
+  class BackendDev,FrontendDev,Proxy,FastAPI,BackendRuntime runtime
+  class Dist,Static,DB artifact
+  class Env,Logs config</pre></section>
+  </main>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { htmlLabels: true } });
+  </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+flowchart LR
+  subgraph State["前端状态层"]
+    AuthCtx["AuthContext<br/>/api/auth<br/>Cookie arena_token"]
+    ExchangeCtx["ExchangeContext<br/>selected_exchange<br/>localStorage + /api/users/exchange-config"]
+    TradingModeCtx["TradingModeContext<br/>testnet/mainnet<br/>/api/hyperliquid/trading-mode"]
+    ArenaCtx["ArenaDataContext<br/>缓存 arena trades / model chat / positions"]
+    HashRoute["useHashRoute<br/>window.location.hash"]
+    WSClient["useTradingWebSocket<br/>行情/资产推送"]
+  end
+
+  subgraph ApiLib["frontend/app/lib"]
+    ApiClient["apiClient.ts<br/>apiRequest()<br/>Authorization Bearer + JSON errors"]
+    ApiBarrel["api.ts<br/>统一导出 account/arena/core/eventContract/hibt/... APIs"]
+    HyperApi["hyperliquidApi.ts"]
+    HibtApi["hibtApi.ts"]
+    EventApi["eventContractApi.ts"]
+    ProgramApi["programApi.ts"]
+    PromptApi["promptApi.ts"]
+  end
+
+  subgraph UI["页面与组件"]
+    SettingsPage["SettingsPage<br/>交易所 watchlist / 数据采集"]
+    DataTab["ExchangeDataSettingsTab<br/>Binance 与 HiBT 共用卡片骨架"]
+    Heatmap["DataCoverageHeatmap<br/>365/730 天覆盖热力图"]
+    KlinesView["KlinesView"]
+    CoinGlassView["CoinGlassView"]
+    HyperAi["Hyper AI Chat"]
+    BacktestView["BacktestTool"]
+    AttributionView["AttributionAnalysis"]
+  end
+
+  UI --> ApiBarrel
+  ApiBarrel --> ApiClient
+  AuthCtx --> ApiClient
+  ExchangeCtx --> ApiClient
+  TradingModeCtx --> ApiClient
+  WSClient --> WSBackend["/ws 或 /api/ws<br/>backend/api/ws"]
+
+  SettingsPage --> DataTab
+  DataTab --> Heatmap
+  SettingsPage -->|watchlist| BinanceHibt["/api/binance/*<br/>/api/hibt/*"]
+  SettingsPage -->|storage / retention| SystemStats["/api/system/storage-stats<br/>/api/system/retention"]
+  SettingsPage -->|backfill| Backfill["POST /api/system/{exchange}/backfill<br/>GET /status"]
+  Heatmap --> Coverage["GET /api/system/data-coverage<br/>exchange + data_type + period + days"]
+
+  KlinesView --> KlineApi["/api/klines<br/>/api/klines/analysis"]
+  CoinGlassView --> CGApi["/api/coinglass/catalog<br/>/api/coinglass/subscription<br/>/api/coinglass/*"]
+  HyperAi --> HyperAiApi["/api/hyper-ai/*<br/>/api/ai-stream/*"]
+  BacktestView --> BacktestApi["/api/event-contract/*<br/>/api/prompt-backtest/*"]
+  AttributionView --> AttributionApi["/api/analytics/*<br/>/api/event-contract/*"]
+
+  classDef state fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef api fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef ui fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef endpoint fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class AuthCtx,ExchangeCtx,TradingModeCtx,ArenaCtx,HashRoute,WSClient state
+  class ApiClient,ApiBarrel,HyperApi,HibtApi,EventApi,ProgramApi,PromptApi api
+  class SettingsPage,DataTab,Heatmap,KlinesView,CoinGlassView,HyperAi,BacktestView,AttributionView ui
+  class WSBackend,BinanceHibt,SystemStats,Backfill,Coverage,KlineApi,CGApi,HyperAiApi,BacktestApi,AttributionApi endpoint

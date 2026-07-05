@@ -1,0 +1,64 @@
+flowchart TB
+  subgraph Predict["预测管线 EventContractService.predict"]
+    Data["data.py<br/>K线 / L2 / CoinGlass 数据接入"]
+    Features["features.py + flow_features.py<br/>l2_features.py + coinglass_features.py<br/>特征构建"]
+    Rules["rules.py + analysis.py<br/>规则引擎与技术面快照"]
+    LLMPanel["llm.py 多评审员共识<br/>constants.py: 25人评审团<br/>共识阈值5 / 上限31"]
+    ReviewerLearn["reviewer_expertise.py<br/>reviewer_learning.py<br/>30评审员贝叶斯进化"]
+    Signal["signal.py<br/>_build_event_signal 信号载荷"]
+  end
+
+  subgraph Backtest["历史回测"]
+    BT["backtest.py + backtest_helpers.py<br/>历史结算回测循环"]
+    Stats["backtest_stats.py<br/>binomial_p_value / wilson_interval"]
+    QualityGate["backtest_quality.py + quality.py<br/>覆盖率审计 preview_data_quality"]
+    Constraints["backtest_constraints.py + backtest_research.py"]
+    Tasks["tasks.py<br/>异步回测任务线程 + 暂停"]
+    Validation["backtest_validation.py<br/>holdout 配置重放"]
+  end
+
+  subgraph Paper["纸面交易 60s 循环 live_paper_trader.py"]
+    Settle["Phase 1 settle<br/>到期 open 注单按 1m bar 结算"]
+    Fill["Phase 2 fill entry<br/>pending_entry 按下一根 bar 开盘价成交"]
+    Decide["Phase 3 decide<br/>调 predict 开新 pending_entry"]
+    Isolation["每 trader 独立 try/except + 独立 commit<br/>单个失败不拖垮同侪"]
+  end
+
+  subgraph Rolling["滚动样本外验证 12h rolling_validation.py"]
+    Fingerprint["config.py _strategy_fingerprint<br/>与窗口无关的策略指纹"]
+    Holdout["冻结参数 holdout 回测<br/>复用 /{run_id}/holdout 配置重放<br/>覆盖上次验证点以来的窗口"]
+    Guard["重复 pending 启动防护"]
+    Cumulative["cumulative_validation_stats<br/>聚合 recorded 窗口<br/>Wilson CI + 二项显著性"]
+  end
+
+  Data --> Features --> Rules --> LLMPanel --> Signal
+  ReviewerLearn --> LLMPanel
+  Signal --> BT
+  BT --> Stats
+  BT --> QualityGate
+  BT --> Constraints
+  Tasks --> BT
+  Validation --> BT
+
+  Settle --> Fill --> Decide
+  Decide -->|predict| Data
+  Decide --> Isolation
+
+  Fingerprint --> Holdout --> Guard
+  Holdout --> Validation
+  Cumulative --> Card["前端可信度卡片<br/>analytics/EventPaperTraderCard"]
+
+  PaperTables[("EventContractPaperTrader<br/>EventContractPaperBet")] --> Settle
+  ValidationLog[("EventContractValidationLog")] --> Cumulative
+  RunTables[("EventContractBacktestRun<br/>EventContractTradeLog<br/>EventContractBacktestTask")] --> BT
+
+  classDef predict fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef backtest fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef paper fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef rolling fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  class Data,Features,Rules,LLMPanel,ReviewerLearn,Signal predict
+  class BT,Stats,QualityGate,Constraints,Tasks,Validation backtest
+  class Settle,Fill,Decide,Isolation paper
+  class Fingerprint,Holdout,Guard,Cumulative,Card rolling
+  class PaperTables,ValidationLog,RunTables data

@@ -1,0 +1,39 @@
+flowchart LR
+  User["操作者 / 研究员<br/>浏览器 UI"] --> Browser["Browser<br/>React + Hash Route"]
+  Browser -->|开发环境 http://127.0.0.1:8802| Vite["Vite Dev Server<br/>frontend/vite.config.ts<br/>proxy /api + /ws"]
+  Browser -->|生产环境同源访问| Static["FastAPI Static<br/>backend/static<br/>/static 与 /assets"]
+  Vite -->|/api 与 /ws 代理| FastAPI["FastAPI app<br/>backend/main.py<br/>uvicorn :5611"]
+  Static --> FastAPI
+  Browser -->|fetch /api/*| FastAPI
+  Browser -->|长轮询 /api/ai-stream/{task_id}?offset=| AIStream["AI Stream Service<br/>api/ai_stream_routes.py<br/>services/ai_stream_service.py<br/>缓冲轮询而非原生 SSE"]
+  Browser -->|WebSocket /ws| WS["WebSocket Manager<br/>api/ws/*"]
+
+  FastAPI --> Startup["启动层<br/>backend/app_startup.py<br/>services/startup.py"]
+  Startup --> Scheduler["APScheduler 包装<br/>services/scheduler.py"]
+  Startup --> Collectors["行情采集器<br/>Kline / Market Flow / Binance / HiBT"]
+  Startup --> Strategy["交易策略与自动交易<br/>services/trading_strategy.py"]
+  Startup --> RuntimeMonitor["运行时监控<br/>backend/app_runtime.py"]
+
+  FastAPI --> MainDB[("PostgreSQL 主库<br/>SQLAlchemy SessionLocal")]
+  FastAPI --> SnapshotDB[("Snapshot DB<br/>snapshot_connection<br/>snapshot_models")]
+  Scheduler --> MainDB
+  Collectors --> MainDB
+  Strategy --> MainDB
+  AIStream --> MainDB
+  WS --> Browser
+
+  Collectors --> BinanceAPI["Binance Futures APIs<br/>REST + WebSocket"]
+  Collectors --> HiBTAPI["HiBT Public APIs<br/>REST Kline + Deals"]
+  Collectors --> HyperAPI["Hyperliquid APIs<br/>Market + Account"]
+  FastAPI --> CoinGlassAPI["CoinGlass APIs<br/>server-side paid keys"]
+  FastAPI --> LLM["LLM Providers<br/>OpenAI-compatible / Anthropic / others"]
+  FastAPI --> Bots["Telegram / Discord Bot Adapter"]
+
+  classDef client fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+  classDef backend fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef external fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class User,Browser,Vite,Static client
+  class FastAPI,Startup,Scheduler,Collectors,Strategy,RuntimeMonitor,AIStream,WS backend
+  class MainDB,SnapshotDB data
+  class BinanceAPI,HiBTAPI,HyperAPI,CoinGlassAPI,LLM,Bots external

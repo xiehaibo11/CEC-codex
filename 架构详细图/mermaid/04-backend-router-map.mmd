@@ -1,0 +1,53 @@
+flowchart TB
+  Main["backend/main.py<br/>FastAPI app"] --> Middleware["CORS + GZip<br/>StaticFiles /static /assets"]
+  Main --> StartupHooks["startup/shutdown hooks<br/>app_startup + service shutdown"]
+  Main --> Health["GET /api/health<br/>POST /api/rebuild-frontend"]
+
+  Main --> Auth["/api/auth<br/>local_auth_routes.py"]
+  Main --> User["/api/users<br/>user_routes.py"]
+  Main --> Accounts["/api/account<br/>account_routes.py"]
+  Main --> Orders["/api/orders<br/>order_routes.py"]
+  Main --> Crypto["/api/crypto<br/>crypto_routes.py"]
+  Main --> Market["/api/market<br/>market_data_routes.py"]
+  Main --> Ranking["/api/ranking<br/>ranking_routes.py"]
+  Main --> Arena["/api/arena<br/>arena_routes.py"]
+  Main --> Config["/api/config<br/>config_routes.py"]
+  Main --> Sampling["/api/sampling<br/>sampling_routes.py"]
+  Main --> MarketRegime["/api/market-regime<br/>market_regime_routes.py"]
+  Main --> TraderData["/api/trader<br/>trader_data_routes.py + api/trader_data/*"]
+  Main --> PromptBacktest["/api/prompt-backtest<br/>prompt_backtest_routes.py"]
+
+  Main --> HyperLiquid["/api/hyperliquid<br/>hyperliquid_routes.py"]
+  Main --> HyperActions["/api/hyperliquid/actions<br/>hyperliquid_action_routes.py"]
+  Main --> Binance["/api/binance<br/>wallet / trading / account / market"]
+  Main --> HiBT["/api/hibt<br/>wallet / trading / account / market"]
+
+  Main --> Klines["/api/klines<br/>kline_routes.py + kline_analysis_routes.py"]
+  Main --> MarketFlow["/api/market-flow<br/>summary + indicators"]
+  Main --> System["/api/system<br/>storage_stats + coverage + retention + backfill"]
+  Main --> CoinGlass["/api/coinglass<br/>catalog + keys + event_contract client"]
+
+  Main --> HyperAI["/api/hyper-ai<br/>profile + conversation + memory + skills + tools"]
+  Main --> AIStream["/api/ai-stream<br/>SSE task polling"]
+  Main --> Prompts["/api/prompts<br/>templates + bindings + preview + AI chat + variables"]
+  Main --> Program["/api/programs<br/>legacy program routes"]
+  Main --> Signals["/api/signals<br/>definitions + pools + analysis + testing + trigger logs"]
+  Main --> Factors["/api/factors<br/>library + values + effectiveness + compute + custom + expression"]
+  Main --> Analytics["/api/analytics<br/>analytics_routes.py"]
+  Main --> EventContract["/api/event-contract<br/>event_contract_routes.py"]
+  Main --> News["/api/news<br/>news_routes.py"]
+  Main --> Intel["/api/market-intelligence<br/>market_intelligence_routes.py"]
+  Main --> Logs["/api/system-logs<br/>system_log_routes.py"]
+  Main --> Bots["/api/bot<br/>telegram + discord + notifications"]
+
+  System --> StorageStats["GET storage-stats?exchange="]
+  System --> Coverage["GET data-coverage?exchange=&data_type=&period=&days="]
+  System --> Retention["GET/PUT retention-days"]
+  System --> Backfill["POST /{exchange}/backfill<br/>GET /{exchange}/backfill/status"]
+
+  classDef root fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef route fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef system fill:#fef3c7,stroke:#d97706,color:#0f172a
+  class Main,Middleware,StartupHooks,Health root
+  class Auth,User,Accounts,Orders,Crypto,Market,Ranking,Arena,Config,Sampling,MarketRegime,TraderData,PromptBacktest,HyperLiquid,HyperActions,Binance,HiBT,Klines,MarketFlow,CoinGlass,HyperAI,AIStream,Prompts,Program,Signals,Factors,Analytics,EventContract,News,Intel,Logs,Bots route
+  class System,StorageStats,Coverage,Retention,Backfill system
