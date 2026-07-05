@@ -9,6 +9,8 @@ import logging
 import json
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime
@@ -43,6 +45,17 @@ class BinanceAdapter(BaseExchangeAdapter):
         super().__init__(environment)
         self.base_url = self.TESTNET_URL if environment == "testnet" else self.BASE_URL
         self.session = requests.Session()
+        # The session lives across poll cycles minutes apart; Binance closes idle
+        # keep-alive connections, and reusing the dead socket raises
+        # RemoteDisconnected. GET-only retries recover transparently.
+        retry = Retry(
+            total=2,
+            connect=2,
+            read=2,
+            backoff_factor=0.3,
+            allowed_methods=frozenset(["GET"]),
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
         self.session.headers.update({"Content-Type": "application/json"})
         proxy = os.environ.get("BINANCE_HTTPS_PROXY") or os.environ.get("HTTPS_PROXY")
         if proxy:
