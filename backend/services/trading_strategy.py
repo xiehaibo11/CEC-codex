@@ -318,7 +318,7 @@ class HyperliquidStrategyManager(StrategyManager):
                         trigger_type=trigger_type, trigger_context=trigger_context
                     )
                 else:
-                    print(f"[HyperliquidStrategy] Account {account_id} mark_triggered_by_signal returned False (already running?)")
+                    print(f"[HyperliquidStrategy] Account {account_id} mark_triggered_by_signal returned False (already running, or trigger_interval cooldown not yet elapsed)")
 
         if not found_match:
             print(f"[HyperliquidStrategy] No strategy found bound to pool_id={pool_id}")
