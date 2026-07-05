@@ -63,13 +63,37 @@ class StrategyState:
             return True
 
     def mark_triggered_by_signal(self, event_time: datetime) -> bool:
-        """Mark strategy as triggered by signal."""
+        """Mark strategy as triggered by signal.
+
+        Enforces the same trigger_interval cooldown as should_trigger_scheduled.
+        Without it, a signal that edge-triggers repeatedly on a noisy metric
+        (e.g. an order-book depth ratio crossing its threshold back and forth
+        every 15-30 minutes) causes the AI to treat each re-fire as an
+        independent opportunity and pyramid into the same position with no
+        awareness of what it just bought minutes earlier. trigger_interval is
+        the account's own configured minimum re-evaluation cadence - it should
+        bound signal-triggered re-entries the same way it bounds scheduled ones.
+        """
         if not self.enabled:
             return False
 
         with self.lock:
             if self.running:
                 return False
+
+            now_ts = event_time.timestamp()
+            last_ts = self.last_trigger_at.timestamp() if self.last_trigger_at else 0
+            time_diff = now_ts - last_ts
+            if time_diff < self.trigger_interval:
+                logger.info(
+                    "Signal trigger for account %s suppressed by cooldown: "
+                    "%.1fs since last trigger < %ss trigger_interval",
+                    self.account_id,
+                    time_diff,
+                    self.trigger_interval,
+                )
+                return False
+
             self.last_trigger_at = event_time
             self.running = True
             return True
