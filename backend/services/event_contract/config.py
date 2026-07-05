@@ -205,6 +205,24 @@ class EventContractConfigMixin:
         # of what was originally requested.
         cfg["_enforced_cost_floors"] = enforced_cost_floors
         cfg["return_trade_limit"] = min(max(cfg["return_trade_limit"], 1), 1000)
+        # --- Factor combination entry gate ----------------------------------------
+        # Evidence (2026-07-05 run-2027 forensics): trades taken while both
+        # "5m momentum" and "VWAP deviation" sit above their trailing p60 win
+        # 56% on an honest train/test split vs the 50.4% unconditioned baseline.
+        # Keys enter the normalized config ONLY when the gate is enabled so
+        # existing strategies keep their fingerprints (rolling validation
+        # continuity depends on fingerprint stability).
+        if config.get("enable_factor_gate"):
+            cfg["enable_factor_gate"] = True
+            cfg["factor_gate_quantile"] = min(
+                max(float(config.get("factor_gate_quantile") or 0.6), 0.5), 0.95
+            )
+            cfg["factor_gate_lookback"] = min(
+                max(int(config.get("factor_gate_lookback") or 60), 20), 500
+            )
+            cfg["factor_gate_min_history"] = min(
+                max(int(config.get("factor_gate_min_history") or 40), 10), cfg["factor_gate_lookback"]
+            )
         if cfg["draw_result"] not in {"loss", "draw", "refund"}:
             raise ValueError(f"Unsupported draw_result: {cfg['draw_result']}")
         if cfg["stake_amount"] < cfg["min_stake"]:

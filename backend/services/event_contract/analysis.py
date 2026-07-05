@@ -106,6 +106,10 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         if cfg["enable_cvd_filter"] and abs(features["cvd_proxy"]) < 0.08 and not professional_policy:
             cvd_source = localize_cvd_source(str(features["cvd_source"]))
             blocked_reasons.append(f"{cvd_source} CVD 未确认方向")
+        factor_gate_reason = self._factor_gate_block_reason(history, features, cfg)
+        if factor_gate_reason:
+            blocked_reasons.append(factor_gate_reason)
+            veto_reasons.append(factor_gate_reason)
         edge_quality_blocked = False
         if cfg.get("enable_edge_quality_gate"):
             target_win_rate = cfg.get("target_win_rate", 75)
@@ -589,6 +593,62 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "timeframes": ["1m", "3m", "5m", "15m"],
             "invalid_conditions": list(rule_analysis.get("blocked_reasons") or []),
         }
+
+    def _factor_gate_block_reason(
+        self,
+        history: List[Dict[str, Any]],
+        features: Dict[str, Any],
+        cfg: Dict[str, Any],
+    ) -> Optional[str]:
+        """Factor-combination entry gate (opt-in via enable_factor_gate).
+
+        Entry requires BOTH "5m momentum" (ret5) and "VWAP deviation" to sit at
+        or above their trailing-window quantile. Thresholds are recomputed from
+        the bars available at decision time only, so the gate is leakage-free
+        by construction and regime-adaptive. Evidence: 2026-07-05 run-2027
+        forensics — this pair was the only filter whose train/test win rates
+        agreed (56.0% / 56.2%) above the unconditioned 50.4% baseline.
+        """
+        if not cfg.get("enable_factor_gate"):
+            return None
+        quantile = float(cfg.get("factor_gate_quantile") or 0.6)
+        lookback = int(cfg.get("factor_gate_lookback") or 60)
+        min_history = int(cfg.get("factor_gate_min_history") or 40)
+        closes = [k["close"] for k in history]
+        if len(closes) < max(min_history, 6):
+            return "因子门控：历史样本不足，禁止入场"
+
+        n = min(lookback, len(closes))
+        start = len(closes) - n
+        ret5_series: List[float] = []
+        vwap_dev_series: List[float] = []
+        for i in range(start, len(closes)):
+            if i >= 5 and closes[i - 5]:
+                ret5_series.append((closes[i] - closes[i - 5]) / closes[i - 5] * 100)
+            close_i = closes[i]
+            if close_i:
+                vwap_i = self._vwap(history[max(0, i - 59) : i + 1])
+                vwap_dev_series.append((close_i - vwap_i) / close_i * 100)
+        if len(ret5_series) < min_history or len(vwap_dev_series) < min_history:
+            return "因子门控：历史样本不足，禁止入场"
+
+        def trailing_quantile(values: List[float]) -> float:
+            ordered = sorted(values)
+            idx = min(len(ordered) - 1, max(0, int(quantile * len(ordered))))
+            return ordered[idx]
+
+        ret5_threshold = trailing_quantile(ret5_series)
+        vwap_dev_threshold = trailing_quantile(vwap_dev_series)
+        close = features.get("close") or 0.0
+        vwap_dev_now = (close - (features.get("vwap") or 0.0)) / close * 100 if close else 0.0
+        ret5_now = float(features.get("ret5") or 0.0)
+        if ret5_now < ret5_threshold or vwap_dev_now < vwap_dev_threshold:
+            return (
+                f"因子门控：5m动量 {ret5_now:.4f}（阈值 {ret5_threshold:.4f}）与 "
+                f"VWAP偏离 {vwap_dev_now:.4f}（阈值 {vwap_dev_threshold:.4f}）"
+                f"未同时达到 trailing p{int(quantile * 100)}"
+            )
+        return None
 
     def _compute_features(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         closes = [k["close"] for k in history]
