@@ -13,7 +13,7 @@ export default function PriceTicker({ symbol, name }: PriceTickerProps) {
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const response = await fetch(`/api/market-data/price/${symbol}`)
+        const response = await fetch(`/api/market/price/${symbol}`)
         if (response.ok) {
           const data = await response.json()
           setPrice(data.price)

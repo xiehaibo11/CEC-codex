@@ -81,19 +81,6 @@ export async function getUserProfile(sessionToken: string): Promise<User> {
   return response.json()
 }
 
-export async function listTradingAccounts(sessionToken: string): Promise<TradingAccount[]> {
-  const response = await apiRequest(`/accounts/?session_token=${sessionToken}`)
-  return response.json()
-}
-
-export async function createTradingAccount(account: TradingAccountCreate, sessionToken: string): Promise<TradingAccount> {
-  const response = await apiRequest(`/accounts/?session_token=${sessionToken}`, {
-    method: 'POST',
-    body: JSON.stringify(account),
-  })
-  return response.json()
-}
-
 export async function getAccountStrategy(accountId: number): Promise<StrategyConfig> {
   const response = await apiRequest(`/account/${accountId}/strategy`)
   return response.json()
@@ -105,20 +92,6 @@ export async function updateAccountStrategy(accountId: number, config: StrategyC
     body: JSON.stringify(config),
   })
   return response.json()
-}
-
-export async function updateTradingAccount(accountId: number, account: TradingAccountUpdate, sessionToken: string): Promise<TradingAccount> {
-  const response = await apiRequest(`/accounts/${accountId}?session_token=${sessionToken}`, {
-    method: 'PUT',
-    body: JSON.stringify(account),
-  })
-  return response.json()
-}
-
-export async function deleteTradingAccount(accountId: number, sessionToken: string): Promise<void> {
-  await apiRequest(`/accounts/${accountId}?session_token=${sessionToken}`, {
-    method: 'DELETE',
-  })
 }
 
 export async function getAccounts(options?: { include_hidden?: boolean }): Promise<TradingAccount[]> {
