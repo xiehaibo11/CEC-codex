@@ -205,6 +205,7 @@ from api.market_flow_routes import router as market_flow_router
 from api.signal_routes import router as signal_router
 from api.market_regime_routes import router as market_regime_router
 from api.analytics_routes import router as analytics_router
+from api.ai_review_routes import router as ai_review_router
 from api.trader_data_routes import router as trader_data_router
 from api.prompt_backtest_routes import router as prompt_backtest_router
 from api.system_routes import router as system_router
@@ -241,6 +242,7 @@ app.include_router(market_flow_router)
 app.include_router(signal_router)
 app.include_router(market_regime_router)
 app.include_router(analytics_router)
+app.include_router(ai_review_router)
 app.include_router(trader_data_router)
 app.include_router(prompt_backtest_router)
 app.include_router(program_router)
