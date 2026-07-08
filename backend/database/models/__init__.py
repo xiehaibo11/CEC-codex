@@ -31,6 +31,8 @@ from .trading import (
     Order,
     Trade,
     AIDecisionLog,
+    AIReviewRun,
+    AIReviewAgentReport,
     AccountAssetSnapshot,
     AccountStrategyConfig,
 )
@@ -135,6 +137,8 @@ __all__ = [
     "Order",
     "Trade",
     "AIDecisionLog",
+    "AIReviewRun",
+    "AIReviewAgentReport",
     "AccountAssetSnapshot",
     "AccountStrategyConfig",
     "CryptoPrice",

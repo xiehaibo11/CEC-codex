@@ -98,6 +98,7 @@ MIGRATIONS = [
     "add_event_contract_trade_log_ai_columns.py",
     "add_event_contract_paper_tables.py",
     "add_event_contract_validation_log.py",
+    "add_ai_review_tables.py",
 ]
 
 

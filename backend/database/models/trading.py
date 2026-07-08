@@ -139,10 +139,51 @@ class AIDecisionLog(Base):
     # Exchange identifier: "hyperliquid" or "binance"
     # NULL for historical data, treated as "hyperliquid" for backward compatibility
     exchange = Column(String(20), nullable=True)
+    review_run_id = Column(Integer, nullable=True, index=True)
+    review_verdict = Column(String(20), nullable=True)
+    review_blocked_reason = Column(Text, nullable=True)
 
     # Relationships
     account = relationship("Account")
     order = relationship("Order")
+
+
+class AIReviewRun(Base):
+    __tablename__ = "ai_review_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    decision_log_id = Column(Integer, ForeignKey("ai_decision_logs.id"), nullable=True, index=True)
+    exchange = Column(String(20), nullable=True, index=True)
+    environment = Column(String(20), nullable=True, index=True)
+    symbol = Column(String(20), nullable=True, index=True)
+    operation = Column(String(10), nullable=False)
+    original_target_portion = Column(DECIMAL(10, 6), nullable=True)
+    original_leverage = Column(Integer, nullable=True)
+    verdict = Column(String(20), nullable=False, index=True)
+    final_target_portion = Column(DECIMAL(10, 6), nullable=True)
+    final_leverage = Column(Integer, nullable=True)
+    final_reason = Column(Text, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    account = relationship("Account")
+    decision_log = relationship("AIDecisionLog")
+
+
+class AIReviewAgentReport(Base):
+    __tablename__ = "ai_review_agent_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    review_run_id = Column(Integer, ForeignKey("ai_review_runs.id"), nullable=False, index=True)
+    agent_role = Column(String(50), nullable=False, index=True)
+    verdict = Column(String(20), nullable=False, index=True)
+    confidence = Column(DECIMAL(5, 4), nullable=True)
+    report_json = Column(Text, nullable=True)
+    report_text = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    review_run = relationship("AIReviewRun")
 
 
 class AccountAssetSnapshot(Base):

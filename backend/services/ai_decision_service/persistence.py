@@ -114,6 +114,9 @@ def save_ai_decision(
             sl_order_id=sl_order_id,
             # Exchange identifier (NULL treated as "hyperliquid" for backward compatibility)
             exchange=exchange,
+            review_run_id=decision.get("review_run_id"),
+            review_verdict=decision.get("review_verdict"),
+            review_blocked_reason=decision.get("review_blocked_reason"),
         )
 
         db.add(decision_log)
