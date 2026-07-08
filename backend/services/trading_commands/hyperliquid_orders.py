@@ -315,6 +315,7 @@ def place_ai_driven_hyperliquid_order(
                     wallet_address=wallet_address,
                     symbol_whitelist=symbol_whitelist,
                     decision_kwargs=decision_kwargs,
+                    trigger_context=trigger_context,
                 )
 
         except Exception as account_err:

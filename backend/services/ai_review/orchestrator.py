@@ -1,12 +1,15 @@
 """Run AI decision reviews and apply final verdicts."""
 from __future__ import annotations
 
-from typing import Any, Dict
+import time
+from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
 
 from services.ai_review.agents import BacktestReviewer, LossReviewer, SignalReviewer
 from services.ai_review.agents.execution_judge import ExecutionJudge
+from services.ai_review.context_builder import build_review_context
+from services.ai_review.persistence import save_review_run
 from services.ai_review.schemas import FinalReview, FinalVerdict, ReviewContext
 
 
@@ -40,3 +43,37 @@ def apply_final_review_to_decision(decision: Dict[str, Any], review: FinalReview
             decision["leverage"] = min(int(decision.get("leverage") or 1), review.max_leverage)
 
     return {"allowed": True, "reason": review.summary}
+
+
+def review_and_apply(
+    db: Session,
+    *,
+    account,
+    decision: Dict[str, Any],
+    portfolio: Dict[str, Any],
+    positions: List[Dict[str, Any]],
+    prices: Dict[str, float],
+    exchange: str,
+    environment: str,
+    trigger_context=None,
+    decision_kwargs=None,
+) -> Dict[str, Any]:
+    if (decision.get("operation") or "").lower() in {"close", "hold"}:
+        return {"allowed": True, "review": None, "reason": "risk-reducing operation"}
+
+    started_at = time.monotonic()
+    context = build_review_context(
+        account=account,
+        decision=decision,
+        portfolio=portfolio,
+        positions=positions,
+        prices=prices,
+        exchange=exchange,
+        environment=environment,
+        trigger_context=trigger_context,
+        decision_kwargs=decision_kwargs,
+    )
+    review = run_review_pipeline(db, context)
+    review = save_review_run(db, context, review, started_at=started_at)
+    applied = apply_final_review_to_decision(decision, review)
+    return {"allowed": applied["allowed"], "review": review, "reason": applied["reason"]}

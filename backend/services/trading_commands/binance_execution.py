@@ -33,6 +33,7 @@ def _execute_binance_decision(
     default_leverage: int = 5,
     decision_kwargs: Optional[Dict[str, Any]] = None,
     wallet=None,
+    trigger_context: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Execute a single AI decision on Binance.
@@ -109,6 +110,32 @@ def _execute_binance_decision(
         logger.warning(f"[BINANCE] Invalid price for {symbol} for {account.name}")
         save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
         return
+
+    if operation in ("buy", "sell"):
+        from services.ai_review.orchestrator import review_and_apply
+
+        review_result = review_and_apply(
+            db,
+            account=account,
+            decision=decision,
+            portfolio=portfolio,
+            positions=positions,
+            prices=prices,
+            exchange="binance",
+            environment=wallet.environment if wallet is not None else "paper",
+            trigger_context=trigger_context,
+            decision_kwargs=decision_kwargs,
+        )
+        if not review_result["allowed"]:
+            logger.warning(
+                "[BINANCE] AI review blocked %s %s for %s: %s",
+                operation,
+                symbol,
+                account.name,
+                review_result["reason"],
+            )
+            save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
+            return
 
     order_result = None
 

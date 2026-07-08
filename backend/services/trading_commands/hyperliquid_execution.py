@@ -1,7 +1,7 @@
 """Per-decision execution for Hyperliquid AI trading."""
 import logging
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from services.ai_decision_service import save_ai_decision
 
@@ -25,6 +25,7 @@ def _execute_hyperliquid_decision(
     wallet_address: str,
     symbol_whitelist: Iterable[str],
     decision_kwargs: Dict[str, Any],
+    trigger_context: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Validate and execute one Hyperliquid AI decision."""
     if not isinstance(decision, dict):
@@ -93,6 +94,31 @@ def _execute_hyperliquid_decision(
 
     should_cancel_orders = False
     if operation in ("buy", "sell"):
+        from services.ai_review.orchestrator import review_and_apply
+
+        review_result = review_and_apply(
+            db,
+            account=account,
+            decision=decision,
+            portfolio=portfolio,
+            positions=positions,
+            prices=prices,
+            exchange="hyperliquid",
+            environment=environment,
+            trigger_context=trigger_context,
+            decision_kwargs=decision_kwargs,
+        )
+        if not review_result["allowed"]:
+            logger.warning(
+                "AI review blocked %s %s for %s: %s",
+                operation,
+                symbol,
+                account.name,
+                review_result["reason"],
+            )
+            save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
+            return
+
         order_result = _execute_entry_order(
             db=db,
             account_name=account.name,
