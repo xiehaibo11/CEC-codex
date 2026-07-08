@@ -1,8 +1,8 @@
 # TradingAgents 风格多智能体审查层设计
 
-日期：2026-07-08  
-项目：CEC-codex  
-参考项目：`TradingAgents/`  
+日期：2026-07-08
+项目：CEC-codex
+参考项目：`TradingAgents/`
 状态：设计草案，未进入实现
 
 ## 1. 背景
@@ -483,4 +483,3 @@ MVP 完成后，应满足：
 7. 增加 API。
 8. 跑测试和回测。
 9. 再考虑引入 Bull / Bear / Risk LLM 审查。
-
