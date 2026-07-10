@@ -2,8 +2,7 @@
 Snapshot database connection - separate from main database to avoid locks
 """
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
 import os
@@ -11,8 +10,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Snapshot database URL from environment or default
-SNAPSHOT_DATABASE_URL = os.environ.get('SNAPSHOT_DATABASE_URL', "postgresql://alpha_user:alpha_pass@localhost/alpha_snapshots")
+# Prefer explicit env override. Docker Compose sets SNAPSHOT_DATABASE_URL to the
+# in-network postgres service name; local tests/default dev commands run on
+# the host and should use the published port.
+SNAPSHOT_DATABASE_URL = os.environ.get(
+    'SNAPSHOT_DATABASE_URL',
+    "postgresql://alpha_user:alpha_pass@127.0.0.1:5434/alpha_snapshots",
+)
 
 # Reuse the same pool tuning knobs as the primary database
 POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "20"))

@@ -3,6 +3,12 @@ export type FormState = {
   exchange: string
   environment: string
   period: string
+  execution_mode: 'paper' | 'live'
+  leverage: number
+  trade_margin: number
+  max_daily_trades: number
+  profit_target_multiplier: number
+  signal_mode: 'trend_follow'
   consensus_mode: 'ai_confirmed' | 'rule_only'
   decision_policy: 'professional_v1' | 'legacy_vote'
   max_ai_evaluations: number
@@ -48,7 +54,9 @@ export const PLATFORM_FORM_PRESETS: Record<string, Partial<FormState>> = {
   custom: {},
 }
 
-export const PERIOD_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h']
+// Production multi-timeframe analysis uses completed 1m bars as its source;
+// 4h/30m/15m/10m/5m views are aggregated server-side.
+export const PERIOD_OPTIONS = ['1m']
 
 export const PERIOD_SECONDS: Record<string, number> = {
   '1m': 60,

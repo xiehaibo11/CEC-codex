@@ -2081,3 +2081,41 @@ def get_event_contract_analytics(
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/signal-stratification")
+def get_signal_trigger_stratification(
+    factor: str = Query("DEPTH_RATIO"),
+    min_bucket_n: int = Query(20, ge=1, le=1000),
+    account_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Stratified win rates of signal-triggered decisions by trigger extremity.
+
+    Sample-gated: buckets report insufficient_sample until they hold
+    min_bucket_n settled trades - run it periodically; it turns "ready"
+    on its own once the forward record is big enough to support a verdict.
+    """
+    from services.signal_trigger_validation import signal_trigger_stratified_report
+
+    return signal_trigger_stratified_report(
+        db, factor=factor, min_bucket_n=min_bucket_n, account_id=account_id
+    )
+
+
+@router.get("/loss-attribution")
+def get_loss_attribution(
+    account_id: Optional[int] = Query(None),
+    exchange: str = Query("binance"),
+    lookback_days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Six-dimension attribution of recent settled losing AI decisions, with
+    counterfactual kline replays and rule-patch suggestions (问题.md §3)."""
+    from services.loss_attribution import attribute_recent_losses
+
+    return attribute_recent_losses(
+        db, account_id=account_id, exchange=exchange,
+        lookback_days=lookback_days, limit=limit,
+    )

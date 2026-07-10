@@ -72,7 +72,7 @@ def _select_side(db: Session, account: Account, symbol: str, max_value: float) -
     return side, quantity
 
 
-def place_ai_driven_crypto_order(max_ratio: float = 0.2, account_ids: Optional[Iterable[int]] = None, account_id: Optional[int] = None, symbol: Optional[str] = None, samples: Optional[List] = None) -> None:
+def place_ai_driven_crypto_order(max_ratio: float = 0.5, account_ids: Optional[Iterable[int]] = None, account_id: Optional[int] = None, symbol: Optional[str] = None, samples: Optional[List] = None) -> None:
     """Place crypto order based on AI model decision.
 
     Args:
@@ -153,7 +153,7 @@ def place_ai_driven_crypto_order(max_ratio: float = 0.2, account_ids: Optional[I
         db.close()
 
 
-def place_random_crypto_order(max_ratio: float = 0.2) -> None:
+def place_random_crypto_order(max_ratio: float = 0.5) -> None:
     """Legacy random order placement (kept for backward compatibility)"""
     db = SessionLocal()
     try:

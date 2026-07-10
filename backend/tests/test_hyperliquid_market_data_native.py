@@ -95,6 +95,7 @@ def test_standard_symbol_klines_use_native_candle_snapshot(monkeypatch):
         {
             "timestamp": 1_700_000_000,
             "datetime": "2023-11-14T22:13:20+00:00",
+            "datetime_str": "2023-11-14 22:13:20",
             "open": 100.0,
             "high": 110.0,
             "low": 95.0,

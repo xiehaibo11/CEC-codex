@@ -1,0 +1,65 @@
+flowchart TB
+  subgraph Feed["喂料层"]
+    Settings["Settings watchlist<br/>binance/hibt_selected_symbols<br/>数据采集总开关"]
+    Collectors["采集器<br/>kline/WS flow/orderbook"]
+    CG["CoinGlass 服务端网关<br/>api/coinglass/client.py<br/>目录校验+限流+密钥解析"]
+    Factors["Factor Library<br/>22内置+自定义表达式<br/>factor_values 1h + IC/ICIR 日更"]
+  end
+
+  subgraph Trigger["触发层（三选一）"]
+    Sched["定时触发<br/>StrategyManager.handle_price_update<br/>should_trigger_scheduled"]
+    Manual["手动触发<br/>POST /account/{id}/trigger-ai-trade"]
+    Signal["信号触发<br/>detect_signals 池边沿触发<br/>pool_id ∈ AccountStrategyConfig.signal_pool_ids"]
+  end
+
+  subgraph Decide["决策层"]
+    Prompt["Prompt 绑定解析<br/>get_prompt_for_account<br/>无绑定 = 直接跳过（无默认兜底）"]
+    Context["上下文组装 _build_prompt_context<br/>账户/持仓/行情/K线指标/因子/新闻<br/>{trigger_context} {market_regime}"]
+    LLM["账户自有 LLM<br/>model/base_url/api_key<br/>重试3次 240s"]
+    Persist["AIDecisionLog<br/>prompt/推理/决策快照<br/>+ WS model_chat 推送"]
+  end
+
+  subgraph Route["订单路由 place_ai_driven_*"]
+    Paper["paper：本地撮合<br/>市价即时成交<br/>orders/positions/trades"]
+    HL["testnet/mainnet：Hyperliquid<br/>place_order_with_tpsl IOC<br/>+快照库 HyperliquidTrade"]
+    BN["binance：币安期货<br/>binance_trading_client"]
+  end
+
+  subgraph Analyze["分析层"]
+    Attr["Attribution Analysis<br/>读 AIDecisionLog+快照库费用<br/>4 Tab：维度/交易/Prompt回测/事件合约"]
+    PromptBT["Prompt Backtest<br/>重放历史决策（只读不下单）"]
+    EventBT["Backtest Tool 事件合约<br/>与主管线完全平行<br/>共享引擎→纸盘交易员"]
+  end
+
+  Settings --> Collectors
+  Collectors -->|crypto_klines+flow表| Factors
+  Collectors -->|市场数据| Signal
+  Factors -->|factor:NAME 指标| Signal
+  Factors -->|SYMBOL_factor_* 变量| Context
+  CG -->|爆仓/CVD/OI特征| EventBT
+
+  Sched --> Prompt
+  Manual --> Prompt
+  Signal -->|trigger_context 含IC/ICIR| Context
+  Signal --> Prompt
+
+  Prompt --> Context --> LLM --> Persist
+  Persist --> Paper
+  Persist --> HL
+  Persist --> BN
+  Paper -->|WS trade/position| Dashboard["Dashboard 实时刷新"]
+  HL --> Dashboard
+  Persist --> Attr
+  Attr --> PromptBT
+  EventBT -.仅报告层并列.- Attr
+
+  classDef feed fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef trig fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef dec fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef route fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef ana fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class Settings,Collectors,CG,Factors feed
+  class Sched,Manual,Signal trig
+  class Prompt,Context,LLM,Persist dec
+  class Paper,HL,BN,Dashboard route
+  class Attr,PromptBT,EventBT ana

@@ -941,7 +941,106 @@ flowchart LR
 | 系统日志 | `system-logs` | `layout/SystemLogs` | `/api/system-logs` |
 | 设置 | `settings` | `settings/SettingsPage` | `/api/system/*`, `/api/binance/*`, `/api/hibt/*`, `/api/news/*` |
 
-## 13. 当前架构阅读建议
+## 13. Dashboard AI 决策下单全链路与八页面相互作用（2026-07-05 深度调查）
+
+```mermaid
+flowchart TB
+  subgraph Feed["喂料层"]
+    Settings["Settings watchlist<br/>binance/hibt_selected_symbols<br/>数据采集总开关"]
+    Collectors["采集器<br/>kline/WS flow/orderbook"]
+    CG["CoinGlass 服务端网关<br/>api/coinglass/client.py<br/>目录校验+限流+密钥解析"]
+    Factors["Factor Library<br/>22内置+自定义表达式<br/>factor_values 1h + IC/ICIR 日更"]
+  end
+
+  subgraph Trigger["触发层（三选一）"]
+    Sched["定时触发<br/>StrategyManager.handle_price_update<br/>should_trigger_scheduled"]
+    Manual["手动触发<br/>POST /account/{id}/trigger-ai-trade"]
+    Signal["信号触发<br/>detect_signals 池边沿触发<br/>pool_id ∈ AccountStrategyConfig.signal_pool_ids"]
+  end
+
+  subgraph Decide["决策层"]
+    Prompt["Prompt 绑定解析<br/>get_prompt_for_account<br/>无绑定 = 直接跳过（无默认兜底）"]
+    Context["上下文组装 _build_prompt_context<br/>账户/持仓/行情/K线指标/因子/新闻<br/>{trigger_context} {market_regime}"]
+    LLM["账户自有 LLM<br/>model/base_url/api_key<br/>重试3次 240s"]
+    Persist["AIDecisionLog<br/>prompt/推理/决策快照<br/>+ WS model_chat 推送"]
+  end
+
+  subgraph Route["订单路由 place_ai_driven_*"]
+    Paper["paper：本地撮合<br/>市价即时成交<br/>orders/positions/trades"]
+    HL["testnet/mainnet：Hyperliquid<br/>place_order_with_tpsl IOC<br/>+快照库 HyperliquidTrade"]
+    BN["binance：币安期货<br/>binance_trading_client"]
+  end
+
+  subgraph Analyze["分析层"]
+    Attr["Attribution Analysis<br/>读 AIDecisionLog+快照库费用<br/>4 Tab：维度/交易/Prompt回测/事件合约"]
+    PromptBT["Prompt Backtest<br/>重放历史决策（只读不下单）"]
+    EventBT["Backtest Tool 事件合约<br/>与主管线完全平行<br/>共享引擎→纸盘交易员"]
+  end
+
+  Settings --> Collectors
+  Collectors -->|crypto_klines+flow表| Factors
+  Collectors -->|市场数据| Signal
+  Factors -->|factor:NAME 指标| Signal
+  Factors -->|SYMBOL_factor_* 变量| Context
+  CG -->|爆仓/CVD/OI特征| EventBT
+
+  Sched --> Prompt
+  Manual --> Prompt
+  Signal -->|trigger_context 含IC/ICIR| Context
+  Signal --> Prompt
+
+  Prompt --> Context --> LLM --> Persist
+  Persist --> Paper
+  Persist --> HL
+  Persist --> BN
+  Paper -->|WS trade/position| Dashboard["Dashboard 实时刷新"]
+  HL --> Dashboard
+  Persist --> Attr
+  Attr --> PromptBT
+  EventBT -.仅报告层并列.- Attr
+
+  classDef feed fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef trig fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef dec fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef route fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef ana fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class Settings,Collectors,CG,Factors feed
+  class Sched,Manual,Signal trig
+  class Prompt,Context,LLM,Persist dec
+  class Paper,HL,BN,Dashboard route
+  class Attr,PromptBT,EventBT ana
+```
+
+### 13.1 决策下单九步链路（file:line 级核实）
+
+1. **触发**（三选一）：定时（`trading_strategy.py` 价格事件驱动 `should_trigger_scheduled`，纯 interval，`trigger_mode` 字段未被读取）；手动（`POST /api/account/{id}/trigger-ai-trade`，可 `force_operation` 跳过 LLM）；信号（采集器 → `detect_signals` 池级边沿触发 → 回调 → `pool_id ∈ AccountStrategyConfig.signal_pool_ids`——注意 `TraderTriggerConfig` 表是遗留死表）。
+2. **模板解析**：`get_prompt_for_account`——**账户无 Prompt 绑定则直接跳过决策，没有默认模板兜底**。
+3. **上下文组装**（`_build_prompt_context`）：账户/持仓/保证金 + 实时行情 + 最近 5 笔交易 + 模板按需变量（`{SYMBOL_klines_15m}` K线指标、`{SYMBOL_factor_1h_RSI21}` 因子、`{trigger_context}` 信号详情含 IC/ICIR、`{market_regime}` 七态市场状态、新闻）。
+4. **LLM 调用**：账户自有 model/base_url/api_key，OpenAI 兼容，3 次重试。
+5. **决策解析**：buy/sell/hold/close，多厂商容错解析。
+6. **落库**：`AIDecisionLog`（prompt/推理/决策快照、模板 id、信号触发 id）+ WS `model_chat` 推送。
+7. **订单路由**：`hyperliquid_environment` ∈ {testnet,mainnet} → HL 实盘 `place_order_with_tpsl`；NULL → paper 本地撮合（**市价即时成交**）；binance → 币安客户端。
+8. **成交落库 + WS**：paper 写 orders/positions/trades；HL 实盘另写快照库 `HyperliquidTrade`；`trade_update`/`position_update` 推送 Dashboard。
+9. **资产快照独立于订单**：HL 30s / 币安 300s 后台服务，非逐单。
+
+### 13.2 八页面角色与相互作用
+
+| 页面 | 角色 | 与主管线的关系 |
+|---|---|---|
+| Settings | **总开关**：watchlist 决定采集/因子/信号/AI 交易的符号全集；回填/保留期管 `crypto_klines` 存量；新闻源 | 上游约束一切；池符号不在 watchlist 则永不触发 |
+| Prompt Templates | 每账户唯一绑定模板 + 变量体系 + AI 写提示词助手 | 决策 prompt 的骨架；未绑定 = 不交易 |
+| Signal System | 信号定义（flow 指标 + `factor:NAME`）→ 池（AND/OR 边沿触发）→ 绑定账户 | 三触发源之一，`trigger_context` 注入 prompt |
+| Factor Library | 22 内置因子 + 69 表达式函数 + 自定义因子；1h 计算、IC/ICIR 日更 | 双通道入 prompt（变量 + trigger_context 有效性行）、信号 metric、Hyper AI 工具；**不喂事件合约引擎** |
+| K-Line Charts | 蜡烛图**实时拉 Binance REST**（不读 `crypto_klines`）+ flow 指标（读 flow 三表）+ AI 分析面板（独立 LLM 用途，写 `KlineAIAnalysisLog`） | 展示层，不进决策 |
+| CoinGlass | 服务端网关（目录校验/限流/密钥）；消费方：事件合约特征、信号钱包追踪、Hyper AI 工具 | 不喂主 AI 决策管线 |
+| Attribution Analysis | 读 `AIDecisionLog` + 快照库费用；4 Tab：维度/交易/Prompt回测/事件合约；PnL 同步门 | 主管线的**下游审计**；Prompt 回测只重放决策不下单 |
+| Backtest Tool | 事件合约引擎（回测/预测/纸盘交易员/滚动验证） | **与主管线完全平行**，仅共享 watchlist/CoinGlass 输入与 Attribution 报告层 |
+
+### 13.3 已确认的接线异常
+
+`TraderTriggerConfig` 死表（真实绑定在 `AccountStrategyConfig.signal_pool_ids`）；信号级边沿检测代码无调用方（池级生效）；`trigger_mode` 字段未读取；Prompt 预览的 `trigger_context` 是硬编码示例；CLAUDE.md「86 内置因子」实为 22 因子 + 69 表达式函数。
+
+## 14. 当前架构阅读建议
 
 1. 如果要改 UI 骨架，优先看 `AppShell.tsx`、`Sidebar.tsx`、对应页面组件与 `frontend/app/lib/*Api.ts`。
 2. 如果要改数据采集或覆盖率，优先看 `SettingsPage.tsx`、`ExchangeDataSettingsTab.tsx`、`DataCoverageHeatmap.tsx`、`api/system/*`、`services/exchanges/*backfill.py`、collector 和 `data_persistence.py`。

@@ -1,4 +1,6 @@
 """Wilson CI, binomial significance and settlement sensitivity."""
+import pytest
+
 from services.event_contract.backtest_stats import (
     binomial_p_value,
     settlement_sensitivity,
@@ -69,3 +71,23 @@ def test_settlement_sensitivity_empty_evaluable_set():
     assert report["bps_2"] == 0.0
     assert report["bps_5"] == 0.0
     assert report["bps_10"] == 0.0
+
+
+class TestBinomialLargeN:
+    """OverflowError regression (2026-07-09): math.comb(n,k) at n~2000 produces
+    integers too large for float multiplication, crashing every long-window
+    backtest summary. Log-space computation must match the exact small-n
+    values and stay finite at any n."""
+
+    def test_large_n_does_not_overflow(self):
+        p = binomial_p_value(900, 2000, 0.5556)
+        assert 0.0 <= p <= 1.0
+
+    def test_matches_exact_small_n(self):
+        # Exact value computed with the original math.comb implementation.
+        assert binomial_p_value(7, 10, 0.5) == pytest.approx(0.171875, abs=1e-9)
+
+    def test_degenerate_probabilities(self):
+        assert binomial_p_value(0, 50, 0.0) == 1.0
+        assert binomial_p_value(1, 50, 0.0) == 0.0
+        assert binomial_p_value(50, 50, 1.0) == 1.0

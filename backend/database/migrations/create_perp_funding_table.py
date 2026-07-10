@@ -16,7 +16,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
-from connection import SessionLocal, engine
+from connection import SessionLocal
 
 
 def upgrade():
@@ -28,7 +28,7 @@ def upgrade():
         # Create perp_funding table
         print("Creating perp_funding table...")
         db.execute(text("""
-            CREATE TABLE perp_funding (
+            CREATE TABLE IF NOT EXISTS perp_funding (
                 id SERIAL PRIMARY KEY,
                 exchange VARCHAR(20) NOT NULL,
                 symbol VARCHAR(20) NOT NULL,
@@ -45,19 +45,19 @@ def upgrade():
         # Create indexes for performance
         print("Creating indexes...")
         db.execute(text("""
-            CREATE INDEX idx_perp_funding_exchange ON perp_funding(exchange)
+            CREATE INDEX IF NOT EXISTS idx_perp_funding_exchange ON perp_funding(exchange)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_perp_funding_symbol ON perp_funding(symbol)
+            CREATE INDEX IF NOT EXISTS idx_perp_funding_symbol ON perp_funding(symbol)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_perp_funding_timestamp ON perp_funding(timestamp)
+            CREATE INDEX IF NOT EXISTS idx_perp_funding_timestamp ON perp_funding(timestamp)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_perp_funding_exchange_symbol ON perp_funding(exchange, symbol)
+            CREATE INDEX IF NOT EXISTS idx_perp_funding_exchange_symbol ON perp_funding(exchange, symbol)
         """))
 
         db.commit()

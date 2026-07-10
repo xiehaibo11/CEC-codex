@@ -26,6 +26,14 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         ai_meta: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         features = self._compute_features(history)
+        production_mtf = cfg.get("_production_mtf_snapshot")
+        if isinstance(production_mtf, dict):
+            # The production desk is driven by completed 1m bars aggregated at
+            # UTC boundaries. Replace the legacy short-horizon proxy directions
+            # only for this path; historical runs keep their old semantics.
+            features["production_mtf"] = production_mtf
+            features["mtf_dirs"] = dict(production_mtf.get("directions") or {})
+            features["mtf_conflict"] = bool(production_mtf.get("conflict", True))
         raw_decisions = list(decisions_override) if decisions_override is not None else self._build_rule_decisions(features, cfg)
         ai_decisions = self._ensure_main_logic_vote(features, cfg, raw_decisions)
         long_votes = sum(1 for item in ai_decisions if item["direction"] == "long")
@@ -106,7 +114,9 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         if cfg["enable_cvd_filter"] and abs(features["cvd_proxy"]) < 0.08 and not professional_policy:
             cvd_source = localize_cvd_source(str(features["cvd_source"]))
             blocked_reasons.append(f"{cvd_source} CVD 未确认方向")
-        factor_gate_reason = self._factor_gate_block_reason(history, features, cfg)
+        factor_gate_reason = self._factor_gate_block_reason(
+            history, features, cfg, direction=top_direction
+        )
         if factor_gate_reason:
             blocked_reasons.append(factor_gate_reason)
             veto_reasons.append(factor_gate_reason)
@@ -179,10 +189,57 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             if not allow_trade and signal_type == "hold_signal":
                 final_direction = "hold"
 
+        # Signal-mode dispatch. "exhaustion_fade" (default) is the legacy gate
+        # below: momentum + overextension + trap detection flip the direction
+        # (fade the move). "trend_follow" is the customer-mandated 只顺大趋势
+        # mode: the momentum consensus direction is never flipped; instead the
+        # bet must agree with the 60-minute trend and must not chase an RSI
+        # overextension (底部顺势做多、高位顺势做空). exhaustion_reversal stays
+        # False in trend_follow so reason/entry_condition reporting stays
+        # truthful automatically.
+        signal_mode = str(cfg.get("signal_mode") or "exhaustion_fade")
+        exhaustion_reversal = False
+        range_boundary_reversal = False
+        if signal_mode == "range_boundary":
+            # Tier-2 box strategy: direction comes from the range STRUCTURE
+            # (fade the boundary), not from the momentum consensus. Shares the
+            # flip machinery with exhaustion_fade but the condition is
+            # structural; mid-range and trending tapes are hard-blocked.
+            if allow_trade and final_direction in ("long", "short"):
+                boundary_direction, boundary_block = self._range_boundary_verdict(
+                    features,
+                    min_trap_risk=cfg.get("range_min_trap_risk"),
+                    min_trend_mag=cfg.get("range_min_trend_mag"),
+                )
+                if boundary_direction is None:
+                    allow_trade = False
+                    signal_type = "hold_signal"
+                    final_direction = "hold"
+                    blocked_reasons.append(boundary_block)
+                else:
+                    # L2 microstructure confirmation (only when the knobs are
+                    # explicitly configured; fail-closed on missing data).
+                    l2_block = self._l2_range_filters(boundary_direction, features, cfg)
+                    if l2_block is not None:
+                        allow_trade = False
+                        signal_type = "hold_signal"
+                        final_direction = "hold"
+                        blocked_reasons.append(l2_block)
+                    else:
+                        if boundary_direction != final_direction:
+                            range_boundary_reversal = True
+                        final_direction = boundary_direction
+        elif signal_mode == "trend_follow":
+            if allow_trade and final_direction in ("long", "short"):
+                trend_block = self._trend_follow_block_reason(final_direction, features)
+                if trend_block:
+                    allow_trade = False
+                    signal_type = "hold_signal"
+                    final_direction = "hold"
+                    blocked_reasons.append(trend_block)
         # Exhaustion reversal gate: momentum + overextension + trap detection + high signal quality.
         # signal_strength >= 89 filters out noisy exhaustion signals (88.8-88.9 were empirical loss points).
-        exhaustion_reversal = False
-        if allow_trade and final_direction in ("long", "short") and not professional_policy:
+        elif allow_trade and final_direction in ("long", "short") and not professional_policy:
             ex_long = features.get("exhaustion_long", False)
             ex_short = features.get("exhaustion_short", False)
             has_exhaustion = (final_direction == "long" and ex_long) or (final_direction == "short" and ex_short)
@@ -220,6 +277,8 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             blocked_reasons,
             reviewer_count,
             professional if professional_policy else None,
+            exhaustion_reversal=exhaustion_reversal,
+            range_boundary_reversal=range_boundary_reversal,
         )
         factors = self._build_factor_snapshot(features)
 
@@ -262,6 +321,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "decision_diagnostics": professional["decision_diagnostics"],
             "allow_trade": allow_trade,
             "exhaustion_reversal": exhaustion_reversal,
+            "range_boundary_reversal": range_boundary_reversal,
             "reversal_evidence_score": features.get("coinglass_reversal_score", 0.0),
             "indicator_reversal_score": features.get("indicator_reversal_score", 0.0),
             "signal_type": signal_type,
@@ -599,15 +659,22 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         history: List[Dict[str, Any]],
         features: Dict[str, Any],
         cfg: Dict[str, Any],
+        direction: str = "long",
     ) -> Optional[str]:
-        """Factor-combination entry gate (opt-in via enable_factor_gate).
+        """Factor-combination entry gate (opt-in via enable_factor_gate),
+        mirrored by consensus direction.
 
-        Entry requires BOTH "5m momentum" (ret5) and "VWAP deviation" to sit at
-        or above their trailing-window quantile. Thresholds are recomputed from
-        the bars available at decision time only, so the gate is leakage-free
-        by construction and regime-adaptive. Evidence: 2026-07-05 run-2027
-        forensics — this pair was the only filter whose train/test win rates
-        agreed (56.0% / 56.2%) above the unconditioned 50.4% baseline.
+        Long consensus: BOTH "5m momentum" (ret5) and "VWAP deviation" must sit
+        at/above their trailing upper quantile (p60 default) — the original,
+        historically validated rule (2026-07-05 run-2027 forensics: the only
+        filter whose train/test win rates agreed, 56.0%/56.2% vs 50.4% base).
+        Short consensus: the mirror — both must sit at/below the LOWER quantile
+        (p40 for the p60 default). 2026-07-09 forensics: the unmirrored gate
+        demanded upper-quantile values from every signal, which a
+        short-consensus bar (both features negative) can never satisfy —
+        500/500 gated trades were long and every surviving short died here.
+        Thresholds are recomputed from bars available at decision time only, so
+        the gate stays leakage-free and regime-adaptive.
         """
         if not cfg.get("enable_factor_gate"):
             return None
@@ -632,9 +699,11 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         if len(ret5_series) < min_history or len(vwap_dev_series) < min_history:
             return "因子门控：历史样本不足，禁止入场"
 
+        effective_quantile = quantile if direction != "short" else 1.0 - quantile
+
         def trailing_quantile(values: List[float]) -> float:
             ordered = sorted(values)
-            idx = min(len(ordered) - 1, max(0, int(quantile * len(ordered))))
+            idx = min(len(ordered) - 1, max(0, int(effective_quantile * len(ordered))))
             return ordered[idx]
 
         ret5_threshold = trailing_quantile(ret5_series)
@@ -642,12 +711,145 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         close = features.get("close") or 0.0
         vwap_dev_now = (close - (features.get("vwap") or 0.0)) / close * 100 if close else 0.0
         ret5_now = float(features.get("ret5") or 0.0)
-        if ret5_now < ret5_threshold or vwap_dev_now < vwap_dev_threshold:
+        if direction == "short":
+            blocked = ret5_now > ret5_threshold or vwap_dev_now > vwap_dev_threshold
+            comparator = "低于"
+        else:
+            blocked = ret5_now < ret5_threshold or vwap_dev_now < vwap_dev_threshold
+            comparator = "达到"
+        if blocked:
             return (
-                f"因子门控：5m动量 {ret5_now:.4f}（阈值 {ret5_threshold:.4f}）与 "
+                f"因子门控（{direction}）：5m动量 {ret5_now:.4f}（阈值 {ret5_threshold:.4f}）与 "
                 f"VWAP偏离 {vwap_dev_now:.4f}（阈值 {vwap_dev_threshold:.4f}）"
-                f"未同时达到 trailing p{int(quantile * 100)}"
+                f"未同时{comparator} trailing p{int(effective_quantile * 100)}"
             )
+        return None
+
+    @staticmethod
+    def _range_boundary_verdict(
+        features: Dict[str, Any],
+        min_trap_risk: Optional[float] = None,
+        min_trend_mag: Optional[float] = None,
+    ) -> tuple:
+        """Tier-2 box strategy verdict: (direction | None, block_reason | None).
+
+        触碰上沿押跌、触碰下沿押涨、区间中部绝对禁止；区间太窄（噪音）或
+        60 分钟趋势过强（可能真突破）时整个模式停用。Base thresholds are
+        a-priori design values from the strategy doc. The optional tightening
+        knobs (declared 2026-07-09 from the run-2043/2044 stratification, to
+        be judged on the untouched 5/1-5/29 holdout) demand the price be truly
+        pinned at the extreme (trap risk) with real pressure into the boundary
+        (trend magnitude)."""
+        width = float(features.get("range_width_pct") or 0.0)
+        atr = float(features.get("atr_pct") or 0.0)
+        ret60 = float(features.get("ret60") or 0.0)
+        pos = features.get("range_pos")
+        if width < max(3 * atr, 0.15):
+            return None, f"区间边界模式：区间宽度 {width:.3f}% 不足（需 ≥ max(3×ATR, 0.15%)），非可交易震荡区间"
+        if abs(ret60) > 0.30:
+            return None, f"区间边界模式：60 分钟趋势 {ret60:+.3f}% 过强，疑似真突破，模式停用"
+        if min_trap_risk is not None:
+            trap = float(features.get("trap_risk") or 0.0)
+            if trap < min_trap_risk:
+                return None, f"区间边界模式：陷阱风险 {trap:.1f} < {min_trap_risk:.1f}，价格未被真正困在极端"
+        if min_trend_mag is not None:
+            trend = float(features.get("trend_score") or 0.0)
+            if abs(trend) < min_trend_mag:
+                return None, f"区间边界模式：趋势强度 |{trend:.4f}| < {min_trend_mag:.4f}，缺少顶向边界的压力"
+        if pos is None:
+            return None, "区间边界模式：区间位置不可用"
+        pos = float(pos)
+        if pos >= 0.85:
+            return "short", None
+        if pos <= 0.15:
+            return "long", None
+        return None, f"区间边界模式：价格处于区间中部（pos {pos:.2f}），属于禁止交易区域"
+
+    @staticmethod
+    def _l2_range_filters(
+        direction: str,
+        features: Dict[str, Any],
+        cfg: Dict[str, Any],
+    ) -> Optional[str]:
+        """L2 microstructure filters for signal_mode="range_boundary".
+
+        The boundary fade measured exactly break-even, so exactly TWO filters
+        (feature count capped at 2 by design to prevent overfitting) demand
+        microstructure confirmation of the fade:
+        1. range_require_obi — the REVERSE-side depth skew at the touch:
+           long needs l2_obi >= +threshold, short needs l2_obi <= -threshold
+           (l2_obi = (bid_depth_5 - ask_depth_5) / (bid_depth_5 + ask_depth_5),
+           real orderbook snapshots only, depth-10 fallback).
+        2. range_require_large_flow — recent aggressive large-order flow must
+           agree with the bet: the bet-side large-notional share over the
+           trailing window must reach the threshold.
+        FAIL-CLOSED: when a knob is set and its feature is unavailable
+        (missing/stale book or flow data) the trade is blocked — this is a
+        live-money filter, missing data must never silently pass.
+        Returns a Chinese blocked-reason string, or None when the bet passes.
+        """
+        obi_threshold = cfg.get("range_require_obi")
+        if obi_threshold is not None:
+            obi = features.get("l2_obi")
+            if obi is None:
+                return "L2过滤：盘口数据不可用"
+            obi = float(obi)
+            required = float(obi_threshold) if direction == "long" else -float(obi_threshold)
+            if (direction == "long" and obi < required) or (direction == "short" and obi > required):
+                return f"L2过滤：盘口深度倾斜 {obi:+.3f} 未达到 {required:+.2f}（方向 {direction}）"
+        flow_threshold = cfg.get("range_require_large_flow")
+        if flow_threshold is not None:
+            buy_share = features.get("large_flow_buy_share")
+            if buy_share is None:
+                return "L2过滤：盘口数据不可用"
+            aligned_share = float(buy_share) if direction == "long" else 1.0 - float(buy_share)
+            if aligned_share < float(flow_threshold):
+                return (
+                    f"L2过滤：大单流向占比 {aligned_share:.2f} < {float(flow_threshold):.2f}，"
+                    f"资金方向不支持（方向 {direction}）"
+                )
+        return None
+
+    @staticmethod
+    def _trend_follow_block_reason(direction: str, features: Dict[str, Any]) -> Optional[str]:
+        """Trend-follow mode gates (signal_mode="trend_follow"), pure function.
+
+        Customer mandate: 只顺大趋势开单，坚决不逆势；优先识别行情底部顺势做多、
+        高位顺势做空. Two checks, applied after all existing quality gates:
+        1. Higher-timeframe alignment: the bet must agree with the 60-minute
+           return (long needs ret60 > +0.10%, short needs ret60 < -0.10%).
+           ret60 is 0.0 when history is shorter than 61 bars, which blocks
+           both sides - no trend evidence, no trade.
+        2. Anti-chase: RSI overextension in the bet direction means the move
+           is already stretched; wait for a pullback instead of chasing.
+        Returns a Chinese blocked-reason string, or None when the trade passes.
+        """
+        production_mtf = features.get("production_mtf")
+        if isinstance(production_mtf, dict):
+            if bool(production_mtf.get("conflict", True)):
+                return "顺势模式：4H/30M/15M/10M/5M 多周期未完成或方向冲突，拒绝开单"
+            aligned_direction = production_mtf.get("aligned_direction")
+            if aligned_direction != direction:
+                return (
+                    f"顺势模式：多周期方向 {aligned_direction or 'hold'} 与 {direction} 不一致，拒绝逆势单"
+                )
+
+        ret60 = float(features.get("ret60") or 0.0)
+        if direction == "long" and ret60 <= 0.10:
+            return (
+                f"顺势模式：方向与 60 分钟大趋势不一致"
+                f"（ret60 {ret60:.4f}% ≤ +0.10%），拒绝逆势单"
+            )
+        if direction == "short" and ret60 >= -0.10:
+            return (
+                f"顺势模式：方向与 60 分钟大趋势不一致"
+                f"（ret60 {ret60:.4f}% ≥ -0.10%），拒绝逆势单"
+            )
+        rsi = float(features.get("rsi") or 50.0)
+        if direction == "long" and rsi > 70:
+            return f"顺势模式：RSI {rsi:.1f} > 70 高位超买，拒绝追多，等待回调后再顺势做多"
+        if direction == "short" and rsi < 30:
+            return f"顺势模式：RSI {rsi:.1f} < 30 低位超卖，拒绝追空，等待反弹后再顺势做空"
         return None
 
     def _compute_features(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -667,6 +869,9 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         ret3 = self._return_pct(closes, 3)
         ret5 = self._return_pct(closes, 5)
         ret15 = self._return_pct(closes, 15)
+        # 60-minute higher-timeframe trend (warmup_bars=80 keeps it available;
+        # _return_pct guards shorter history by returning 0.0).
+        ret60 = self._return_pct(closes, 60)
         ema_fast = self._ema(closes[-30:], 5)
         ema_slow = self._ema(closes[-60:], 20)
         ema_diff_pct = (ema_fast - ema_slow) / close * 100 if close else 0
@@ -722,6 +927,22 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
         spread_bps = l2.get("spread_bps")
         if spread_bps is None:
             spread_bps = max(0.0, atr_pct * 10)
+        # Depth-5 order-book imbalance from a REAL L2 snapshot only (depth-10
+        # fallback when the 5-level fields are empty). Stays None when no book
+        # is attached: the range_boundary L2 filter is fail-closed and must
+        # never read the OHLCV-proxy orderbook_imbalance above.
+        l2_obi = None
+        if l2_available:
+            bid5 = float(l2.get("bid_depth_5") or 0.0)
+            ask5 = float(l2.get("ask_depth_5") or 0.0)
+            if bid5 + ask5 > 0:
+                l2_obi = (bid5 - ask5) / (bid5 + ask5)
+            elif l2.get("imbalance_10") is not None:
+                l2_obi = float(l2["imbalance_10"])
+        # Large-order flow alignment share comes from the LOCAL flow bundle
+        # specifically (CoinGlass has no large-order feed and takes priority in
+        # the shared `flow` dict above). None when unavailable -> fail-closed.
+        large_flow_buy_share = (last.get("flow") or {}).get("large_flow_buy_share")
         trend_score = ret3 * 0.35 + ret5 * 0.35 + ema_diff_pct * 0.3
         mtf_dirs = {
             "1m": self._dir_from_value(ret1, 0.015),
@@ -911,6 +1132,7 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "ret3": ret3,
             "ret5": ret5,
             "ret15": ret15,
+            "ret60": ret60,
             "ema_fast": ema_fast,
             "ema_slow": ema_slow,
             "ema_diff_pct": ema_diff_pct,
@@ -943,6 +1165,8 @@ class EventContractAnalysisMixin(EventContractFeatureMixin):
             "spread_bps": spread_bps,
             "bid_depth_10": l2.get("bid_depth_10"),
             "ask_depth_10": l2.get("ask_depth_10"),
+            "l2_obi": l2_obi,
+            "large_flow_buy_share": large_flow_buy_share,
             "trend_score": trend_score,
             "ma_cross_direction": ma_cross["direction"],
             "ma_cross_bars_since": ma_cross["bars_since"],

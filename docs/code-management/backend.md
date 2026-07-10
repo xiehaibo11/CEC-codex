@@ -96,3 +96,13 @@ Before splitting, add or preserve tests around the affected endpoint or service.
 Move pure helpers first, then clients, then orchestration code.
 Keep imports acyclic and avoid moving runtime configuration into feature modules.
 After each split, run the smallest relevant backend command and record it in the PR.
+
+## Production Event-Contract Boundary
+
+- New production event-contract configurations pass through `services/event_contract/production_policy.py`.
+- Production expiry is limited to 5 or 10 minutes, the base feed is 1m, and the signal mode is `trend_follow`.
+- `range_boundary` and `exhaustion_fade` remain readable for historical audit only and cannot be enabled for production Paper Trader cycles.
+- The production decision stack uses completed 1m bars aggregated into 4h/30m/15m/10m/5m snapshots, then applies the structured professional-AI confirmation gate.
+- `execution_mode=paper` uses the local matcher; `execution_mode=live` is capability-gated and must fail closed until a venue-specific event-contract adapter exists. It must never fall through to perpetual order clients.
+- Paper Trader cadence is a 1-second scheduler tick with `last_decision_time` idempotency; settlement/fill/decision phases remain ordered and no overlapping contract is opened.
+- Fixed risk defaults are 10x, 100 USDT, 10 entries per local day, and stop-new-entry at 2x initial equity. Run `backend/scripts/disable_legacy_event_traders.py` as a dry-run first; `--apply` is required to persist legacy-row disables.

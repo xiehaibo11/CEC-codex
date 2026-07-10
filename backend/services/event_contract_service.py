@@ -16,6 +16,7 @@ from services.event_contract.flow_features import EventContractFlowMixin
 from services.event_contract.l2_features import EventContractL2Mixin
 from services.event_contract.llm import EventContractLlmMixin
 from services.event_contract.quality import EventContractQualityMixin
+from services.event_contract.professional_ai import EventContractProfessionalAiMixin
 from services.event_contract.rules import EventContractRuleMixin
 from services.event_contract.signal import EventContractSignalMixin
 
@@ -29,6 +30,7 @@ class EventContractService(
     EventContractDataMixin,
     EventContractQualityMixin,
     EventContractAnalysisMixin,
+    EventContractProfessionalAiMixin,
     EventContractSignalMixin,
     EventContractRuleMixin,
     EventContractLlmMixin,

@@ -30,6 +30,44 @@ WS_URL = "wss://fstream.binance.com/ws"
 RECONNECT_DELAY_SECONDS = 5
 WS_TIMEOUT_SECONDS = 30
 
+# Endpoint rotation. 2026-07-09 forensics: fstream accepted the aggTrade
+# subscription but delivered ZERO messages for 5 days (silent regional
+# filtering since 7/4) while the spot stream worked fine; with no reconnect
+# trigger the flush timer spun on empty buffers forever. Spot aggTrade is a
+# high-fidelity proxy for perp taker flow (same asset, same message schema).
+ENDPOINTS = (
+    {"url": WS_URL, "source": "binance_futures"},
+    {"url": "wss://stream.binance.com:9443/ws", "source": "binance_spot"},
+)
+
+# Close and rotate when no MARKET message (aggTrade) arrives for this long —
+# BTCUSDT prints hundreds of trades a second, so a minute of silence means the
+# stream is dead no matter what the socket thinks.
+SILENCE_TIMEOUT_SECONDS = 60
+
+# Watchdog poll cadence while a connection is up.
+_WATCHDOG_POLL_SECONDS = 10
+
+
+def should_reconnect_for_silence(
+    last_message_ts: Optional[float],
+    now_ts: float,
+    connected_ts: Optional[float] = None,
+) -> bool:
+    """True when the stream has been silent past SILENCE_TIMEOUT_SECONDS.
+
+    Silence is measured from the last market message, or from connect time
+    when nothing has arrived at all (the observed fstream failure mode)."""
+    anchor = last_message_ts if last_message_ts is not None else connected_ts
+    if anchor is None:
+        return False
+    return (now_ts - anchor) > SILENCE_TIMEOUT_SECONDS
+
+
+def next_endpoint_index(current: int) -> int:
+    """Rotate to the next endpoint (wraps)."""
+    return (current + 1) % len(ENDPOINTS)
+
 
 @dataclass
 class TradeBuffer:
@@ -95,6 +133,10 @@ class BinanceWSCollector:
         self.ws_thread: Optional[threading.Thread] = None
         self.buffer_lock = threading.Lock()
         self.large_order_tracker = LargeOrderThresholdTracker(exchange="binance")
+        # Silence-watchdog state (see should_reconnect_for_silence).
+        self._endpoint_idx = 0
+        self._last_market_msg_ts: Optional[float] = None
+        self._connected_ts: Optional[float] = None
 
         logger.info("BinanceWSCollector initialized")
 
@@ -166,7 +208,6 @@ class BinanceWSCollector:
 
     def _ws_loop(self):
         """WebSocket connection loop running in separate thread"""
-        import websocket
 
         while self.running:
             try:
@@ -177,8 +218,14 @@ class BinanceWSCollector:
                     time.sleep(RECONNECT_DELAY_SECONDS)
 
     def _connect_and_process(self):
-        """Connect to WebSocket and process messages"""
+        """Connect to the current endpoint and process messages. A silence
+        watchdog closes the socket when no market message arrives for
+        SILENCE_TIMEOUT_SECONDS, and the caller's loop reconnects; on a
+        silence-triggered close we rotate to the next endpoint (the observed
+        fstream failure keeps the socket "healthy" while sending nothing)."""
         import websocket
+
+        endpoint = ENDPOINTS[self._endpoint_idx]
 
         # Build stream list
         streams = []
@@ -189,6 +236,8 @@ class BinanceWSCollector:
         def on_message(ws, message):
             try:
                 data = json.loads(message)
+                if data.get("e") == "aggTrade":
+                    self._last_market_msg_ts = time.time()
                 self._process_message(data)
             except Exception as e:
                 logger.error(f"Message processing error: {e}")
@@ -206,18 +255,53 @@ class BinanceWSCollector:
                 "id": 1
             }
             ws.send(json.dumps(subscribe_msg))
-            logger.info(f"Subscribed to Binance streams: {streams}")
+            logger.info(
+                f"Subscribed to Binance streams via {endpoint['source']}: {streams}"
+            )
+            if endpoint["source"] != "binance_futures":
+                logger.warning(
+                    "[Binance WS] collecting from the SPOT stream as a proxy - "
+                    "the futures stream went silent (taker-flow source labeled in logs only)"
+                )
 
         ws = websocket.WebSocketApp(
-            WS_URL,
+            endpoint["url"],
             on_message=on_message,
             on_error=on_error,
             on_close=on_close,
             on_open=on_open
         )
 
+        self._last_market_msg_ts = None
+        self._connected_ts = time.time()
+        silence_triggered = threading.Event()
+
+        def _watchdog():
+            while self.running and not silence_triggered.is_set():
+                time.sleep(_WATCHDOG_POLL_SECONDS)
+                if should_reconnect_for_silence(
+                    self._last_market_msg_ts, time.time(), self._connected_ts
+                ):
+                    silence_triggered.set()
+                    logger.warning(
+                        "[Binance WS] no market data for %ss on %s - closing and "
+                        "rotating endpoint", SILENCE_TIMEOUT_SECONDS, endpoint["source"],
+                    )
+                    try:
+                        ws.close()
+                    except Exception:  # noqa: BLE001 - close must never kill the watchdog
+                        pass
+                    return
+
+        watchdog = threading.Thread(target=_watchdog, daemon=True)
+        watchdog.start()
+
         # Run with ping interval to keep connection alive
         ws.run_forever(ping_interval=WS_TIMEOUT_SECONDS)
+        silence_triggered_flag = silence_triggered.is_set()
+        silence_triggered.set()  # stop the watchdog thread promptly
+        if silence_triggered_flag:
+            self._endpoint_idx = next_endpoint_index(self._endpoint_idx)
 
     def _process_message(self, data: dict):
         """Process incoming WebSocket message"""

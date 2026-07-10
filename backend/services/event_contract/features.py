@@ -424,6 +424,8 @@ class EventContractFeatureMixin:
         blocked: List[str],
         reviewer_count: int,
         professional: Dict[str, Any] | None = None,
+        exhaustion_reversal: bool = False,
+        range_boundary_reversal: bool = False,
     ) -> str:
         if professional:
             score_text = (
@@ -442,6 +444,29 @@ class EventContractFeatureMixin:
             )
         if blocked:
             return f"{localize_direction(direction)}被阻断：{blocked[0]}"
+        if range_boundary_reversal:
+            # Direction came from the range STRUCTURE (boundary fade), not the
+            # momentum votes — say so instead of crediting the panel.
+            momentum = "long" if direction == "short" else "short"
+            return (
+                f"{localize_direction(direction)}（区间边界反转：价格触及区间"
+                f"{'上沿' if direction == 'short' else '下沿'}，逆动量共识"
+                f"（{votes}/{reviewer_count} 票{localize_direction(momentum)}）回归区间）。"
+                f"市场状态={f['market_state']}，趋势={f['trend_score']:.4f}，"
+                f"成交量={f['volume_ratio']:.2f}，假突破={f['fake_breakout_risk']:.1f}，"
+                f"陷阱={f['trap_risk']:.1f}。"
+            )
+        if exhaustion_reversal:
+            # The panel voted the momentum side; the trade deliberately fades it.
+            # Claiming the votes supported the flipped direction misleads review.
+            momentum = "long" if direction == "short" else "short"
+            return (
+                f"{localize_direction(direction)}（衰竭反手：{votes}/{reviewer_count} 票动量"
+                f"{localize_direction(momentum)}，反向入场）。"
+                f"市场状态={f['market_state']}，趋势={f['trend_score']:.4f}，"
+                f"成交量={f['volume_ratio']:.2f}，假突破={f['fake_breakout_risk']:.1f}，"
+                f"陷阱={f['trap_risk']:.1f}。"
+            )
         return (
             f"{localize_direction(direction)}，获得 {votes}/{reviewer_count} 个评审投票。"
             f"市场状态={f['market_state']}，趋势={f['trend_score']:.4f}，"

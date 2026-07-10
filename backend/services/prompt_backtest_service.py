@@ -70,6 +70,10 @@ def execute_backtest_task(task_id: int) -> None:
                 "task_id": task_id,
                 "modified_prompt": item.modified_prompt,
                 "original_operation": item.original_operation,
+                # Live-parity risk-guard replay needs the historical moment
+                # and account the original decision ran under.
+                "account_id": task.account_id,
+                "original_decision_time": item.original_decision_time,
             }
             for item in items
         ]
@@ -163,6 +167,16 @@ def _process_and_save_item(
             })
             return
 
+        # Live parity: annotate the decision with the same loss-streak guard
+        # verdict the live executor would have applied at that moment.
+        with SessionLocal() as guard_db:
+            _annotate_live_risk_guard(
+                guard_db,
+                decision,
+                account_id=item.get("account_id"),
+                decision_time=item.get("original_decision_time"),
+            )
+
         # Calculate change
         new_op = (decision.get("operation") or "").lower()
         orig_op = (item["original_operation"] or "").lower()
@@ -190,6 +204,48 @@ def _process_and_save_item(
             "error": str(e)[:500],
             "raw_response": content[:2000] if content else None,
         })
+
+
+def _annotate_live_risk_guard(
+    db,
+    decision: Dict[str, Any],
+    *,
+    account_id: Optional[int],
+    decision_time: Optional[datetime],
+) -> None:
+    """Stamp ``_risk_guard_blocked`` on a replayed decision when the live
+    loss-streak guard would have rejected it at ``decision_time`` - the same
+    key the live executors stuff into blocked decisions, so sim and live
+    records read identically.
+
+    Only the loss-streak guard replays exactly (it is derived from
+    ai_decision_logs, which exist for any historical moment). The exposure-cap
+    guard needs the account's positions at that time, which are not recorded -
+    a known sim/live gap, better left visible than papered over with guesses.
+    """
+    operation = (decision.get("operation") or "").lower()
+    symbol = (decision.get("symbol") or "").upper()
+    if operation not in ("buy", "sell") or not symbol or not account_id or not decision_time:
+        return
+    from services.trading_commands.risk_guards import (
+        LOSS_STREAK_LIMIT,
+        LOSS_STREAK_LOOKBACK_HOURS,
+        _recent_same_direction_losses,
+    )
+
+    try:
+        streak = _recent_same_direction_losses(
+            db, account_id, symbol, operation, decision_time,
+            LOSS_STREAK_LOOKBACK_HOURS, LOSS_STREAK_LIMIT,
+        )
+    except Exception as exc:  # noqa: BLE001 - annotation must not fail the item
+        logger.warning("risk-guard replay failed for backtest item: %s", exc)
+        return
+    if streak >= LOSS_STREAK_LIMIT:
+        decision["_risk_guard_blocked"] = (
+            f"风控闸（回测复现）：{symbol} {operation} 方向在该时点前 "
+            f"{LOSS_STREAK_LOOKBACK_HOURS}h 内已连续亏损 {streak} 笔，实盘将拒绝执行。"
+        )
 
 
 def _save_item_result(item_id: int, task_id: int, result: Dict) -> None:

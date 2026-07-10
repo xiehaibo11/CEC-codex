@@ -172,6 +172,24 @@ def call_ai_for_decision(
         logger.error("Failed to render prompt template '%s': %s", template.key, exc)
         prompt = template.template_text
 
+    # System hard facts go LAST (U-shaped attention: the tail is the other
+    # high-attention slot). Frozen directions, margin state, news-age rule.
+    try:
+        from services.ai_decision_service.prompt_runtime_sections import (
+            build_critical_constraints_tail,
+        )
+
+        margin_usage = None
+        if hyperliquid_state:
+            margin_usage = hyperliquid_state.get("margin_usage_percent")
+        constraints_tail = build_critical_constraints_tail(
+            db, account.id, symbol_order, margin_usage_percent=margin_usage
+        )
+        if constraints_tail:
+            prompt = f"{prompt}\n\n{constraints_tail}"
+    except Exception as tail_err:  # noqa: BLE001 - advisory tail must not block decisions
+        logger.warning("Failed to build critical constraints tail: %s", tail_err)
+
     logger.debug("Using prompt template '%s' for account %s", template.key, account.id)
 
     # Use unified payload/headers builders (see build_llm_payload docstring)
@@ -187,17 +205,58 @@ def call_ai_for_decision(
         stream=use_streaming,
     )
 
-    try:
-        endpoints = build_chat_completion_endpoints(account.base_url, account.model)
-        if not endpoints:
-            logger.error("No valid API endpoint built for account %s", account.name)
-            system_logger.log_error(
-                "API_ENDPOINT_BUILD_FAILED",
-                f"Failed to build API endpoint for {account.name} (model: {account.model})",
-                {"account": account.name, "model": account.model, "base_url": account.base_url},
-            )
-            return None
+    endpoints = build_chat_completion_endpoints(account.base_url, account.model)
+    if not endpoints:
+        logger.error("No valid API endpoint built for account %s", account.name)
+        system_logger.log_error(
+            "API_ENDPOINT_BUILD_FAILED",
+            f"Failed to build API endpoint for {account.name} (model: {account.model})",
+            {"account": account.name, "model": account.model, "base_url": account.base_url},
+        )
+        return None
 
+    # Self-consistency gate: sample the same prompt N times (temperature 0.7
+    # gives natural variance) and only keep directions the samples agree on.
+    # Verified research (arXiv 2505.06120): LLM decision degradation is mostly
+    # run-to-run variance - exactly what direction-agreement voting removes.
+    from services.ai_decision_service.self_consistency import (
+        configured_samples,
+        reconcile_decision_samples,
+    )
+
+    n_samples = configured_samples()
+    samples = []
+    for sample_idx in range(n_samples):
+        decisions = _request_and_parse_decisions(
+            account, prompt, headers, payload, endpoints, use_streaming
+        )
+        if decisions:
+            samples.append(decisions)
+        elif sample_idx == 0:
+            # Primary sample failure keeps the original single-shot contract.
+            return None
+    if not samples:
+        return None
+
+    structured_decisions = reconcile_decision_samples(samples)
+    logger.info(
+        "AI decisions for %s (%s/%s self-consistency samples): %s",
+        account.name, len(samples), n_samples, structured_decisions,
+    )
+    return structured_decisions
+
+
+def _request_and_parse_decisions(
+    account,
+    prompt: str,
+    headers: Dict[str, str],
+    payload: Dict[str, Any],
+    endpoints,
+    use_streaming: bool,
+) -> Optional[List[Dict[str, Any]]]:
+    """One LLM round trip: retry across endpoints, parse, and structure the
+    decision entries. Returns None on any failure (caller decides policy)."""
+    try:
         # Retry logic for rate limiting and transient errors
         max_retries = 3
         response = None
@@ -322,9 +381,8 @@ def call_ai_for_decision(
             logger.error("AI response for %s contained no usable decision entries", account.name)
             return None
 
-        logger.info("AI decisions for %s: %s", account.name, structured_decisions)
         return structured_decisions
-        
+
     except requests.RequestException as err:
         logger.error(f"AI API request failed: {err}")
         return None
@@ -334,7 +392,7 @@ def call_ai_for_decision(
         try:
             if 'text_content' in locals():
                 logger.error(f"Content that failed to parse: {text_content[:500]}")
-        except:
+        except Exception:
             pass
         return None
     except Exception as err:

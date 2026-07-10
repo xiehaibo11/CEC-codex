@@ -206,17 +206,48 @@ def initialize_services():
         logger.info("News AI classifier scheduled (30-min interval)")
 
         # Start the event-contract live paper trading cycle (settle -> fill entry ->
-        # decide) for every enabled forward-testing trader (every 60 seconds)
+        # decide) at the 1-second boundary cadence. The cycle itself only acts
+        # once per completed 1m bar, so this gives bar-close/open responsiveness
+        # without duplicating decisions.
         from services.event_contract.live_paper_trader import (
             run_live_paper_cycle,
             EVENT_PAPER_TRADER_JOB_ID,
         )
         task_scheduler.add_interval_task(
             task_func=run_live_paper_cycle,
-            interval_seconds=60,
+            interval_seconds=1,
             task_id=EVENT_PAPER_TRADER_JOB_ID,
+            job_options={"max_instances": 1, "coalesce": True, "misfire_grace_time": 2},
         )
-        logger.info("Event-contract live paper trading cycle scheduled (60s interval)")
+        logger.info("Event-contract live paper trading cycle scheduled (1s bar-boundary interval)")
+
+        # Tier-1 price-locked arbitrage OPPORTUNITY DETECTOR (MVP: detector +
+        # opportunity log only, no venue quotes): settle expired hypothetical
+        # 5-min windows and record newly locked ones (every 30 seconds)
+        from services.arb_opportunity_detector import (
+            run_detector_cycle,
+            ARB_OPPORTUNITY_JOB_ID,
+        )
+        task_scheduler.add_interval_task(
+            task_func=run_detector_cycle,
+            interval_seconds=30,
+            task_id=ARB_OPPORTUNITY_JOB_ID,
+        )
+        logger.info("Arb opportunity detector cycle scheduled (30s interval)")
+
+        # Hard time-based exit: AI-managed Binance positions close once held
+        # past POSITION_MAX_HOLD_MINUTES (default 5) - 用户规则：5分钟一到就平仓.
+        # 30s cadence gives the 5-minute horizon adequate precision.
+        from services.position_time_exit import (
+            run_position_time_exit_cycle,
+            TIME_EXIT_JOB_ID,
+        )
+        task_scheduler.add_interval_task(
+            task_func=run_position_time_exit_cycle,
+            interval_seconds=30,
+            task_id=TIME_EXIT_JOB_ID,
+        )
+        logger.info("Position time-exit cycle scheduled (30s interval, 5m hold limit)")
 
         # Automate rolling out-of-sample validation: append a frozen-parameter
         # holdout backtest for every enabled paper trader's strategy fingerprint
@@ -292,7 +323,7 @@ async def shutdown_event():
     await shutdown_services()
 
 
-def schedule_auto_trading(interval_seconds: int = 300, max_ratio: float = 0.2, use_ai: bool = True) -> None:
+def schedule_auto_trading(interval_seconds: int = 300, max_ratio: float = 0.5, use_ai: bool = True) -> None:
     """Schedule automatic trading tasks
     
     Args:

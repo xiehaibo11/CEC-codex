@@ -17,7 +17,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
-from connection import SessionLocal, engine
+from connection import SessionLocal
 
 
 def upgrade():
@@ -29,7 +29,7 @@ def upgrade():
         # Create price_samples table
         print("Creating price_samples table...")
         db.execute(text("""
-            CREATE TABLE price_samples (
+            CREATE TABLE IF NOT EXISTS price_samples (
                 id SERIAL PRIMARY KEY,
                 exchange VARCHAR(20) NOT NULL,
                 symbol VARCHAR(20) NOT NULL,
@@ -43,32 +43,40 @@ def upgrade():
         # Create indexes for performance
         print("Creating indexes...")
         db.execute(text("""
-            CREATE INDEX idx_price_samples_exchange ON price_samples(exchange)
+            CREATE INDEX IF NOT EXISTS idx_price_samples_exchange ON price_samples(exchange)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_price_samples_symbol ON price_samples(symbol)
+            CREATE INDEX IF NOT EXISTS idx_price_samples_symbol ON price_samples(symbol)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_price_samples_sample_time ON price_samples(sample_time)
+            CREATE INDEX IF NOT EXISTS idx_price_samples_sample_time ON price_samples(sample_time)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_price_samples_exchange_symbol ON price_samples(exchange, symbol)
+            CREATE INDEX IF NOT EXISTS idx_price_samples_exchange_symbol ON price_samples(exchange, symbol)
         """))
 
         db.execute(text("""
-            CREATE INDEX idx_price_samples_exchange_symbol_time ON price_samples(exchange, symbol, sample_time)
+            CREATE INDEX IF NOT EXISTS idx_price_samples_exchange_symbol_time ON price_samples(exchange, symbol, sample_time)
         """))
 
         # Add foreign key constraint for account_id (optional)
         print("Adding foreign key constraint...")
         db.execute(text("""
-            ALTER TABLE price_samples
-            ADD CONSTRAINT fk_price_samples_account_id
-            FOREIGN KEY (account_id) REFERENCES accounts(id)
-            ON DELETE SET NULL
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'fk_price_samples_account_id'
+                ) THEN
+                    ALTER TABLE price_samples
+                    ADD CONSTRAINT fk_price_samples_account_id
+                    FOREIGN KEY (account_id) REFERENCES accounts(id)
+                    ON DELETE SET NULL;
+                END IF;
+            END $$;
         """))
 
         db.commit()

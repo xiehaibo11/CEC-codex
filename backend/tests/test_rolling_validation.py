@@ -130,7 +130,13 @@ def _make_validation_log(db, fingerprint, **overrides):
 
 def test_validation_log_migration_registered_last():
     migration_manager = importlib.import_module("database.migration_manager")
-    assert migration_manager.MIGRATIONS[-1] == "add_event_contract_validation_log.py"
+    migrations = migration_manager.MIGRATIONS
+    assert "add_event_contract_validation_log.py" in migrations
+    # Later feature migrations may append after it, but the validation-log
+    # migration must still be registered before migrations that depend on the
+    # event-contract validation record existing.
+    if "add_ai_review_tables.py" in migrations:
+        assert migrations.index("add_event_contract_validation_log.py") < migrations.index("add_ai_review_tables.py")
 
 
 def test_validation_log_migration_upgrade_is_idempotent():
@@ -322,7 +328,7 @@ def test_launch_phase_guards_against_duplicate_pending_launch(session, monkeypat
     NOT create a new task/log row."""
     fingerprint = "fp-launch-duplicate-guard"
     _make_trader(session, fingerprint)
-    source_run = _make_backtest_run(
+    _make_backtest_run(
         session,
         fingerprint,
         end_time=NOW - timedelta(hours=20),  # source run ended 20h ago

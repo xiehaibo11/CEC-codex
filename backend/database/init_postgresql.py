@@ -8,7 +8,7 @@ import sys
 import logging
 import os
 from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import OperationalError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -203,8 +203,8 @@ def create_tables():
         # Import models to register them with SQLAlchemy
         from database.connection import engine, Base
         from database.snapshot_connection import snapshot_engine, SnapshotBase
-        from database import models  # This imports all model definitions
-        from database import snapshot_models  # This imports snapshot model definitions
+        from database import models  # noqa: F401  # register all model definitions
+        from database import snapshot_models  # noqa: F401  # register snapshot model definitions
 
         # Create main database tables
         logger.info("Creating main database tables...")
@@ -261,8 +261,13 @@ def main():
     logger.info("CEC-codex - PostgreSQL Initialization")
     logger.info("=" * 60)
 
-    # Step 1: Create user and databases
-    if not create_postgres_user_and_databases():
+    # Step 1: Create user and databases only for unmanaged local installs.
+    # Docker/systemd deployments provide DATABASE_URL/SNAPSHOT_DATABASE_URL and
+    # manage database creation outside this script; trying to connect to a local
+    # postgres superuser there only creates noisy false failures during startup.
+    if os.environ.get("DATABASE_URL") or os.environ.get("SNAPSHOT_DATABASE_URL"):
+        logger.info("DATABASE_URL/SNAPSHOT_DATABASE_URL provided; skipping admin database bootstrap")
+    elif not create_postgres_user_and_databases():
         logger.error("\n❌ Database initialization failed!")
         logger.error("Please ensure PostgreSQL is installed and running.")
         return 1

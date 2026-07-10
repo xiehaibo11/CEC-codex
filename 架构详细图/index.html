@@ -673,6 +673,71 @@
   class BackendDev,FrontendDev,Proxy,FastAPI,BackendRuntime runtime
   class Dist,Static,DB artifact
   class Env,Logs config</pre></section>
+    <section><h2>13. Dashboard AI 决策下单全链路与页面相互作用</h2><pre class="mermaid">flowchart TB
+  subgraph Feed[&quot;喂料层&quot;]
+    Settings[&quot;Settings watchlist&lt;br/&gt;binance/hibt_selected_symbols&lt;br/&gt;数据采集总开关&quot;]
+    Collectors[&quot;采集器&lt;br/&gt;kline/WS flow/orderbook&quot;]
+    CG[&quot;CoinGlass 服务端网关&lt;br/&gt;api/coinglass/client.py&lt;br/&gt;目录校验+限流+密钥解析&quot;]
+    Factors[&quot;Factor Library&lt;br/&gt;22内置+自定义表达式&lt;br/&gt;factor_values 1h + IC/ICIR 日更&quot;]
+  end
+
+  subgraph Trigger[&quot;触发层（三选一）&quot;]
+    Sched[&quot;定时触发&lt;br/&gt;StrategyManager.handle_price_update&lt;br/&gt;should_trigger_scheduled&quot;]
+    Manual[&quot;手动触发&lt;br/&gt;POST /account/{id}/trigger-ai-trade&quot;]
+    Signal[&quot;信号触发&lt;br/&gt;detect_signals 池边沿触发&lt;br/&gt;pool_id ∈ AccountStrategyConfig.signal_pool_ids&quot;]
+  end
+
+  subgraph Decide[&quot;决策层&quot;]
+    Prompt[&quot;Prompt 绑定解析&lt;br/&gt;get_prompt_for_account&lt;br/&gt;无绑定 = 直接跳过（无默认兜底）&quot;]
+    Context[&quot;上下文组装 _build_prompt_context&lt;br/&gt;账户/持仓/行情/K线指标/因子/新闻&lt;br/&gt;{trigger_context} {market_regime}&quot;]
+    LLM[&quot;账户自有 LLM&lt;br/&gt;model/base_url/api_key&lt;br/&gt;重试3次 240s&quot;]
+    Persist[&quot;AIDecisionLog&lt;br/&gt;prompt/推理/决策快照&lt;br/&gt;+ WS model_chat 推送&quot;]
+  end
+
+  subgraph Route[&quot;订单路由 place_ai_driven_*&quot;]
+    Paper[&quot;paper：本地撮合&lt;br/&gt;市价即时成交&lt;br/&gt;orders/positions/trades&quot;]
+    HL[&quot;testnet/mainnet：Hyperliquid&lt;br/&gt;place_order_with_tpsl IOC&lt;br/&gt;+快照库 HyperliquidTrade&quot;]
+    BN[&quot;binance：币安期货&lt;br/&gt;binance_trading_client&quot;]
+  end
+
+  subgraph Analyze[&quot;分析层&quot;]
+    Attr[&quot;Attribution Analysis&lt;br/&gt;读 AIDecisionLog+快照库费用&lt;br/&gt;4 Tab：维度/交易/Prompt回测/事件合约&quot;]
+    PromptBT[&quot;Prompt Backtest&lt;br/&gt;重放历史决策（只读不下单）&quot;]
+    EventBT[&quot;Backtest Tool 事件合约&lt;br/&gt;与主管线完全平行&lt;br/&gt;共享引擎→纸盘交易员&quot;]
+  end
+
+  Settings --&gt; Collectors
+  Collectors --&gt;|crypto_klines+flow表| Factors
+  Collectors --&gt;|市场数据| Signal
+  Factors --&gt;|factor:NAME 指标| Signal
+  Factors --&gt;|SYMBOL_factor_* 变量| Context
+  CG --&gt;|爆仓/CVD/OI特征| EventBT
+
+  Sched --&gt; Prompt
+  Manual --&gt; Prompt
+  Signal --&gt;|trigger_context 含IC/ICIR| Context
+  Signal --&gt; Prompt
+
+  Prompt --&gt; Context --&gt; LLM --&gt; Persist
+  Persist --&gt; Paper
+  Persist --&gt; HL
+  Persist --&gt; BN
+  Paper --&gt;|WS trade/position| Dashboard[&quot;Dashboard 实时刷新&quot;]
+  HL --&gt; Dashboard
+  Persist --&gt; Attr
+  Attr --&gt; PromptBT
+  EventBT -.仅报告层并列.- Attr
+
+  classDef feed fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef trig fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef dec fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef route fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef ana fill:#ffedd5,stroke:#ea580c,color:#0f172a
+  class Settings,Collectors,CG,Factors feed
+  class Sched,Manual,Signal trig
+  class Prompt,Context,LLM,Persist dec
+  class Paper,HL,BN,Dashboard route
+  class Attr,PromptBT,EventBT ana</pre></section>
   </main>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';

@@ -12,6 +12,7 @@ from database.connection import Base
 from database.models.event_contract import EventContractPaperBet, EventContractPaperTrader
 from services.event_contract import paper_trader_api
 from services.event_contract.backtest_stats import wilson_interval
+from services.event_contract.production_policy import normalize_production_config
 from services.event_contract_service import event_contract_service
 
 
@@ -34,8 +35,16 @@ def _make_trader(db, **overrides):
     config = overrides.pop("config", {"symbol": "BTC", "exchange": "binance"})
     stake_amount = overrides.pop("stake_amount", 100.0)
     initial_balance = overrides.pop("initial_balance", 10000.0)
+    # Governance is exercised in TestFingerprintGovernance; the rest of this
+    # module tests CRUD/stats mechanics on explicitly experimental traders.
+    allow_unvalidated = overrides.pop("allow_unvalidated", True)
     return paper_trader_api.create_paper_trader(
-        db, name=name, config=config, stake_amount=stake_amount, initial_balance=initial_balance
+        db,
+        name=name,
+        config=config,
+        stake_amount=stake_amount,
+        initial_balance=initial_balance,
+        allow_unvalidated=allow_unvalidated,
     )
 
 
@@ -68,7 +77,8 @@ class TestCreatePaperTrader:
         assert trader["strategy_fingerprint"]
 
         cfg = event_contract_service._normalize_config(
-            {"symbol": "btcusdt", "exchange": "Binance"}, prediction=True
+            normalize_production_config({"symbol": "btcusdt", "exchange": "Binance"}),
+            prediction=True,
         )
         expected_fingerprint = event_contract_service._strategy_fingerprint(cfg)
         assert trader["strategy_fingerprint"] == expected_fingerprint
@@ -119,6 +129,39 @@ class TestListAndToggle:
     def test_toggle_missing_trader_raises(self, session):
         with pytest.raises(ValueError):
             paper_trader_api.set_paper_trader_enabled(session, 9999, True)
+
+
+class TestUpdateStake:
+    """Stake-only sizing change (2026-07-06): must never touch strategy
+    config/fingerprint, so it can't be confused with re-validating the edge
+    itself - the sample-count clock for that keeps running untouched."""
+
+    def test_updates_stake_amount(self, session):
+        trader = _make_trader(session, stake_amount=100.0, initial_balance=10000.0)
+        updated = paper_trader_api.update_paper_trader_stake(session, trader["id"], 300.0)
+        assert updated["stake_amount"] == 300.0
+
+    def test_does_not_touch_strategy_fingerprint(self, session):
+        trader = _make_trader(session, stake_amount=100.0)
+        before = trader["strategy_fingerprint"]
+        updated = paper_trader_api.update_paper_trader_stake(session, trader["id"], 250.0)
+        assert updated["strategy_fingerprint"] == before
+
+    def test_rejects_zero_or_negative_stake(self, session):
+        trader = _make_trader(session)
+        with pytest.raises(ValueError):
+            paper_trader_api.update_paper_trader_stake(session, trader["id"], 0.0)
+        with pytest.raises(ValueError):
+            paper_trader_api.update_paper_trader_stake(session, trader["id"], -50.0)
+
+    def test_rejects_stake_exceeding_current_balance(self, session):
+        trader = _make_trader(session, stake_amount=100.0, initial_balance=10000.0)
+        with pytest.raises(ValueError):
+            paper_trader_api.update_paper_trader_stake(session, trader["id"], 10001.0)
+
+    def test_missing_trader_raises(self, session):
+        with pytest.raises(ValueError):
+            paper_trader_api.update_paper_trader_stake(session, 9999, 200.0)
 
 
 class TestStatsMath:
@@ -229,3 +272,160 @@ class TestBetsPagination:
     def test_bets_missing_trader_raises(self, session):
         with pytest.raises(ValueError):
             paper_trader_api.get_paper_trader_bets(session, 9999)
+
+
+class TestFingerprintGovernance:
+    """A paper trader must run the exact strategy that was validated.
+
+    Root cause guarded: trader #2 went live with fingerprint da06c4697308fb9d,
+    which had ZERO backtest runs - the validated 67.8% run carried a different
+    fingerprint (config drift on clone). Creation must refuse a fingerprint
+    that has no completed, significant-vs-breakeven backtest run unless the
+    caller explicitly opts into an experimental deployment.
+    """
+
+    @pytest.fixture()
+    def session_with_runs(self):
+        from database.models.event_contract import EventContractBacktestRun
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(
+            engine,
+            tables=[
+                EventContractPaperTrader.__table__,
+                EventContractPaperBet.__table__,
+                EventContractBacktestRun.__table__,
+            ],
+        )
+        factory = sessionmaker(bind=engine)
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    @staticmethod
+    def _add_run(db, fingerprint, significant, status="completed", **summary_extra):
+        import datetime as dt
+        import json as json_mod
+
+        from database.models.event_contract import EventContractBacktestRun
+
+        run = EventContractBacktestRun(
+            symbol="BTC",
+            exchange="binance",
+            environment="mainnet",
+            period="1m",
+            start_time=dt.datetime(2026, 5, 29),
+            end_time=dt.datetime(2026, 7, 4),
+            status=status,
+            summary=json_mod.dumps(
+                {
+                    "strategy_fingerprint": fingerprint,
+                    "significant_vs_breakeven": significant,
+                    "decided_win_rate": 67.77,
+                    **summary_extra,
+                }
+            ),
+        )
+        db.add(run)
+        db.commit()
+        return run
+
+    def _fingerprint_for(self, config):
+        cfg = event_contract_service._normalize_config(
+            normalize_production_config(dict(config)), prediction=True
+        )
+        return event_contract_service._strategy_fingerprint(cfg)
+
+    def test_refuses_fingerprint_with_no_backtest_run(self, session_with_runs):
+        with pytest.raises(ValueError, match="no completed backtest"):
+            paper_trader_api.create_paper_trader(
+                session_with_runs,
+                name="unvalidated",
+                config={"symbol": "BTC", "exchange": "binance"},
+                allow_unvalidated=False,
+            )
+
+    def test_refuses_fingerprint_whose_runs_are_not_significant(self, session_with_runs):
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(session_with_runs, self._fingerprint_for(config), significant=False)
+        with pytest.raises(ValueError, match="no completed backtest"):
+            paper_trader_api.create_paper_trader(
+                session_with_runs, name="not-significant", config=config, allow_unvalidated=False
+            )
+
+    def test_accepts_validated_fingerprint(self, session_with_runs):
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(session_with_runs, self._fingerprint_for(config), significant=True)
+        trader = paper_trader_api.create_paper_trader(
+            session_with_runs, name="validated", config=config, allow_unvalidated=False
+        )
+        assert trader["strategy_fingerprint"] == self._fingerprint_for(config)
+
+    def test_explicit_opt_out_allows_experimental_trader(self, session_with_runs):
+        trader = paper_trader_api.create_paper_trader(
+            session_with_runs,
+            name="experimental",
+            config={"symbol": "BTC", "exchange": "binance"},
+            allow_unvalidated=True,
+        )
+        assert trader["id"]
+
+    def test_refuses_fragile_edge_run(self, session_with_runs):
+        """Run 2036 flipped 41% of its trades on a 5bps settlement shift - an
+        edge living inside microstructure noise is not deployable."""
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(
+            session_with_runs,
+            self._fingerprint_for(config),
+            significant=True,
+            settlement_sensitivity={"bps_2": 13.2, "bps_5": 41.3, "bps_10": 66.9},
+        )
+        with pytest.raises(ValueError, match="no completed backtest"):
+            paper_trader_api.create_paper_trader(
+                session_with_runs, name="fragile", config=config, allow_unvalidated=False
+            )
+
+    def test_refuses_miscalibrated_run(self, session_with_runs):
+        """Run 2036's own calibration said predicted 1.8% vs actual 67.8%
+        (Brier 0.655) - a run whose probabilities are that broken is not
+        evidence of an edge."""
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(
+            session_with_runs,
+            self._fingerprint_for(config),
+            significant=True,
+            calibration_report={"status": "ok", "n": 121, "brier_score": 0.655},
+        )
+        with pytest.raises(ValueError, match="no completed backtest"):
+            paper_trader_api.create_paper_trader(
+                session_with_runs, name="miscalibrated", config=config, allow_unvalidated=False
+            )
+
+    def test_accepts_solid_run_with_good_sensitivity_and_calibration(self, session_with_runs):
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(
+            session_with_runs,
+            self._fingerprint_for(config),
+            significant=True,
+            settlement_sensitivity={"bps_2": 3.0, "bps_5": 8.0, "bps_10": 15.0},
+            calibration_report={"status": "ok", "n": 200, "brier_score": 0.21},
+        )
+        trader = paper_trader_api.create_paper_trader(
+            session_with_runs, name="solid", config=config, allow_unvalidated=False
+        )
+        assert trader["id"]
+
+    def test_insufficient_calibration_sample_does_not_block(self, session_with_runs):
+        config = {"symbol": "BTC", "exchange": "binance"}
+        self._add_run(
+            session_with_runs,
+            self._fingerprint_for(config),
+            significant=True,
+            calibration_report={"status": "insufficient_sample", "n": 10},
+        )
+        trader = paper_trader_api.create_paper_trader(
+            session_with_runs, name="small-cal-sample", config=config, allow_unvalidated=False
+        )
+        assert trader["id"]

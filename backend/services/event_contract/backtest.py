@@ -17,6 +17,7 @@ from services.event_contract.ai_trader_team import (
 from services.event_contract.backtest_helpers import EventContractBacktestHelperMixin
 from services.event_contract.constants import ENGINE_VERSION, MAX_REVIEWER_PANEL_SIZE, PERIOD_SECONDS, reviewer_names_for_panel
 from services.event_contract.localization import join_chinese_reasons
+from services.event_contract.multi_timeframe import build_multi_timeframe_snapshot
 from services.event_contract.tasks import EventBacktestPaused, build_ai_reviewer_statuses
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,9 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
     def predict(self, db: Session, config: Dict[str, Any]) -> Dict[str, Any]:
         cfg = self._normalize_config(config, prediction=True)
         now_ts = int(datetime.now(timezone.utc).timestamp())
-        lookback_start = now_ts - 3 * 24 * 3600
+        # Production predictions need enough completed data to build the 4H
+        # context in addition to the 30M/15M/10M/5M setup and trigger views.
+        lookback_start = now_ts - 7 * 24 * 3600
         klines = self._load_klines(
             db,
             cfg["exchange"],
@@ -77,6 +80,13 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         data_quality["sanitize"] = sanitize_report
         data_quality["warnings"].extend(sanitize_report["warnings"])
         self._validate_data_quality(data_quality, cfg)
+        production_mtf = None
+        if cfg.get("professional_ai_enabled"):
+            production_mtf = build_multi_timeframe_snapshot(klines, now_ts=now_ts)
+            data_quality["production_multi_timeframe"] = production_mtf
+            # Snapshot data is a per-decision runtime input, not a strategy
+            # parameter and therefore must not alter fingerprints.
+            cfg = {**cfg, "_production_mtf_snapshot": production_mtf}
         coinglass_bundle = self._load_coinglass_feature_bundle(
             cfg,
             klines[0]["timestamp"],
@@ -137,11 +147,18 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         latest = history[-1]
         similar = self._find_similar_patterns(klines, analysis, cfg)
 
-        return {
+        result = {
             "symbol": cfg["symbol"],
             "engine_version": ENGINE_VERSION,
             "exchange": cfg["exchange"],
             "period": cfg["period"],
+            "execution_mode": cfg.get("execution_mode", config.get("execution_mode", "paper")),
+            "leverage": cfg.get("leverage", config.get("leverage", 10)),
+            "trade_margin": cfg.get("trade_margin", config.get("trade_margin", 100)),
+            "max_daily_trades": cfg.get("max_daily_trades", config.get("max_daily_trades", 10)),
+            "profit_target_multiplier": cfg.get(
+                "profit_target_multiplier", config.get("profit_target_multiplier", 2)
+            ),
             "consensus_mode": cfg["consensus_mode"],
             "decision_policy": analysis["decision_policy"],
             "ai_participated": analysis["ai_participated"],
@@ -179,6 +196,91 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
             "ai_decisions": analysis["ai_decisions"],
             "factors": analysis["factors"],
         }
+        if cfg.get("professional_ai_enabled"):
+            try:
+                professional_review, professional_meta = self._call_professional_ai(
+                    db,
+                    cfg,
+                    production_mtf or {},
+                    analysis,
+                )
+                self._apply_professional_ai_review(
+                    result=result,
+                    cfg=cfg,
+                    latest=latest,
+                    review=professional_review,
+                    metadata=professional_meta,
+                )
+            except Exception as exc:  # noqa: BLE001 - production AI fails closed
+                logger.warning(
+                    "Professional AI unavailable for %s %s; returning HOLD: %s",
+                    cfg["exchange"],
+                    cfg["symbol"],
+                    exc,
+                )
+                self._apply_professional_ai_review(
+                    result=result,
+                    cfg=cfg,
+                    latest=latest,
+                    review=None,
+                    error=str(exc),
+                )
+        self._apply_ev_gate(db, config, cfg, latest, result)
+        return result
+
+    def _apply_ev_gate(
+        self,
+        db: Session,
+        raw_config: Dict[str, Any],
+        cfg: Dict[str, Any],
+        latest: Dict[str, Any],
+        result: Dict[str, Any],
+    ) -> None:
+        """Final expected-value check on a tradable prediction: the
+        deduplicated record of similar historical trades must demonstrate a
+        win rate above break-even before real money follows the signal.
+
+        Knobs (``enable_ev_gate``, ``ev_gate_min_n``) are read from the RAW
+        config only - they must never enter the normalized cfg, or they would
+        change strategy fingerprints and orphan every validated run."""
+        if not bool(raw_config.get("enable_ev_gate", True)):
+            return
+        if not result.get("allow_trade") or result.get("best_action") not in ("long", "short"):
+            return
+
+        from services.event_contract.ev_gate import DEFAULT_MIN_N, check_ev_gate
+
+        break_even_pct = (1 + cfg["fee_rate"]) / (1 + cfg["win_payout_ratio"]) * 100
+        cutoff = datetime.fromtimestamp(
+            self._decision_timestamp(latest, cfg), tz=timezone.utc
+        ).replace(tzinfo=None)
+        verdict = check_ev_gate(
+            db,
+            symbol=cfg["symbol"],
+            direction=result["best_action"],
+            market_state=result["market_state"],
+            cutoff=cutoff,
+            break_even_pct=break_even_pct,
+            min_n=int(raw_config.get("ev_gate_min_n", DEFAULT_MIN_N)),
+        )
+        result["historical_ev"] = verdict["estimate"]
+        event_signal = result.get("event_signal") or {}
+        estimate = verdict["estimate"]
+        event_signal["expected_win_rate"] = estimate["win_rate"] if estimate["n"] else None
+        event_signal["expected_win_rate_basis"] = "historical_similar_trades"
+        if verdict["allowed"]:
+            return
+        result["allow_trade"] = False
+        result["veto_reasons"] = list(result.get("veto_reasons") or []) + [verdict["reason"]]
+        event_signal["veto_reasons"] = list(event_signal.get("veto_reasons") or []) + [
+            verdict["reason"]
+        ]
+        ai_consensus = result.get("ai_consensus")
+        if isinstance(ai_consensus, dict):
+            ai_consensus["allow_trade"] = False
+        result["entry_warning"] = join_chinese_reasons(
+            [text for text in (result.get("entry_warning"), verdict["reason"]) if text]
+        )
 
     def run_backtest(
         self,
@@ -528,6 +630,19 @@ class EventContractBacktestMixin(EventContractBacktestHelperMixin):
         # Data-snooping audit: how many configs were already tried on this window
         # (counts runs persisted BEFORE this one, so the current run is excluded).
         summary["research_report"]["window_reuse"] = self._window_reuse_report(db, cfg)
+        # EV audit: for each decided trade, would the historical EV gate
+        # (leakage-safe cutoff at that trade's own entry time) have allowed it?
+        # A run whose trades the gate mostly blocks is riding a signal family
+        # with no demonstrated edge, whatever its headline win rate says.
+        try:
+            from services.event_contract.ev_gate import ev_gate_report
+
+            summary["ev_gate_report"] = ev_gate_report(
+                db, trades, break_even_pct=summary["break_even_win_rate"]
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics must not kill a finished run
+            logger.warning("ev_gate_report failed: %s", exc)
+            summary["ev_gate_report"] = {"error": str(exc)}
         report(
             {
                 "phase": "saving",

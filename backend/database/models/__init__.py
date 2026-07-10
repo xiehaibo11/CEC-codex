@@ -116,6 +116,9 @@ from .factors import (
     FactorEffectiveness,
     CustomFactor,
 )
+from .arb import (
+    ArbOpportunityLog,
+)
 
 __all__ = [
     "Base",
@@ -199,4 +202,5 @@ __all__ = [
     "FactorValue",
     "FactorEffectiveness",
     "CustomFactor",
+    "ArbOpportunityLog",
 ]

@@ -26,11 +26,13 @@ class SignalReviewer:
         if trigger_type != "signal":
             return AgentReview(
                 agent_role=self.agent_role,
-                verdict=AgentVerdict.WARN,
-                confidence=0.9,
-                warnings=["非信号触发的开仓只能作为低置信度候选，需由执行评委降级或限仓。"],
+                verdict=AgentVerdict.BLOCK,
+                confidence=1.0,
+                blocking_reasons=[
+                    "非信号触发的开仓缺少可验证信号来源，执行层阻断新增风险。"
+                ],
                 evidence=[{"trigger_type": trigger_type or "unknown"}],
-                report_text="缺少结构化信号来源。",
+                report_text="缺少结构化信号来源，不能仅凭新闻叙事开仓。",
             )
 
         if context.environment == "mainnet":

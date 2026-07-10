@@ -94,7 +94,15 @@ class TaskScheduler:
             logger.debug(f"Failed to remove snapshot task for account {account_id}: {e}")
     
     
-    def add_interval_task(self, task_func: Callable, interval_seconds: int, task_id: str, *args, **kwargs):
+    def add_interval_task(
+        self,
+        task_func: Callable,
+        interval_seconds: int,
+        task_id: str,
+        *args,
+        job_options: Optional[Dict] = None,
+        **kwargs,
+    ):
         """
         Add interval execution task
 
@@ -103,17 +111,21 @@ class TaskScheduler:
             interval_seconds: Execution interval (seconds)
             task_id: Task unique identifier
             *args, **kwargs: Parameters passed to task_func
+            job_options: Optional APScheduler job options such as
+                ``max_instances``, ``coalesce`` and ``misfire_grace_time``.
         """
         if not self.is_running():
             self.start()
             
+        scheduler_options = dict(job_options or {})
         self.scheduler.add_job(
             func=task_func,
             trigger=IntervalTrigger(seconds=interval_seconds),
             args=args,
             kwargs=kwargs,
             id=task_id,
-            replace_existing=True
+            replace_existing=True,
+            **scheduler_options,
         )
         
         logger.info(f"Added interval task {task_id}: Execute every {interval_seconds} seconds")

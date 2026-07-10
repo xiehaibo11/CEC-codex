@@ -2,9 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-# Prefer explicit env override; default to service name for containerized deployment
-# Default to docker-compose service name; override via env when needed
-DATABASE_URL = os.environ.get('DATABASE_URL', "postgresql://alpha_user:alpha_pass@postgres:5432/alpha_arena")
+# Prefer explicit env override. Docker Compose sets DATABASE_URL to the
+# in-network postgres service name; local tests/default dev commands run on
+# the host and should use the published port.
+DATABASE_URL = os.environ.get('DATABASE_URL', "postgresql://alpha_user:alpha_pass@127.0.0.1:5434/alpha_arena")
 
 # Allow tuning via environment variables but provide sensible defaults for our workload
 POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "20"))

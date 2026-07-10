@@ -138,6 +138,21 @@ class EventContractConfigMixin:
             "max_bars": int(config.get("max_bars") or 50000),
             "return_trade_limit": int(config.get("return_trade_limit") or 300),
         }
+        # Production-only AI confirmation is conditionally included so legacy
+        # historical fingerprints remain stable when the flag was never set.
+        if "professional_ai_enabled" in config:
+            cfg["professional_ai_enabled"] = bool(config.get("professional_ai_enabled"))
+            cfg["professional_ai_min_confidence"] = min(
+                max(float(config.get("professional_ai_min_confidence") or 75), 0), 100
+            )
+        if "execution_mode" in config:
+            cfg["execution_mode"] = str(config.get("execution_mode") or "paper").strip().lower()
+            cfg["leverage"] = float(config.get("leverage") or 10)
+            cfg["trade_margin"] = float(config.get("trade_margin") or 100)
+            cfg["max_daily_trades"] = int(config.get("max_daily_trades") or 10)
+            cfg["profit_target_multiplier"] = float(
+                config.get("profit_target_multiplier") or 2
+            )
         if cfg["consensus_mode"] not in CONSENSUS_MODES:
             raise ValueError(f"Unsupported consensus_mode: {cfg['consensus_mode']}")
         if cfg["decision_policy"] not in {"professional_v1", "legacy_vote"}:
@@ -162,8 +177,10 @@ class EventContractConfigMixin:
         cfg["min_coinglass_coverage_pct"] = min(max(cfg["min_coinglass_coverage_pct"], 0), 100)
         # CoinGlass max-lag scales off the CG sampling interval (which may be coarser than
         # the K-line period - e.g. 30m CG on 1m bars needs >= 1800s lag for forward-fill).
+        # Floor at one full interval: any smaller tolerance leaves the features
+        # unavailable for most decision bars between CG samples.
         cg_lag_unit = PERIOD_SECONDS.get(str(cfg.get("coinglass_interval") or period), PERIOD_SECONDS[period])
-        cfg["max_coinglass_lag_seconds"] = min(max(cfg["max_coinglass_lag_seconds"], 0), cg_lag_unit * 10)
+        cfg["max_coinglass_lag_seconds"] = min(max(cfg["max_coinglass_lag_seconds"], cg_lag_unit), cg_lag_unit * 10)
         cfg["max_coinglass_pages_per_metric"] = min(max(cfg["max_coinglass_pages_per_metric"], 1), 500)
         cfg["reviewer_panel_size"] = min(max(cfg["reviewer_panel_size"], 5), MAX_REVIEWER_PANEL_SIZE)
         cfg["consensus_threshold"] = min(max(cfg["consensus_threshold"], 1), cfg["reviewer_panel_size"])
@@ -244,6 +261,36 @@ class EventContractConfigMixin:
             cfg["factor_gate_min_history"] = min(
                 max(int(config.get("factor_gate_min_history") or 40), 10), cfg["factor_gate_lookback"]
             )
+        # --- Signal mode ------------------------------------------------------------
+        # "exhaustion_fade" (default): the legacy fade-the-momentum behavior.
+        # "trend_follow": customer-mandated 只顺大趋势 mode (no direction flip;
+        # 60-minute alignment + anti-chase gates in analysis.py).
+        # The key enters the normalized config ONLY for an explicit non-default
+        # request: _public_config hashes every cfg key into strategy
+        # fingerprints, so adding it unconditionally (or storing an explicit
+        # default) would fork/orphan every validated historical run.
+        signal_mode_raw = config.get("signal_mode")
+        if signal_mode_raw is not None:
+            signal_mode = str(signal_mode_raw).strip().lower()
+            if signal_mode not in {"exhaustion_fade", "trend_follow", "range_boundary"}:
+                raise ValueError(f"Unsupported signal_mode: {signal_mode}")
+            if signal_mode != "exhaustion_fade":
+                cfg["signal_mode"] = signal_mode
+        # Optional range_boundary tightening knobs — same conditional-inclusion
+        # rule (fingerprints must not change for configs that don't set them).
+        if config.get("range_min_trap_risk") is not None:
+            cfg["range_min_trap_risk"] = float(config["range_min_trap_risk"])
+        if config.get("range_min_trend_mag") is not None:
+            cfg["range_min_trend_mag"] = float(config["range_min_trend_mag"])
+        # L2 microstructure filters for range_boundary (declared 2026-07-09,
+        # exactly two features by design to prevent overfitting): reverse-side
+        # order-book depth skew and large-order flow alignment. Same
+        # conditional-inclusion rule — the keys enter cfg only when explicitly
+        # provided so existing strategy fingerprints stay stable.
+        if config.get("range_require_obi") is not None:
+            cfg["range_require_obi"] = float(config["range_require_obi"])
+        if config.get("range_require_large_flow") is not None:
+            cfg["range_require_large_flow"] = float(config["range_require_large_flow"])
         if cfg["draw_result"] not in {"loss", "draw", "refund"}:
             raise ValueError(f"Unsupported draw_result: {cfg['draw_result']}")
         if cfg["stake_amount"] < cfg["min_stake"]:

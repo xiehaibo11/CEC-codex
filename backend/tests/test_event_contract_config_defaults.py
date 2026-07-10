@@ -28,3 +28,24 @@ def test_delay_defaults_to_three_seconds():
 
 def test_payout_defaults_to_08():
     assert _norm({})["win_payout_ratio"] == 0.8
+
+
+def test_coinglass_lag_floored_at_sampling_interval():
+    # A lag tolerance below the CG sampling interval makes the features dead
+    # ~93% of the time (trader #2 ran 120s tolerance against 30m data and every
+    # live bet had reversal_evidence_score=0). Floor at one full interval.
+    cfg = _norm({
+        "enable_coinglass_features": True,
+        "coinglass_interval": "30m",
+        "max_coinglass_lag_seconds": 120,
+    })
+    assert cfg["max_coinglass_lag_seconds"] == 1800
+
+
+def test_coinglass_lag_above_interval_kept():
+    cfg = _norm({
+        "enable_coinglass_features": True,
+        "coinglass_interval": "30m",
+        "max_coinglass_lag_seconds": 3600,
+    })
+    assert cfg["max_coinglass_lag_seconds"] == 3600

@@ -23,6 +23,11 @@ from services.event_contract.constants import PERIOD_SECONDS
 # 30-bar window of the OHLCV proxy it replaces.
 CVD_WINDOW_BARS = 30
 
+# Trailing window for the large-order flow alignment share consumed by the
+# range_boundary L2 filter. Short by design: the filter reads the aggressive
+# flow at the boundary touch, not the session-wide bias.
+LARGE_FLOW_WINDOW_SECONDS = 60
+
 
 class EventContractFlowMixin:
     def _load_flow_feature_bundle(
@@ -62,10 +67,14 @@ class EventContractFlowMixin:
         taker_ts: List[int] = []
         buy_prefix: List[float] = [0.0]
         sell_prefix: List[float] = [0.0]
+        large_buy_prefix: List[float] = [0.0]
+        large_sell_prefix: List[float] = [0.0]
         for row in taker_rows:
             taker_ts.append(int(row["timestamp"]))
             buy_prefix.append(buy_prefix[-1] + float(row["taker_buy_volume"] or 0))
             sell_prefix.append(sell_prefix[-1] + float(row["taker_sell_volume"] or 0))
+            large_buy_prefix.append(large_buy_prefix[-1] + float(row["large_buy_notional"] or 0))
+            large_sell_prefix.append(large_sell_prefix[-1] + float(row["large_sell_notional"] or 0))
 
         metric_ts: List[int] = []
         metrics: List[Dict[str, Any]] = []
@@ -93,6 +102,8 @@ class EventContractFlowMixin:
             "taker_ts": taker_ts,
             "buy_prefix": buy_prefix,
             "sell_prefix": sell_prefix,
+            "large_buy_prefix": large_buy_prefix,
+            "large_sell_prefix": large_sell_prefix,
             "metric_ts": metric_ts,
             "metrics": metrics,
             "warnings": warnings,
@@ -104,7 +115,8 @@ class EventContractFlowMixin:
         flow is correlated but not identical, so the source is reported."""
         query = text(
             """
-            SELECT timestamp, taker_buy_volume, taker_sell_volume
+            SELECT timestamp, taker_buy_volume, taker_sell_volume,
+                   large_buy_notional, large_sell_notional
             FROM market_trades_aggregated
             WHERE exchange = :exchange AND symbol = :symbol
               AND timestamp BETWEEN :start_ms AND :end_ms
@@ -115,12 +127,20 @@ class EventContractFlowMixin:
         rows = db.execute(query, {**params, "exchange": cfg["exchange"]}).mappings().all()
         if rows:
             return rows, cfg["exchange"]
+        # Prefer venues whose LARGE-ORDER fields are populated: hibt writes
+        # zeros forever while hyperliquid records real values, and picking by
+        # raw row count alone selected the useless venue (2026-07-09: the
+        # large-flow filter was structurally dead because of this ordering).
         fallback = db.execute(
             text(
                 """
-                SELECT exchange, COUNT(*) AS n FROM market_trades_aggregated
+                SELECT exchange,
+                       SUM(CASE WHEN large_buy_notional > 0 OR large_sell_notional > 0
+                                THEN 1 ELSE 0 END) AS large_rows,
+                       COUNT(*) AS n
+                FROM market_trades_aggregated
                 WHERE symbol = :symbol AND timestamp BETWEEN :start_ms AND :end_ms
-                GROUP BY exchange ORDER BY n DESC LIMIT 1
+                GROUP BY exchange ORDER BY large_rows DESC, n DESC LIMIT 1
                 """
             ),
             params,
@@ -143,6 +163,8 @@ class EventContractFlowMixin:
         taker_ts = bundle["taker_ts"]
         buy_prefix = bundle["buy_prefix"]
         sell_prefix = bundle["sell_prefix"]
+        large_buy_prefix = bundle.get("large_buy_prefix")
+        large_sell_prefix = bundle.get("large_sell_prefix")
         metric_ts = bundle["metric_ts"]
         metrics = bundle["metrics"]
 
@@ -170,6 +192,21 @@ class EventContractFlowMixin:
                         feature["taker_buy_sell_ratio"] = buy / sell if sell else 1.0
                         feature["taker_exchange"] = bundle.get("taker_exchange")
                         feature["taker_lag_seconds"] = round((decision_ms - taker_ts[end_idx - 1]) / 1000, 3)
+                    # Large-order flow alignment over a short trailing window
+                    # (range_boundary L2 filter). Same leakage rule: only rows
+                    # stamped at or before the bar close (end_idx) count.
+                    if large_buy_prefix is not None and large_sell_prefix is not None:
+                        large_start_idx = bisect.bisect_left(
+                            taker_ts, decision_ms - LARGE_FLOW_WINDOW_SECONDS * 1000
+                        )
+                        large_buy = large_buy_prefix[end_idx] - large_buy_prefix[large_start_idx]
+                        large_sell = large_sell_prefix[end_idx] - large_sell_prefix[large_start_idx]
+                        large_total = large_buy + large_sell
+                        if large_total > 0:
+                            feature["large_buy_notional"] = large_buy
+                            feature["large_sell_notional"] = large_sell
+                            feature["large_flow_buy_share"] = large_buy / large_total
+                            feature["large_flow_window_seconds"] = LARGE_FLOW_WINDOW_SECONDS
 
             if metric_ts:
                 idx = bisect.bisect_right(metric_ts, decision_ms) - 1

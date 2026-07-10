@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, Database, History } from 'lucide-react'
+import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, Database, History, TrendingUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ContactDialog from '@/components/contact/ContactDialog'
 import ExchangeModal from '@/components/exchange/ExchangeModal'
@@ -136,6 +136,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
     { label: t('sidebar.factorLibrary', 'Factors'), page: 'factor-library', icon: FlaskConical },
     { label: t('sidebar.manualTrading', 'Manual Trading'), page: 'manual-trading', icon: Coins },
     { label: t('sidebar.klines', 'K-Lines'), page: 'klines', icon: KLinesIcon },
+    { label: t('sidebar.eventArrows', 'Event Arrows'), page: 'event-arrows', icon: TrendingUp },
     { label: t('sidebar.coinglass', 'CoinGlass'), page: 'coinglass', icon: Database },
     { label: t('sidebar.systemLogs', 'System Logs'), page: 'system-logs', icon: FileText },
   ] as const

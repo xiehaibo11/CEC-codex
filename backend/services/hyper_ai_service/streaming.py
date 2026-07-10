@@ -81,6 +81,28 @@ def stream_chat_response(
         })
         return
 
+    # Generation rollover: when the conversation hits a context detection
+    # point (window budget / output headroom / compression generations), the
+    # trading text is archived and memory-compressed FIRST, then this request
+    # transparently continues in a fresh seeded conversation.
+    try:
+        from database.models import HyperAiConversation as _RolloverConv
+        from services.hyper_ai_service.rollover import rollover_conversation, should_rollover
+
+        _conv = db.query(_RolloverConv).filter(_RolloverConv.id == conversation_id).first()
+        if _conv is not None:
+            _reason = should_rollover(db, _conv, llm_config.get("model", ""))
+            if _reason:
+                _new_conv = rollover_conversation(db, _conv, llm_config)
+                yield format_sse_event("conversation_rollover", {
+                    "old_conversation_id": conversation_id,
+                    "conversation_id": _new_conv.id,
+                    "reason": _reason,
+                })
+                conversation_id = _new_conv.id
+    except Exception as _rollover_err:  # noqa: BLE001 - rollover must never kill a chat
+        logger.warning("conversation rollover check failed: %s", _rollover_err)
+
     # Save user message
     save_message(db, conversation_id, "user", user_message)
 

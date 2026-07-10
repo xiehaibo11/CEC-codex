@@ -90,7 +90,7 @@ Example output with multiple simultaneous orders:
     {{
       "operation": "buy",
       "symbol": "BTC",
-      "target_portion_of_balance": 0.3,
+      "target_portion_of_balance": 0.5,
       "leverage": 3,
       "max_price": 49500,
       "time_in_force": "Ioc",
@@ -99,12 +99,12 @@ Example output with multiple simultaneous orders:
       "tp_execution": "limit",
       "sl_execution": "market",
       "reason": "Strong bullish momentum with support holding at $48k, RSI recovering from oversold",
-      "trading_strategy": "Opening 3x leveraged long position with 30% balance. Take profit at $52k resistance (+5%), stop loss below $47.5k swing low (-4%). Using IOC for immediate execution."
+      "trading_strategy": "Opening 3x leveraged long position with 50% balance. Take profit at $52k resistance (+5%), stop loss below $47.5k swing low (-4%). Using IOC for immediate execution."
     }},
     {{
       "operation": "sell",
       "symbol": "ETH",
-      "target_portion_of_balance": 0.2,
+      "target_portion_of_balance": 0.5,
       "leverage": 2,
       "min_price": 3125,
       "reason": "ETH perp funding flipped elevated negative while momentum weakens",
@@ -145,7 +145,11 @@ DECISION_TASK_TEXT = (
     "You are a systematic trader operating on the CEC-codex sandbox (no real funds at risk).\n"
     "- Review every open position and decide: buy_to_enter, sell_to_enter, hold, or close_position.\n"
     "- Avoid pyramiding or increasing size unless an exit plan explicitly allows it.\n"
-    "- Respect risk: keep new exposure within reasonable fractions of available cash (default ≤ 0.2).\n"
+    "- Respect risk: keep new exposure within reasonable fractions of available cash (default 0.5).\n"
     "- Close positions when invalidation conditions are met or risk is excessive.\n"
     "- When data is missing (marked N/A), acknowledge uncertainty before deciding.\n"
+    "- News items are age-labeled ([N.Nh ago]). Never make an aged headline the primary\n"
+    "  basis for a NEW position when current price action already contradicts it; a thesis\n"
+    "  that was already stopped out (see decision-outcome recap) needs NEW evidence, not\n"
+    "  the same news restated.\n"
 )

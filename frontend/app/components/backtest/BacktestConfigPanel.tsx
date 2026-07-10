@@ -100,20 +100,28 @@ export function BacktestConfigPanel({
             <Select value={String(form.expiry_minutes)} onValueChange={value => updateForm('expiry_minutes', Number(value))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[1, 3, 5, 10, 15].map(value => (
+                {[5, 10].map(value => (
                   <SelectItem key={value} value={String(value)}>{value}m</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          {professionalMode ? (
-            <div className="space-y-1">
-              <Label className="text-xs">{t('backtestTool.executionMode', 'Execution Mode')}</Label>
-              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
-                {t('backtestTool.professionalNoSharedVote', 'No shared AI vote gate')}
-              </div>
-            </div>
-          ) : (
+          <div className="space-y-1">
+            <Label className="text-xs">{t('backtestTool.executionMode', 'Execution Mode')}</Label>
+            <Select value={form.execution_mode} onValueChange={value => updateForm('execution_mode', value as FormState['execution_mode'])}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="paper">{t('backtestTool.paperMode', 'Paper simulation')}</SelectItem>
+                <SelectItem value="live">{t('backtestTool.liveMode', 'Live (capability-gated)')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              {form.execution_mode === 'live'
+                ? t('backtestTool.liveUnavailableNotice', 'Live event-contract adapter is not registered; decisions fail closed and no perpetual order is sent.')
+                : t('backtestTool.paperSimulationNotice', 'Paper mode uses local price simulation and never sends an exchange order.')}
+            </p>
+          </div>
+          {professionalMode ? null : (
             <div className="space-y-1">
               <Label className="text-xs">{t('backtestTool.consensusMode', 'Consensus Mode')}</Label>
               <Select value={form.consensus_mode} onValueChange={value => updateForm('consensus_mode', value as FormState['consensus_mode'])}>
@@ -125,6 +133,12 @@ export function BacktestConfigPanel({
               </Select>
             </div>
           )}
+          <div className="space-y-1">
+            <Label className="text-xs">{t('backtestTool.productionRiskProfile', 'Production Risk Profile')}</Label>
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs leading-5">
+              {t('backtestTool.productionRiskProfileValue', 'Trend-follow · 10x · 100 USDT · max 10/day · stop at 2x equity')}
+            </div>
+          </div>
           <div className="space-y-1">
             <Label className="text-xs">{t('backtestTool.decisionPolicy', 'Decision Policy')}</Label>
             <Select value={form.decision_policy} onValueChange={value => updateForm('decision_policy', value as FormState['decision_policy'])}>

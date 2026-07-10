@@ -47,10 +47,10 @@ def test_signal_reviewer_passes_non_opening_trade(session):
     assert report.verdict == AgentVerdict.PASS
 
 
-def test_signal_reviewer_warns_on_scheduled_mainnet_open(session):
+def test_signal_reviewer_blocks_scheduled_open_without_signal(session):
     report = SignalReviewer().review(session, _ctx(trigger_context={"trigger_type": "scheduled"}))
-    assert report.verdict == AgentVerdict.WARN
-    assert "非信号触发" in report.warnings[0]
+    assert report.verdict == AgentVerdict.BLOCK
+    assert "非信号触发" in report.blocking_reasons[0]
 
 
 def test_backtest_reviewer_warns_when_signal_has_no_backtest_summary(session):

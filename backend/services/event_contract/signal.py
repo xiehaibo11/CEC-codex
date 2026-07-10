@@ -30,11 +30,21 @@ class EventContractSignalMixin:
             risks,
             blocked_reasons,
         )
-        expected_win_rate = (
-            probabilities["long"] if final_direction == "long"
-            else probabilities["short"] if final_direction == "short"
-            else max(probabilities["long"], probabilities["short"])
+        exhaustion_reversal = bool(ai_consensus.get("exhaustion_reversal")) or bool(
+            ai_consensus.get("range_boundary_reversal")
         )
+        if exhaustion_reversal:
+            # The vote-based probabilities describe the momentum side the trade
+            # is deliberately fading; reporting them as this bet's win rate is
+            # dishonest (live it produced expected_win_rate=1 on A-grade bets).
+            # No calibrated reversal model exists yet, so report no estimate.
+            expected_win_rate = None
+        else:
+            expected_win_rate = (
+                probabilities["long"] if final_direction == "long"
+                else probabilities["short"] if final_direction == "short"
+                else max(probabilities["long"], probabilities["short"])
+            )
         entry_ts = self._decision_timestamp(latest, cfg)
         entry_time = self._to_iso(entry_ts)
         expiry_time = self._to_iso(entry_ts + cfg["expiry_minutes"] * 60)
@@ -51,7 +61,10 @@ class EventContractSignalMixin:
             "expiry_minutes": cfg["expiry_minutes"],
             "confidence": round(confidence, 2),
             "signal_strength": round(signal_strength, 2),
-            "expected_win_rate": round(expected_win_rate, 2),
+            "expected_win_rate": None if expected_win_rate is None else round(expected_win_rate, 2),
+            "expected_win_rate_basis": (
+                "reversal_flip_unmodeled" if exhaustion_reversal else "vote_consensus"
+            ),
             "decision_policy": ai_consensus.get("decision_policy"),
             "edge_score": ai_consensus.get("edge_score"),
             "edge_score_raw": ai_consensus.get("edge_score_raw"),
@@ -131,6 +144,14 @@ class EventContractSignalMixin:
         total = ai_consensus.get("reviewer_count", 0)
         required = ai_consensus.get("required_votes", 0)
         direction = localize_direction(final_direction)
+        if ai_consensus.get("exhaustion_reversal"):
+            momentum = localize_direction("long" if final_direction == "short" else "short")
+            return (
+                f"{votes}/{total} 票动量{momentum}，衰竭反手{direction}"
+                f"（要求 {required}/{total}）；"
+                f"信号强度 {ai_consensus['signal_strength']:.2f}；"
+                f"共识率 {ai_consensus['consensus_rate']:.2f}%。"
+            )
         return (
             f"{votes}/{total} 票支持{direction}（要求 {required}/{total}）；"
             f"信号强度 {ai_consensus['signal_strength']:.2f}；"

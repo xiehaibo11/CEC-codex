@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from database.connection import SessionLocal
 from sqlalchemy import text
-from datetime import datetime, timezone
 
 def upgrade():
     """Apply migration"""
@@ -22,7 +21,7 @@ def upgrade():
         # Add sampling_depth column
         db.execute(text("""
             ALTER TABLE global_sampling_configs
-            ADD COLUMN sampling_depth INTEGER NOT NULL DEFAULT 10
+            ADD COLUMN IF NOT EXISTS sampling_depth INTEGER NOT NULL DEFAULT 10
         """))
 
         db.commit()
@@ -60,7 +59,7 @@ def downgrade():
 
         db.execute(text("""
             ALTER TABLE global_sampling_configs
-            DROP COLUMN sampling_depth
+            DROP COLUMN IF EXISTS sampling_depth
         """))
 
         db.commit()

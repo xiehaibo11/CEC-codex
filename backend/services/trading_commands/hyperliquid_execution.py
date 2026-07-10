@@ -119,6 +119,27 @@ def _execute_hyperliquid_decision(
             save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
             return
 
+        # Deterministic pre-trade risk guards (loss streak / exposure cap) -
+        # same hygiene as the Binance path; see risk_guards.py for the
+        # 2026-07-06 testnet evidence that motivated them.
+        from .risk_guards import check_pre_trade_guards
+
+        guard = check_pre_trade_guards(
+            db,
+            account_id=account.id,
+            symbol=symbol,
+            operation=operation,
+            positions=positions,
+            total_equity=float(portfolio.get("total_assets") or 0),
+        )
+        if not guard["allowed"]:
+            logger.warning(
+                "Risk guard blocked %s %s for %s: %s",
+                operation, symbol, account.name, guard["reason"],
+            )
+            decision["_risk_guard_blocked"] = guard["reason"]
+            save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
+            return
         order_result = _execute_entry_order(
             db=db,
             account_name=account.name,

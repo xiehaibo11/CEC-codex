@@ -104,7 +104,7 @@ class EventContractBacktestTask(Base):
 
 
 class EventContractPaperTrader(Base):
-    """Forward-testing paper trader: continuously bets on live 1m bars for one strategy config."""
+    """Forward-testing event trader with explicit Paper/Live capability state."""
     __tablename__ = "event_contract_paper_traders"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -118,6 +118,12 @@ class EventContractPaperTrader(Base):
     initial_balance = Column(Float, nullable=False, default=10000)
     current_balance = Column(Float, nullable=False, default=10000)
     strategy_fingerprint = Column(String(32), nullable=True, index=True)
+    execution_mode = Column(String(10), nullable=False, default="paper")
+    leverage = Column(Float, nullable=False, default=10)
+    trade_margin = Column(Float, nullable=False, default=100.0)
+    max_daily_trades = Column(Integer, nullable=False, default=10)
+    profit_target_multiplier = Column(Float, nullable=False, default=2.0)
+    last_decision_time = Column(TIMESTAMP, nullable=True, index=True)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 

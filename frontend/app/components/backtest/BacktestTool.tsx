@@ -40,7 +40,7 @@ import { BacktestConfigPanel } from './BacktestConfigPanel'
 import { BacktestResultsPanel } from './BacktestResultsPanel'
 import { PredictionPanel } from './PredictionPanel'
 import { formatTime, fromLocalInputValue, toLocalInputValue } from './shared'
-import { PERIOD_OPTIONS, PERIOD_SECONDS, PLATFORM_FORM_PRESETS, type FormState } from './types'
+import { PERIOD_OPTIONS, PLATFORM_FORM_PRESETS, type FormState } from './types'
 
 const BACKTEST_CONFIG_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:config:v1'
 const BACKTEST_TASK_STORAGE_KEY = 'hyper-alpha-arena:backtest-tool:active-task:v1'
@@ -53,6 +53,12 @@ function buildDefaultForm(start: Date, end: Date): FormState {
     exchange: 'binance',
     environment: 'mainnet',
     period: '1m',
+    execution_mode: 'paper',
+    leverage: 10,
+    trade_margin: 100,
+    max_daily_trades: 10,
+    profit_target_multiplier: 2,
+    signal_mode: 'trend_follow',
     consensus_mode: 'rule_only',
     decision_policy: 'professional_v1',
     max_ai_evaluations: 1,
@@ -228,9 +234,7 @@ export default function BacktestTool() {
     return Array.from(new Set(items.map(item => item.symbol))).sort()
   }, [symbols, form.exchange, form.environment])
 
-  const periodOptions = selectedSymbolMeta?.periods?.length
-    ? selectedSymbolMeta.periods.filter(period => (PERIOD_SECONDS[period] || Number.MAX_SAFE_INTEGER) <= form.expiry_minutes * 60)
-    : PERIOD_OPTIONS.filter(period => PERIOD_SECONDS[period] <= form.expiry_minutes * 60)
+  const periodOptions = PERIOD_OPTIONS
 
   const saveConfig = () => {
     window.localStorage.setItem(BACKTEST_CONFIG_STORAGE_KEY, JSON.stringify(form))
@@ -270,6 +274,12 @@ export default function BacktestTool() {
     environment: form.environment,
     period: form.period,
     expiry_minutes: Number(form.expiry_minutes),
+    execution_mode: form.execution_mode,
+    leverage: 10,
+    trade_margin: 100,
+    max_daily_trades: 10,
+    profit_target_multiplier: 2,
+    signal_mode: 'trend_follow',
     consensus_mode: form.decision_policy === 'professional_v1' ? 'rule_only' : form.consensus_mode,
     decision_policy: form.decision_policy,
     max_ai_evaluations: form.decision_policy === 'professional_v1' ? 1 : Number(form.max_ai_evaluations),
@@ -581,7 +591,7 @@ export default function BacktestTool() {
               </h1>
               <Badge variant="secondary" className="gap-1">
                 <Bot className="h-3 w-3" />
-                {t('backtestTool.eventContract', '5m Event Contract')}
+                {t('backtestTool.eventContract', '5m/10m Event Contract')}
               </Badge>
               <Badge variant="outline">
                 {form.decision_policy === 'professional_v1'
@@ -596,7 +606,7 @@ export default function BacktestTool() {
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t('backtestTool.subtitle', '5-minute event contract prediction with signal edge, risk veto, execution realism, and historical settlement backtest.')}
+              {t('backtestTool.subtitle', '5m/10m event-contract analysis with completed multi-timeframe AI review, risk vetoes, and historical settlement backtest.')}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -219,6 +219,7 @@ from api.news_routes import router as news_router
 from api.market_intelligence_routes import router as market_intelligence_router
 from api.coinglass_routes import router as coinglass_router
 from api.event_contract_routes import router as event_contract_router
+from api.arb_routes import router as arb_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -257,6 +258,7 @@ app.include_router(news_router)
 app.include_router(market_intelligence_router)
 app.include_router(coinglass_router)
 app.include_router(event_contract_router)
+app.include_router(arb_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 def get_db():

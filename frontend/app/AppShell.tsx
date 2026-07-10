@@ -30,6 +30,7 @@ const ProgramTrader = lazy(() => import('@/components/program/ProgramTrader'))
 const SettingsPage = lazy(() => import('@/components/settings/SettingsPage'))
 const HyperAiPage = lazy(() => import('@/components/hyper-ai/HyperAiPage'))
 const ArenaAssets = lazy(() => import('@/components/arena/ArenaAssets'))
+const EventArrowChartPage = lazy(() => import('@/components/event-arrow/EventArrowChartPage'))
 
 function ViewLoadingFallback() {
   return (
@@ -226,6 +227,7 @@ function MainContent({
       {currentPage === 'model-chat' && <MobileModelChat />}
       {currentPage === 'settings' && <SettingsPage />}
       {currentPage === 'arena-assets' && <ArenaAssets />}
+      {currentPage === 'event-arrows' && <EventArrowChartPage />}
       </Suspense>
     </main>
   )

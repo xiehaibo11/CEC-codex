@@ -16,6 +16,12 @@ export interface EventContractConfig {
   environment?: string
   period: string
   expiry_minutes: number
+  signal_mode?: 'trend_follow'
+  execution_mode?: 'paper' | 'live'
+  leverage?: number
+  trade_margin?: number
+  max_daily_trades?: number
+  profit_target_multiplier?: number
   consensus_mode?: 'ai_confirmed' | 'rule_only'
   decision_policy?: 'professional_v1' | 'legacy_vote'
   ai_trader_id?: number | null
@@ -132,6 +138,10 @@ export interface EventConsensus {
   event_signal_type?: string
   signal_strength: number
   reason_summary: string
+  professional_ai_status?: 'received' | 'unavailable'
+  professional_ai_direction?: 'long' | 'short' | 'hold' | null
+  professional_ai_confidence?: number
+  professional_ai_model?: string | null
 }
 
 export interface EventSignal {
@@ -145,7 +155,8 @@ export interface EventSignal {
   expiry_minutes: number
   confidence: number
   signal_strength: number
-  expected_win_rate: number
+  expected_win_rate: number | null
+  expected_win_rate_basis?: 'vote_consensus' | 'reversal_flip_unmodeled'
   decision_policy?: 'professional_v1' | 'legacy_vote'
   edge_score?: number
   risk_score?: number
@@ -206,6 +217,7 @@ export interface EventDataQuality {
   no_future_leakage?: boolean
   max_lag_seconds?: number | null
   avg_lag_seconds?: number | null
+  production_multi_timeframe?: Record<string, unknown>
 }
 
 export interface EventPrediction {
@@ -213,6 +225,12 @@ export interface EventPrediction {
   engine_version?: string
   exchange: string
   period: string
+  execution_mode?: 'paper' | 'live'
+  leverage?: number
+  trade_margin?: number
+  max_daily_trades?: number
+  profit_target_multiplier?: number
+  professional_ai_review?: Record<string, unknown>
   consensus_mode?: 'ai_confirmed' | 'rule_only'
   decision_policy?: 'professional_v1' | 'legacy_vote'
   ai_participated?: boolean
@@ -825,6 +843,17 @@ export interface EventPaperTrader extends EventPaperTraderStats {
   initial_balance: number
   created_at: string | null
   updated_at: string | null
+  execution_mode?: 'paper' | 'live'
+  execution_capabilities?: { open: boolean; settle: boolean; close: boolean }
+  leverage?: number
+  trade_margin?: number
+  max_daily_trades?: number
+  daily_trade_limit?: number
+  profit_target_multiplier?: number
+  profit_target_reached?: boolean
+  stop_reason?: Record<string, unknown> | null
+  last_decision_time?: string | null
+  policy_error?: string | null
 }
 
 export interface EventPaperTraderBet {
@@ -874,6 +903,33 @@ export async function getEventPaperTraderBets(
 
 export async function getEventPaperTraderStats(traderId: number): Promise<EventPaperTraderStats> {
   const response = await apiRequest(`/event-contract/paper-traders/${traderId}/stats`)
+  return response.json()
+}
+
+export interface EventPaperTraderDailyStats {
+  trader_id: number
+  date: string
+  tz_offset_minutes?: number
+  opened_today: number
+  settled_today: number
+  wins: number
+  win_amount: number
+  losses: number
+  loss_amount: number
+  draws: number
+  win_rate_pct: number
+  loss_rate_pct: number
+  net_pnl: number
+}
+
+export async function getEventPaperTraderDailyStats(
+  traderId: number,
+  tzOffsetMinutes: number,
+): Promise<EventPaperTraderDailyStats> {
+  const query = new URLSearchParams({ tz_offset_minutes: String(tzOffsetMinutes) })
+  const response = await apiRequest(
+    `/event-contract/paper-traders/${traderId}/daily-stats?${query.toString()}`,
+  )
   return response.json()
 }
 

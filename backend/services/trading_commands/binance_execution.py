@@ -137,6 +137,49 @@ def _execute_binance_decision(
             save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
             return
 
+    # 5a. Mainnet signal validation gate (问题.md §1): testnet is the
+    # validation sandbox; a signal may drive MAINNET orders only after its
+    # settled forward record is big enough and net positive.
+    if (
+        operation in ("buy", "sell")
+        and wallet is not None
+        and wallet.environment == "mainnet"
+        and (decision_kwargs or {}).get("signal_trigger_id")
+    ):
+        from services.signal_trigger_validation import signal_validation_gate
+
+        gate = signal_validation_gate(db, trigger_context)
+        if not gate["allowed"]:
+            logger.warning(
+                f"[BINANCE] Signal validation gate blocked {operation} {symbol} "
+                f"for {account.name}: {gate['reason']}"
+            )
+            decision["_signal_validation_blocked"] = gate["reason"]
+            save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
+            return
+
+    # 5b. Deterministic pre-trade risk guards (loss streak / exposure cap).
+    # 2026-07-06 testnet: the LLM repeated one bearish thesis 5x (all losses)
+    # and stacked same-direction exposure until margin monitors force-closed.
+    if operation in ("buy", "sell"):
+        from .risk_guards import check_pre_trade_guards
+
+        guard = check_pre_trade_guards(
+            db,
+            account_id=account.id,
+            symbol=symbol,
+            operation=operation,
+            positions=positions,
+            total_equity=float(portfolio.get("total_assets") or 0),
+        )
+        if not guard["allowed"]:
+            logger.warning(
+                f"[BINANCE] Risk guard blocked {operation} {symbol} for {account.name}: {guard['reason']}"
+            )
+            decision["_risk_guard_blocked"] = guard["reason"]
+            save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
+            return
+
     order_result = None
 
     try:

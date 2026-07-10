@@ -17,6 +17,7 @@ export const PAGE_TITLES: Record<string, string> = {
   'model-chat': 'Model Chat',
   settings: 'Settings',
   'arena-assets': 'Arena Assets',
+  'event-arrows': 'Event Arrows',
 }
 
 const normalizePageName = (pageName: string) => (

@@ -1,14 +1,123 @@
 """Runtime prompt sections for AI trading context."""
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from database.models import Account
+from database.models.trading import AIDecisionLog
 from services.ai_decision_service.prompt_formatting import _get_metric_unit
 
 logger = logging.getLogger(__name__)
+
+
+def build_decision_outcome_context(
+    db: Session,
+    account_id: int,
+    *,
+    lookback_hours: int = 24,
+    now: Optional[datetime] = None,
+) -> str:
+    """Per (symbol, direction) settled-outcome recap with explicit streak
+    warnings, so the LLM sees "this thesis just lost N times" instead of
+    treating every cycle as a fresh question (2026-07-06: five same-narrative
+    sells, all losses, nothing in the prompt connected them)."""
+    from services.trading_commands.risk_guards import LOSS_STREAK_LIMIT
+
+    resolved_now = now or datetime.utcnow()
+    rows = (
+        db.query(AIDecisionLog.symbol, AIDecisionLog.operation, AIDecisionLog.realized_pnl)
+        .filter(
+            AIDecisionLog.account_id == account_id,
+            AIDecisionLog.operation.in_(("buy", "sell")),
+            AIDecisionLog.executed == "true",
+            AIDecisionLog.realized_pnl.isnot(None),
+            AIDecisionLog.realized_pnl != 0,
+            AIDecisionLog.decision_time >= resolved_now - timedelta(hours=lookback_hours),
+        )
+        .order_by(AIDecisionLog.decision_time.asc())
+        .all()
+    )
+    if not rows:
+        return ""
+
+    cells: Dict[tuple, List[float]] = {}
+    for symbol, operation, pnl in rows:
+        cells.setdefault((symbol, operation), []).append(float(pnl))
+
+    lines = [f"Recent settled decision outcomes (last {lookback_hours}h, this account):"]
+    for (symbol, operation), pnls in sorted(cells.items()):
+        wins = sum(1 for p in pnls if p > 0)
+        losses = sum(1 for p in pnls if p < 0)
+        streak = 0
+        for p in reversed(pnls):
+            if p < 0:
+                streak += 1
+            else:
+                break
+        line = (
+            f"- {symbol} {operation}: {len(pnls)} settled, {wins}W/{losses}L, "
+            f"net pnl {sum(pnls):+.2f}"
+        )
+        if streak >= LOSS_STREAK_LIMIT:
+            line += (
+                f"。⚠️ 该方向连续亏损 {streak} 笔——风控闸已冻结该方向，"
+                f"再提交 {operation} 将被直接拒绝。除非有全新证据，否则选择 hold 或反向评估。"
+            )
+        elif streak == 1:
+            line += (
+                f"。注意：该方向连续亏损 {streak} 笔，再亏 {LOSS_STREAK_LIMIT - streak} 笔将被风控冻结。"
+                "重复同一论点前先解释上一笔为什么错了。"
+            )
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def build_critical_constraints_tail(
+    db: Session,
+    account_id: int,
+    symbols: Optional[List[str]],
+    *,
+    margin_usage_percent: Optional[float] = None,
+    now: Optional[datetime] = None,
+) -> str:
+    """System hard facts, rendered for the very END of the decision prompt.
+
+    Verified lost-in-the-middle research: attention over long inputs is
+    U-shaped, so constraints buried mid-prompt get skipped. The tail is the
+    other high-attention slot - reserve it for the facts the model must not
+    override: frozen directions, margin state, and the news-age rule."""
+    from services.trading_commands.risk_guards import (
+        LOSS_STREAK_LIMIT,
+        LOSS_STREAK_LOOKBACK_HOURS,
+        _recent_same_direction_losses,
+    )
+
+    resolved_now = now or datetime.utcnow()
+    lines = ["=== 系统硬约束（以下为系统事实，模型陈述不能覆盖）==="]
+    for symbol in (symbols or [])[:5]:
+        for operation in ("buy", "sell"):
+            try:
+                streak = _recent_same_direction_losses(
+                    db, account_id, symbol, operation, resolved_now,
+                    LOSS_STREAK_LOOKBACK_HOURS, LOSS_STREAK_LIMIT,
+                )
+            except Exception as exc:  # noqa: BLE001 - tail is advisory, never fatal
+                logger.warning("constraints tail streak lookup failed: %s", exc)
+                continue
+            if streak >= LOSS_STREAK_LIMIT:
+                lines.append(
+                    f"⛔ {symbol} {operation} 方向已连亏 {streak} 笔，被风控闸冻结——"
+                    f"提交该方向将被直接拒绝"
+                )
+    if margin_usage_percent is not None:
+        lines.append(
+            f"- 当前保证金占用 {margin_usage_percent:.1f}%；同方向敞口达到权益 2 倍后加仓会被拒绝"
+        )
+    lines.append("- 新闻均带 [N.Nh ago] 年龄标签；旧闻与当前价格行为矛盾时，以价格为准")
+    return "\n".join(lines)
 
 
 def build_recent_trades_summary(
@@ -49,6 +158,10 @@ def build_recent_trades_summary(
 
             if recent_trades or open_orders:
                 recent_trades_summary = _format_trade_and_order_sections(recent_trades, open_orders)
+
+            outcome_context = build_decision_outcome_context(db_session, account.id)
+            if outcome_context:
+                recent_trades_summary = f"{recent_trades_summary}\n\n{outcome_context}"
     except Exception as err:
         logger.warning("Failed to get recent trades summary: %s", err, exc_info=True)
         recent_trades_summary = f"Error fetching trade history: {str(err)[:100]}"

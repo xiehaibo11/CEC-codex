@@ -43,6 +43,7 @@ export async function pollHyperAiTaskResponse({
 }: PollHyperAiTaskResponseArgs) {
   let content = ''
   let reasoning = ''
+  let activeConvId = convId
   let toolCalls: ToolCallEntry[] = []
   let doneToolCallsLog: ToolCallLogEntry[] | null = null
   let doneReasoningSnapshot: string | null = null
@@ -104,6 +105,17 @@ export async function pollHyperAiTaskResponse({
           ))
         } else if (eventType === 'skill_loaded' && data.skill_name) {
           setActiveSkill(data.skill_name as string)
+        } else if (eventType === 'conversation_rollover' && data.conversation_id) {
+          // Context detection point hit: backend archived the old round and
+          // continued this request in a fresh seeded conversation.
+          activeConvId = data.conversation_id as number
+          setCurrentConvId(activeConvId)
+          fetchConversations()
+          setMessages(prev => prev.map((m, idx) =>
+            idx === prev.length - 1 && m.isStreaming
+              ? { ...m, statusText: t('hyperAi.rollover', 'Context limit reached — continuing in a new round...') }
+              : m
+          ))
         } else if (eventType === 'subagent_progress') {
           const agent = data.subagent || 'Agent'
           let statusMsg = ''
@@ -196,8 +208,8 @@ export async function pollHyperAiTaskResponse({
         }
       },
       onTaskLost: () => {
-        if (convId) {
-          fetchMessages(convId)
+        if (activeConvId) {
+          fetchMessages(activeConvId)
         }
       },
     })

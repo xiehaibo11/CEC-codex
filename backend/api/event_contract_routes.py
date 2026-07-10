@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from database.connection import SessionLocal
 from database.models import CoinGlassUserKey
 from services.event_contract_service import event_contract_service
 from services.event_contract import paper_trader_api
+from services.event_contract.production_policy import normalize_production_config
 from services.event_contract.rolling_validation import cumulative_validation_stats
 from services.event_contract.tasks import (
     create_event_backtest_task,
@@ -40,7 +41,12 @@ class PredictRequest(BaseModel):
     exchange: str = "binance"
     environment: str = "mainnet"
     period: str = "1m"
-    expiry_minutes: int = 5
+    expiry_minutes: Literal[5, 10] = 5
+    execution_mode: Literal["paper", "live"] = "paper"
+    leverage: int = Field(default=10, ge=1, le=10)
+    trade_margin: float = Field(default=100, gt=0)
+    professional_ai_enabled: bool = True
+    professional_ai_min_confidence: float = Field(default=75, ge=0, le=100)
     consensus_mode: str = Field(default="rule_only", pattern="^(ai_confirmed|rule_only)$")
     decision_policy: str = Field(default="professional_v1", pattern="^(professional_v1|legacy_vote)$")
     ai_trader_id: Optional[int] = None
@@ -58,6 +64,10 @@ class PredictRequest(BaseModel):
     enable_multi_timeframe_filter: bool = True
     enable_volume_filter: bool = True
     enable_cvd_filter: bool = False
+    # Signal mode: legacy exhaustion fade (default when omitted) vs the
+    # customer-mandated trend follow (只顺大趋势). None keeps signal_mode out of
+    # the normalized config so existing strategy fingerprints stay stable.
+    signal_mode: Literal["trend_follow"] = "trend_follow"
     # Factor-combination entry gate (5m momentum + VWAP deviation trailing quantile)
     enable_factor_gate: bool = False
     factor_gate_quantile: float = Field(default=0.6, ge=0.5, le=0.95)
@@ -104,7 +114,7 @@ def get_symbols(exchange: Optional[str] = Query(None), db: Session = Depends(get
             "symbols": event_contract_service.get_available_symbols(db, exchange=exchange),
             "default_exchange": "binance",
             "default_symbol": "BTC",
-            "supported_periods": ["1m", "3m", "5m", "15m", "30m", "1h"],
+            "supported_periods": ["1m"],
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -113,7 +123,8 @@ def get_symbols(exchange: Optional[str] = Query(None), db: Session = Depends(get
 @router.post("/predict")
 def predict_event_contract(request: Request, payload: PredictRequest, db: Session = Depends(get_db)):
     try:
-        config = _attach_user_coinglass_key(payload.model_dump(), request, db)
+        config = normalize_production_config(payload.model_dump())
+        config = _attach_user_coinglass_key(config, request, db)
         return event_contract_service.predict(db, config)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -124,7 +135,8 @@ def predict_event_contract(request: Request, payload: PredictRequest, db: Sessio
 @router.post("/backtest")
 def backtest_event_contract(request: Request, payload_model: BacktestRequest, db: Session = Depends(get_db)):
     try:
-        payload: Dict[str, Any] = _attach_user_coinglass_key(payload_model.model_dump(), request, db)
+        payload: Dict[str, Any] = normalize_production_config(payload_model.model_dump())
+        payload = _attach_user_coinglass_key(payload, request, db)
         return event_contract_service.run_backtest(db, payload)
     except ValueError as exc:
         db.rollback()
@@ -138,7 +150,8 @@ def backtest_event_contract(request: Request, payload_model: BacktestRequest, db
 def preview_backtest_data_quality(request: Request, payload_model: BacktestRequest, db: Session = Depends(get_db)):
     """Audit kline/L2/CoinGlass coverage for the requested window without running a backtest."""
     try:
-        payload: Dict[str, Any] = _attach_user_coinglass_key(payload_model.model_dump(), request, db)
+        payload: Dict[str, Any] = normalize_production_config(payload_model.model_dump())
+        payload = _attach_user_coinglass_key(payload, request, db)
         return event_contract_service.preview_data_quality(db, payload)
     except ValueError as exc:
         db.rollback()
@@ -151,7 +164,7 @@ def preview_backtest_data_quality(request: Request, payload_model: BacktestReque
 @router.post("/backtest/tasks")
 def create_backtest_task(request: Request, payload_model: BacktestRequest, db: Session = Depends(get_db)):
     try:
-        payload: Dict[str, Any] = payload_model.model_dump()
+        payload: Dict[str, Any] = normalize_production_config(payload_model.model_dump())
         task = create_event_backtest_task(
             db,
             config=payload,
@@ -213,10 +226,14 @@ class PaperTraderCreateRequest(BaseModel):
     config: Dict[str, Any]
     stake_amount: float = Field(default=100, gt=0)
     initial_balance: float = Field(default=10000, gt=0)
+    # Deploy gate: by default the config's strategy fingerprint must have a
+    # completed backtest run that is significant vs break-even.
+    allow_unvalidated: bool = False
 
 
 class PaperTraderUpdateRequest(BaseModel):
-    enabled: bool
+    enabled: Optional[bool] = None
+    stake_amount: Optional[float] = Field(default=None, gt=0)
 
 
 @router.post("/backtest/{run_id}/holdout")
@@ -325,6 +342,7 @@ def create_paper_trader(payload: PaperTraderCreateRequest, db: Session = Depends
             config=payload.config,
             stake_amount=payload.stake_amount,
             initial_balance=payload.initial_balance,
+            allow_unvalidated=payload.allow_unvalidated,
         )
     except ValueError as exc:
         db.rollback()
@@ -345,7 +363,16 @@ def list_paper_traders(db: Session = Depends(get_db)):
 @router.put("/paper-traders/{trader_id}")
 def update_paper_trader(trader_id: int, payload: PaperTraderUpdateRequest, db: Session = Depends(get_db)):
     try:
-        return paper_trader_api.set_paper_trader_enabled(db, trader_id, payload.enabled)
+        result = None
+        if payload.stake_amount is not None:
+            result = paper_trader_api.update_paper_trader_stake(db, trader_id, payload.stake_amount)
+        if payload.enabled is not None:
+            result = paper_trader_api.set_paper_trader_enabled(db, trader_id, payload.enabled)
+        if result is None:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        return result
+    except HTTPException:
+        raise
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc))
@@ -373,6 +400,26 @@ def get_paper_trader_bets(
 def get_paper_trader_stats(trader_id: int, db: Session = Depends(get_db)):
     try:
         return paper_trader_api.get_paper_trader_stats(db, trader_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/paper-traders/{trader_id}/daily-stats")
+def get_paper_trader_daily_stats(
+    trader_id: int,
+    tz_offset_minutes: int = Query(default=480, description="Local-day offset from UTC in minutes (default UTC+8)"),
+    db: Session = Depends(get_db),
+):
+    """Section-4 daily panel: today-only bet counts, win/loss amounts and live
+    win/loss rates, where "today" resets at local midnight in the requested
+    timezone. Out-of-range offsets are clamped to [-720, 840] (UTC-12..UTC+14)."""
+    tz_offset_minutes = max(-720, min(840, tz_offset_minutes))
+    try:
+        return paper_trader_api.get_paper_trader_daily_stats(
+            db, trader_id, tz_offset_minutes=tz_offset_minutes
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:

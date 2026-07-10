@@ -20,13 +20,28 @@ def wilson_interval(wins: int, n: int, z: float = 1.96) -> Tuple[float, float]:
 
 
 def binomial_p_value(wins: int, n: int, p0: float) -> float:
-    """One-sided exact binomial tail P(X >= wins | n, p0)."""
+    """One-sided binomial tail P(X >= wins | n, p0), computed in log space.
+
+    math.comb(n, k) at n in the thousands produces integers too large to
+    multiply with floats (OverflowError crashed every long-window backtest
+    summary on 2026-07-09); lgamma keeps each term finite at any n while
+    matching the exact values to float precision."""
     if n <= 0:
         return 1.0
     p0 = min(max(p0, 0.0), 1.0)
+    if p0 <= 0.0:
+        return 1.0 if wins <= 0 else 0.0
+    if p0 >= 1.0:
+        return 1.0
+    log_p = math.log(p0)
+    log_q = math.log(1.0 - p0)
     tail = 0.0
-    for k in range(wins, n + 1):
-        tail += math.comb(n, k) * (p0 ** k) * ((1 - p0) ** (n - k))
+    for k in range(max(wins, 0), n + 1):
+        log_term = (
+            math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
+            + k * log_p + (n - k) * log_q
+        )
+        tail += math.exp(log_term)
     return min(1.0, max(0.0, tail))
 
 

@@ -38,6 +38,17 @@ def test_paper_bet_status_default_and_values():
     assert status_col.default.arg in allowed
 
 
+def test_paper_trader_has_production_execution_fields():
+    columns = EventContractPaperTrader.__table__.columns
+
+    assert columns["execution_mode"].default.arg == "paper"
+    assert columns["leverage"].default.arg == 10
+    assert columns["trade_margin"].default.arg == 100.0
+    assert columns["max_daily_trades"].default.arg == 10
+    assert columns["profit_target_multiplier"].default.arg == 2.0
+    assert columns["last_decision_time"].nullable is True
+
+
 def test_paper_bet_trader_fk_cascades_on_delete():
     trader_id_col = EventContractPaperBet.__table__.columns["trader_id"]
     fks = list(trader_id_col.foreign_keys)

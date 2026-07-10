@@ -245,7 +245,8 @@ def place_ai_driven_binance_order(
                     max_leverage=wallet.max_leverage or 20,
                     default_leverage=wallet.default_leverage or 5,
                     decision_kwargs=decision_kwargs,
-                    wallet=wallet
+                    wallet=wallet,
+                    trigger_context=trigger_context,
                 )
 
         except Exception as e:

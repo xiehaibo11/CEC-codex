@@ -343,3 +343,7 @@ prompts/
 # Internal docs (not for public repo)
 docs/*.md
 backend/scripts/
+
+# Database backups (large binary dumps - keep out of git)
+backups/*.dump
+backups/globals_*.sql
